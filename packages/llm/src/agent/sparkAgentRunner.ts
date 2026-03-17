@@ -297,6 +297,7 @@ async function persistToolLoopTrace(options: {
   agentId: string;
   toolLoopResult: LlmToolLoopResult;
   consolePrefix: string;
+  toolCallsRootDir?: string;
 }): Promise<{ stepCount: number; toolCallCount: number }> {
   const logDocPath = `users/${options.userId}/agents/${options.agentId}/logs/log`;
   const now = new Date();
@@ -330,11 +331,18 @@ async function persistToolLoopTrace(options: {
           value: toolCall.input,
         }),
       );
+      const traceOutputValue = await enrichToolTraceOutputValue({
+        toolName: toolCall.toolName,
+        value: toolCall.output,
+        step: step.step,
+        toolIndex: callIndex,
+        toolCallsRootDir: options.toolCallsRootDir,
+      });
       const output = serializeTraceValue(
         sanitizeToolTraceValue({
           toolName: toolCall.toolName,
           direction: "output",
-          value: toolCall.output,
+          value: traceOutputValue,
         }),
       );
       const callId =
@@ -377,6 +385,59 @@ async function persistToolLoopTrace(options: {
   return {
     stepCount: options.toolLoopResult.steps.length,
     toolCallCount,
+  };
+}
+
+async function readOptionalJsonRecord(
+  filePath: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    const raw = await readFile(filePath, { encoding: "utf8" });
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+async function enrichToolTraceOutputValue(options: {
+  toolName: string;
+  value: unknown;
+  step: number;
+  toolIndex: number;
+  toolCallsRootDir?: string;
+}): Promise<unknown> {
+  if (options.toolName !== "extract_text") {
+    return options.value;
+  }
+  const toolCallsRootDir = options.toolCallsRootDir?.trim() ?? "";
+  if (toolCallsRootDir.length === 0) {
+    return options.value;
+  }
+  const toolIdSegment = `turn${options.step}tool${options.toolIndex}`;
+  const baseDir = path.join(toolCallsRootDir, "extract_text", toolIdSegment);
+  const [requestMetadata, responseMetadata] = await Promise.all([
+    readOptionalJsonRecord(path.join(baseDir, "request.metadata.json")),
+    readOptionalJsonRecord(path.join(baseDir, "response.metadata.json")),
+  ]);
+  if (!requestMetadata && !responseMetadata) {
+    return options.value;
+  }
+  const baseOutput =
+    options.value &&
+    typeof options.value === "object" &&
+    !Array.isArray(options.value)
+      ? { ...(options.value as Record<string, unknown>) }
+      : { output: options.value };
+  return {
+    ...baseOutput,
+    trace: {
+      ...(requestMetadata ? { request: requestMetadata } : {}),
+      ...(responseMetadata ? { response: responseMetadata } : {}),
+    },
   };
 }
 
@@ -4485,48 +4546,16 @@ function buildAgentTools(options: {
     await ensureDir(path.dirname(resolved));
     await writeFile(resolved, cappedText, { encoding: "utf8" });
     workspace.scheduleUpdate(resolvedOutputPath);
-    const outputBytes = Buffer.byteLength(cappedText, "utf8");
+    if (truncated) {
+      logExtractTextProgress(
+        `response_truncated originalChars=${normalizedText.length.toString()} writtenChars=${cappedText.length.toString()}`,
+      );
+    }
 
+    // Keep the agent-visible tool result minimal. The written markdown file is
+    // the contract surface; internal model/cost/debug details stay in logs.
     return {
       status: "written",
-      modelId: DEFAULT_EXTRACT_TEXT_MODEL_ID,
-      ...(submodelSummary?.modelVersion
-        ? { modelVersion: submodelSummary.modelVersion }
-        : {}),
-      ...(submodelSummary?.elapsedMs !== undefined
-        ? { elapsedMs: submodelSummary.elapsedMs }
-        : {}),
-      ...(typeof submodelSummary?.costUsd === "number"
-        ? { costUsd: submodelSummary.costUsd }
-        : {}),
-      ...(submodelSummary?.usageTokens
-        ? { usageTokens: submodelSummary.usageTokens }
-        : {}),
-      documentPaths: primaryDocuments.map((item) => item.documentPath),
-      documentFiles: primaryDocuments.length,
-      documentKinds: primaryDocuments.map((item) => item.documentKind),
-      outputPath: resolvedOutputPath,
-      promptChars,
-      textChars: cappedText.length,
-      outputBytes,
-      sourceBytes: primaryDocuments.reduce(
-        (sum, item) => sum + item.documentBytes.length,
-        0,
-      ),
-      supportingPaths: supportingParts.map((item) => item.contextPath),
-      supportingFiles: supportingParts.length,
-      ...(instructionText ? { instructions: instructionText } : {}),
-      ...(supportingInstructionText
-        ? { supportingInstructions: supportingInstructionText }
-        : {}),
-      ...(primaryDocuments.length === 1
-        ? {
-            sourcePath: primaryDocuments[0].documentPath,
-            sourceKind: primaryDocuments[0].documentKind,
-            sourceMimeType: primaryDocuments[0].documentMimeType,
-          }
-        : {}),
-      ...(truncated ? { truncated: true } : {}),
     };
   };
 
@@ -6011,10 +6040,11 @@ function buildAgentTools(options: {
     extract_text: tool({
       description: [
         "Extract text from one or more workspace image/PDF documents and write markdown output.",
-        `Always uses ${DEFAULT_EXTRACT_TEXT_MODEL_ID} (model cannot be overridden).`,
+        "Uses a fixed internal extraction model (cannot be overridden).",
         "Required fields: documentPaths and outputPath.",
         "Always include documentPaths with 1+ primary transcription target documents.",
         'Minimal payload example: {"documentPaths":["source/student-work.png"],"outputPath":"output/transcription.md"}',
+        'On success, the tool returns only {"status":"written"}. Read outputPath to inspect the transcription.',
         "Do not repeat an identical call for the same documentPaths/outputPath; read the written markdown file and continue from it.",
         'Use instructions to narrow scope (for example: "problems H1 and H2 only").',
         "Use supportingPaths to add extra context files (images, PDFs, or text documents).",
@@ -8210,6 +8240,7 @@ export async function runSparkAgentTask(
         agentId: options.agentId,
         toolLoopResult,
         consolePrefix: `[spark-agent:${options.agentId}] `,
+        toolCallsRootDir: resolveSparkAgentToolCallsDir(workspaceRoot),
       });
       logSync?.append(
         `trace_summary: steps=${traceSummary.stepCount} tool_calls=${traceSummary.toolCallCount}`,

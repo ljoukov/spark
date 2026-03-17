@@ -290,7 +290,7 @@ describe("Spark agent tool: extract_text", () => {
     generateContentStreamMock.mockReset();
   });
 
-  it("uses fixed gemini-2.5-pro and writes markdown output", async () => {
+  it("uses the fixed extraction model, writes markdown output, and returns minimal status", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =
         await import("../src/agent/sparkAgentRunner");
@@ -341,7 +341,9 @@ describe("Spark agent tool: extract_text", () => {
       });
 
       assertPlainRecord(result, "extract_text result");
-      expect(result.status).toBe("written");
+      expect(result).toEqual({
+        status: "written",
+      });
       expect(scheduled).toContain(outputPath);
       expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
 
