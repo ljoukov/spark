@@ -7,17 +7,8 @@
 	import { onMount, tick } from 'svelte';
 	import { getContext } from 'svelte';
 	import { fromStore, type Readable } from 'svelte/store';
+	import type { Unsubscribe } from 'firebase/firestore';
 	import { z } from 'zod';
-	import {
-		collection,
-		doc,
-		getFirestore,
-		limit,
-		onSnapshot,
-		orderBy,
-		query,
-		type Unsubscribe
-	} from 'firebase/firestore';
 	import { getAuth, onIdTokenChanged } from 'firebase/auth';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { renderMarkdown } from '$lib/markdown';

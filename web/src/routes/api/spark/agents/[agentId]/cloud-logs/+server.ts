@@ -1,9 +1,10 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import { doc, getDoc, getFirestore } from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { z } from 'zod';
 
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { env } from '$env/dynamic/private';
-import { getFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 import { listSparkCloudLogs } from '$lib/server/gcp/logging';
 import { SparkAgentStateSchema } from '@spark/schemas';
 
@@ -58,17 +59,20 @@ export const GET: RequestHandler = async ({ request, params, url }) => {
 	const agentId = parsedParams.data.agentId;
 	const serviceAccountJson = requireServiceAccountJson();
 	const documentPath = `users/${userId}/agents/${agentId}`;
-	const agentSnapshot = await getFirestoreDocument({
-		serviceAccountJson,
-		documentPath
-	});
-	if (!agentSnapshot.exists || !agentSnapshot.data) {
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const agentSnapshot = await getDoc(doc(firestore, documentPath));
+	if (!agentSnapshot.exists) {
+		return json({ error: 'not_found' }, { status: 404 });
+	}
+	const agentData = agentSnapshot.data();
+	if (!agentData) {
 		return json({ error: 'not_found' }, { status: 404 });
 	}
 
 	const parsedAgent = SparkAgentStateSchema.safeParse({
 		id: agentId,
-		...agentSnapshot.data
+		...agentData
 	});
 	if (!parsedAgent.success) {
 		return json({ error: 'invalid_agent_payload' }, { status: 500 });

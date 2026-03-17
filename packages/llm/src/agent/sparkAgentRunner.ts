@@ -8125,21 +8125,26 @@ export async function runSparkAgentTask(
           filePath: TUTOR_STATE_COMPOSER_PATH,
           content: stringifyJsonFile(composerState),
         }),
-        patchFirestoreDocument({
-          serviceAccountJson,
-          documentPath: resolveTutorSessionDocPath(
-            options.userId,
-            tutorSessionId,
+        setDoc(
+          doc(
+            firestore,
+            resolveTutorSessionDocPath(
+              options.userId,
+              tutorSessionId,
+            ),
           ),
-          updates: {
-            status: sessionStatus,
-            preview,
-            updatedAt: now,
-            activeTurnAgentId: options.agentId,
-            ...(focusLabel ? { focusLabel } : {}),
-            ...(summary.allResolved ? { completedAt: now } : {}),
-          },
-        }),
+          buildFirestoreMergeData({
+            updates: {
+              status: sessionStatus,
+              preview,
+              updatedAt: now,
+              activeTurnAgentId: options.agentId,
+              ...(focusLabel ? { focusLabel } : {}),
+              ...(summary.allResolved ? { completedAt: now } : {}),
+            },
+          }),
+          { merge: true },
+        ),
       ]);
       tutorFocusLabel = focusLabel ?? null;
       return {
