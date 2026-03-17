@@ -32,7 +32,7 @@ const SparkAgentReplayManifestSchema = z
     grader: z
       .object({
         summaryPath: z.string().trim().min(1),
-        problemsDir: z.string().trim().min(1),
+        sheetPath: z.string().trim().min(1),
       })
       .optional(),
   })
@@ -86,7 +86,7 @@ export async function captureSparkAgentReplayState(options: {
   useSubagents: boolean;
   grader?: {
     summaryPath: string;
-    problemsDir: string;
+    sheetPath: string;
   };
 }): Promise<void> {
   const replayRootDir = path.join(options.rootDir, SPARK_AGENT_REPLAY_DIR);

@@ -74,30 +74,33 @@ export function recoverStaleTutorReviewState(options: {
 	const nowMs = options.now.getTime();
 	const recoveredThreadIds: string[] = [];
 
-	const threads = options.reviewState.threads.map((thread) => {
+	const threads = Object.fromEntries(Object.entries(options.reviewState.threads).map(([questionId, thread]) => {
 		if (thread.status !== 'responding') {
-			return thread;
+			return [questionId, thread];
 		}
 
 		const lastMessage = thread.messages.at(-1) ?? null;
 		if (!lastMessage || lastMessage.author !== 'student') {
-			return thread;
+			return [questionId, thread];
 		}
 
 		const lastMessageMs = parseInstantMs(lastMessage.createdAt);
 		if (lastMessageMs === null || nowMs - lastMessageMs < staleAfterMs) {
-			return thread;
+			return [questionId, thread];
 		}
 
-		recoveredThreadIds.push(thread.id);
-		return appendTutorReviewMessage({
-			thread,
-			author: 'assistant',
-			markdown: fallbackAssistantMarkdown,
-			createdAt: nowIso,
-			status: 'open'
-		});
-	});
+		recoveredThreadIds.push(questionId);
+		return [
+			questionId,
+			appendTutorReviewMessage({
+				thread,
+				author: 'assistant',
+				markdown: fallbackAssistantMarkdown,
+				createdAt: nowIso,
+				status: 'open'
+			})
+		];
+	}));
 
 	if (recoveredThreadIds.length === 0) {
 		return {
@@ -134,7 +137,7 @@ export async function recoverTutorSessionIfStale(options: {
 		now
 	});
 	const summary = summarizeTutorReviewState(recovered.reviewState);
-	const allResolved = recovered.reviewState.threads.length === 0 || summary.allResolved;
+	const allResolved = summary.totalThreads === 0 || summary.allResolved;
 	const nextStatus: SparkTutorSession['status'] =
 		summary.respondingThreads > 0
 			? 'responding'

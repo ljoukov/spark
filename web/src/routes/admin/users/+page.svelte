@@ -174,13 +174,13 @@
 								href={`/admin/users/${user.uid}/graders`}
 								class={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
 							>
-								Graders
+								Sheets
 							</a>
 							<a
 								href={`/admin/users/${user.uid}/tutors`}
 								class={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
 							>
-								Tutors
+								Interactions
 							</a>
 							<a
 								href={`/admin/users/${user.uid}/agents`}

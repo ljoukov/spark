@@ -38,7 +38,7 @@
 				Showcase for the paper-style worksheet and annotated-text components ported to Svelte and
 				stored in <code>$lib/components</code>. The Hamilton 2023 tab is seeded with a sample
 				student submission, and each worksheet still supports the mock review flow for previewing
-				per-question tutor notes and reply interactions.
+				per-question review notes and reply interactions.
 			</p>
 		</div>
 
@@ -54,7 +54,7 @@
 			<h2 class="sheet-preview-section-title">Worksheet</h2>
 			<p class="sheet-preview-section-description">
 				Reusable paper-sheet component from <code>$lib/components/paper-sheet</code>, now with
-				question-level tutor feedback cards and mock reply interactions.
+				question-level feedback cards and mock reply interactions.
 			</p>
 		</div>
 

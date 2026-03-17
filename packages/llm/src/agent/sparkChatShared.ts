@@ -14,7 +14,7 @@ import {
   createSparkAgentRunTelemetryConfig,
 } from "../utils/gcp/monitoring";
 import {
-  SPARK_GRADER_PROBLEMS_DIR,
+  SPARK_GRADER_SHEET_PATH,
   SPARK_GRADER_SUMMARY_PATH,
   SPARK_GRADER_UPLOADS_MANIFEST_PATH,
   buildSparkGraderAgentPrompt,
@@ -107,7 +107,7 @@ export type SparkGraderLaunchPlan = {
   launchTitle: string;
   launchTitleKey: string;
   summaryPath: string;
-  problemsDir: string;
+  sheetPath: string;
   prompt: string;
   brief: string;
   graderTask: string;
@@ -198,14 +198,13 @@ export function buildSparkGraderBrief(options: {
     "## Objectives",
     "- Identify the paper, assignment, or document context, year, and title from uploaded learner materials when possible.",
     "- Transcribe student work, problem statements, and any official solutions from uploads first.",
-    "- For student submissions, keep transcription complete and faithful, then rewrite each problem into a numbered list of student statements/sentences in source order without retelling.",
+    "- For student submissions, keep transcription complete and faithful, then convert the graded worksheet into one worksheet JSON artifact with supported sheet question types plus the student's submitted answers.",
     "- When prompt text and student writing share the same page, transcription must clearly separate the original task text from the student's supplied answer.",
     "- For problem statements and official solutions, keep source wording as verbatim as possible; do not rewrite them into cleaned canonical statements.",
     "- Only apply minimal OCR/layout cleanup when meaning is unchanged, and mark uncertainty explicitly instead of paraphrasing.",
     "- Preserve the student's variable names, formulas, terminology, and method choice as closely as possible while doing that cleanup.",
     "- Respect the reference source policy before any online search.",
-    "- Feedback should be line-by-line against those numbered student statements.",
-    "- Feedback should be empathetic and student-facing: acknowledge plausible thinking or correct structure before naming the exact gap.",
+    "- Per-question worksheet review notes should be empathetic and student-facing: acknowledge plausible thinking or correct structure before naming the exact gap.",
     "- Prefer methodological direction or a rule of thumb before giving the answer away, and do not treat a near-miss as resolved if the task itself is still unmet.",
     "- If official solutions are missing, solve each problem carefully before grading and match the student's level/terminology/methods where reasonable.",
     "- The run summary shown in the UI should stay short and student-facing: title + concise markdown summary, with no IDs, file paths, or process-log wording.",
@@ -241,17 +240,18 @@ export function renderSparkGraderTask(taskTemplate: string): string {
     "- Leave `supportingPaths` unset unless a file is disambiguation-only and is not itself a transcription target.",
     "- Problem statements and official solutions must keep source wording verbatim where possible: preserve numbering, labels, examples, punctuation, variable names, and displayed math.",
     "- Do not rewrite problem statements into cleaned/canonical wording; allow only minimal OCR/layout cleanup that keeps meaning unchanged, and mark any remaining uncertainty explicitly.",
-    "- Student solution transcription must be complete and faithful: after extraction, split each problem into a numbered list of student statements/sentences in source order.",
-    "- On mixed prompt/answer pages (for example fill-in-the-blank work), clearly distinguish original prompt text from the student's supplied words; if needed, format transcript items as `Prompt fragment: ... Student response: ...`.",
+    "- Student solution transcription must be complete and faithful, but the final output is one worksheet JSON artifact rather than a markdown report.",
+    "- On mixed prompt/answer pages (for example fill-in-the-blank work), clearly distinguish original prompt text from the student's supplied words and store only the student contribution inside worksheet `answers`.",
     "- Preserve student variable names, formulas, terminology, and method choices as closely as possible; allow only numbering, line-break cleanup, and obvious spelling fixes that do not change meaning.",
-    "- Final grading feedback must be line-by-line against that numbered transcript.",
-    "- Annotation and feedback should be empathetic and specific: acknowledge what makes sense in a near-miss or almost-correct structure before naming the gap.",
+    "- Final grading feedback must be emitted as per-question worksheet review notes plus worksheet-level reference markdown.",
+    "- Worksheet review notes should be empathetic and specific: acknowledge what makes sense in a near-miss or almost-correct structure before naming the gap.",
     "- Prefer a next-step cue, contrast, or rule of thumb before giving the answer outright, and do not accept loose synonyms when the task asked for a definition/explanation.",
     "- When official solutions are missing, derived solutions should stay at the student's level and reuse their terminology/method style where reasonable.",
+    "- Use only supported worksheet question types: fill, mcq, lines, calc, match, spelling. If a task does not fit cleanly, use `lines`.",
     "",
     "Run-mode constraints for grader runs:",
     "- Keep transcription and source gathering on the main agent only.",
-    "- After transcription, decide whether any problem actually needs a subagent. If you do use one, use at most 1 subagent per problem for solving/assessment.",
+    "- After transcription, use subagents selectively for substantial reasoning work; keep short routine worksheet questions in the main agent. If you do use one, use at most 1 subagent per problem for solving/assessment.",
     "- For grader subagents, call `spawn_agent` with a single text instruction in `prompt` or `message` only. Do not send workspace files or uploads via `items`; tell the subagent which workspace paths to read or view itself.",
     "- Keep reference-text extraction disabled; rely on explicit `extract_text` instructions and direct source fidelity.",
   ].join("\n");
@@ -293,10 +293,10 @@ export function buildSparkGraderLaunchPlan(options: {
     launchTitle,
     launchTitleKey: normalizeGraderTitleKey(launchTitle),
     summaryPath: SPARK_GRADER_SUMMARY_PATH,
-    problemsDir: SPARK_GRADER_PROBLEMS_DIR,
+    sheetPath: SPARK_GRADER_SHEET_PATH,
     prompt: buildSparkGraderAgentPrompt({
       summaryPath: SPARK_GRADER_SUMMARY_PATH,
-      problemsDir: SPARK_GRADER_PROBLEMS_DIR,
+      sheetPath: SPARK_GRADER_SHEET_PATH,
     }),
     brief,
     graderTask: renderSparkGraderTask(options.graderTaskTemplate),

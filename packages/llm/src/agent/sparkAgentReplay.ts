@@ -322,12 +322,22 @@ export async function runSparkGraderLocal(options: {
     },
   };
 
+  let publishedSheet = false;
+
   const fullBaseTools = buildSparkAgentTools({
     workspace,
     rootDir: options.workspaceDir,
     userId: options.userId ?? "local-grader-replay",
     serviceAccountJson: "{}",
     allowPythonExec: false,
+    graderPublish: {
+      mode: "mock",
+      runId: "replay-sheet",
+      href: "/spark/sheets/replay-sheet",
+    },
+    onPublishSheet: () => {
+      publishedSheet = true;
+    },
     extractTextDebugRootDir: resolveSparkAgentToolCallsDir(
       options.workspaceDir,
     ),
@@ -349,6 +359,11 @@ export async function runSparkGraderLocal(options: {
       })
       .strict(),
     execute: ({ summary }) => {
+      if (!publishedSheet) {
+        throw new Error(
+          "Grader sheet is not published yet. Call publish_sheet before done().",
+        );
+      }
       doneCalled = true;
       doneSummary = summary ?? null;
       return { status: "done", summary: summary ?? null };

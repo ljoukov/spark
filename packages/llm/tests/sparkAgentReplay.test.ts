@@ -85,7 +85,7 @@ describe("prepareSparkGraderReplayWorkspace", () => {
           useSubagents: false,
           grader: {
             summaryPath: "grader/output/run-summary.json",
-            problemsDir: "grader/output/problems",
+            sheetPath: "grader/output/sheet.json",
           },
         },
         null,

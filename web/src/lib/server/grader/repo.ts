@@ -7,7 +7,7 @@ import {
 } from '$lib/server/gcp/firestoreRest';
 import {
 	buildWorkspaceFileDocPath,
-	SPARK_GRADER_PROBLEMS_DIR,
+	SPARK_GRADER_SHEET_PATH,
 	SPARK_GRADER_SUMMARY_PATH
 } from '@spark/llm';
 import { z } from 'zod';
@@ -15,7 +15,7 @@ import { z } from 'zod';
 export const DEFAULT_GRADER_RUN_KEY = 'uploaded_work' as const;
 export const DEFAULT_GRADER_RUN_LABEL = 'Uploaded work' as const;
 export const GRADER_SUMMARY_PATH = SPARK_GRADER_SUMMARY_PATH;
-export const GRADER_PROBLEMS_DIR = SPARK_GRADER_PROBLEMS_DIR;
+export const GRADER_SHEET_PATH = SPARK_GRADER_SHEET_PATH;
 
 const userIdSchema = z.string().trim().min(1, 'userId is required');
 const runIdSchema = z.string().trim().min(1, 'runId is required');
@@ -47,8 +47,6 @@ const firestoreTimestampSchema = z.preprocess((value) => {
 	return value;
 }, z.date());
 
-const sparkGraderProblemVerdictSchema = z.enum(['correct', 'partial', 'incorrect', 'ungraded']);
-
 const sparkGraderTotalsSchema = z.object({
 	awardedMarks: z.number().min(0),
 	maxMarks: z.number().min(0),
@@ -63,7 +61,12 @@ const sparkGraderProblemSummarySchema = z.object({
 	title: trimmedString.optional(),
 	awardedMarks: z.number().min(0).optional(),
 	maxMarks: z.number().min(0).optional(),
-	verdict: sparkGraderProblemVerdictSchema.optional(),
+	verdict: z.enum(['correct', 'partial', 'incorrect', 'ungraded']).optional(),
+	filePath: trimmedString
+});
+
+const sparkGraderSheetSummarySchema = z.object({
+	title: trimmedString.optional(),
 	filePath: trimmedString
 });
 
@@ -95,7 +98,8 @@ const sparkGraderRunSchema = z.object({
 	olympiadKey: trimmedString,
 	olympiadLabel: trimmedString,
 	summaryPath: trimmedString,
-	problemsDir: trimmedString,
+	problemsDir: trimmedString.optional(),
+	sheetPath: trimmedString,
 	sourceAttachmentIds: z.array(trimmedString).optional(),
 	sourceAttachmentCount: z.number().int().min(0).optional(),
 	status: z.enum(['created', 'executing', 'stopped', 'failed', 'done']),
@@ -103,6 +107,7 @@ const sparkGraderRunSchema = z.object({
 	presentation: sparkGraderPresentationSchema.optional(),
 	totals: sparkGraderTotalsSchema.optional(),
 	problems: z.array(sparkGraderProblemSummarySchema).optional(),
+	sheet: sparkGraderSheetSummarySchema.optional(),
 	resultSummary: z.string().trim().optional(),
 	error: z.string().trim().optional(),
 	createdAt: firestoreTimestampSchema,

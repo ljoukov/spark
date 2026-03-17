@@ -1,13 +1,7 @@
 <script lang="ts">
 	import { ChatComposer } from '$lib/components/chat/index.js';
 	import { MarkdownContent } from '$lib/components/markdown/index.js';
-	import type { PaperSheetQuestionReview } from './types';
-
-	type ThreadTurn = {
-		id: string;
-		speaker: 'student' | 'tutor';
-		text: string;
-	};
+	import type { PaperSheetFeedbackThread, PaperSheetQuestionReview } from './types';
 
 	function getToneClass(review: PaperSheetQuestionReview): string {
 		switch (review.status) {
@@ -23,21 +17,28 @@
 	function getStatusState(
 		review: PaperSheetQuestionReview,
 		processing: boolean,
-		thread: ThreadTurn[],
+		thread: PaperSheetFeedbackThread | null,
 		fallbackLabel: string
 	): {
 		kind: 'pending' | 'processing' | 'open' | 'optional' | 'done';
 		label: string;
 	} {
-		if (processing) {
+		if (processing || thread?.status === 'responding') {
 			return {
 				kind: 'processing',
 				label: 'processing'
 			};
 		}
 
+		if (thread?.status === 'resolved') {
+			return {
+				kind: 'done',
+				label: 'resolved'
+			};
+		}
+
 		if (review.status === 'correct') {
-			if (thread.length > 0) {
+			if ((thread?.turns.length ?? 0) > 0) {
 				return {
 					kind: 'done',
 					label: 'shared'
@@ -50,7 +51,7 @@
 			};
 		}
 
-		if (thread.length > 0) {
+		if ((thread?.turns.length ?? 0) > 0) {
 			return {
 				kind: 'open',
 				label: 'conversation open'
@@ -74,6 +75,7 @@
 		draft,
 		thread,
 		processing = false,
+		showComposer = true,
 		questionLabel,
 		onToggle,
 		onDraftChange,
@@ -82,15 +84,16 @@
 		review: PaperSheetQuestionReview;
 		open?: boolean;
 		draft: string;
-		thread: ThreadTurn[];
+		thread: PaperSheetFeedbackThread | null;
 		processing?: boolean;
+		showComposer?: boolean;
 		questionLabel: string;
 		onToggle: () => void;
 		onDraftChange: (value: string) => void;
 		onReply: (value?: string) => void;
 	} = $props();
 
-	const noteLabel = $derived(review.label ?? 'Tutor note');
+	const noteLabel = $derived(review.label ?? 'Review note');
 	const statusLabel = $derived.by(() => {
 		if (review.statusLabel) {
 			return review.statusLabel;
@@ -104,14 +107,17 @@
 		return 'response needed';
 	});
 	const statusState = $derived.by(() => getStatusState(review, processing, thread, statusLabel));
-	const displayThread = $derived.by((): ThreadTurn[] => [
+	const displayThread = $derived.by(() => [
 		{
 			id: `${noteLabel}-initial`,
-			speaker: 'tutor',
+			speaker: 'tutor' as const,
 			text: review.note
 		},
-		...thread
+		...(thread?.turns ?? [])
 	]);
+	const composerDisabled = $derived(
+		!showComposer || processing || thread?.status === 'responding' || thread?.status === 'resolved'
+	);
 </script>
 
 <section class={`paper-sheet-note ${getToneClass(review)}`}>
@@ -151,37 +157,43 @@
 					<div class="paper-sheet-note__processing" role="status" aria-live="polite">sending…</div>
 				{/if}
 
-				<div class="paper-sheet-note__composer">
-					<ChatComposer
-						value={draft}
-						placeholder={review.replyPlaceholder ?? 'Write your response to the tutor...'}
-						ariaLabel={`Reply to tutor for ${questionLabel}`}
-						sendAriaLabel={`Send reply to tutor for ${questionLabel}`}
-						micAriaLabel={`Add spoken-style reply prompt for ${questionLabel}`}
-						attachAriaLabel={`Open attachment options for ${questionLabel}`}
-						submitMode="enter"
-						maxLines={5}
-						showAttach={true}
-						showMic={true}
-						showTakePhoto={true}
-						inputClass="paper-sheet-note__input"
-						onInput={({ value }) => {
-							onDraftChange(value);
-						}}
-						onAttachSelect={() => {
-							appendDraft('[Mock attachment] I want to show the tutor my working for this answer.');
-						}}
-						onTakePhotoSelect={() => {
-							appendDraft('[Mock photo] Here is a photo of the part I want feedback on.');
-						}}
-						onMicClick={() => {
-							appendDraft('I think I should make one point more clearly here.');
-						}}
-						onSubmit={({ value }) => {
-							onReply(value);
-						}}
-					/>
-				</div>
+				{#if showComposer}
+					<div class="paper-sheet-note__composer">
+						<ChatComposer
+							value={draft}
+							placeholder={review.replyPlaceholder ?? 'Write your reply here...'}
+							ariaLabel={`Reply for ${questionLabel}`}
+							sendAriaLabel={`Send reply for ${questionLabel}`}
+							micAriaLabel={`Add spoken-style reply prompt for ${questionLabel}`}
+							attachAriaLabel={`Open attachment options for ${questionLabel}`}
+							submitMode="enter"
+							maxLines={5}
+							showAttach={true}
+							showMic={true}
+							showTakePhoto={true}
+							inputClass="paper-sheet-note__input"
+							disabled={composerDisabled}
+							onInput={({ value }) => {
+								onDraftChange(value);
+							}}
+							onAttachSelect={() => {
+								appendDraft('[Mock attachment] I want to show my working for this answer.');
+							}}
+							onTakePhotoSelect={() => {
+								appendDraft('[Mock photo] Here is a photo of the part I want checked.');
+							}}
+							onMicClick={() => {
+								appendDraft('I think I should make one point more clearly here.');
+							}}
+							onSubmit={({ value }) => {
+								if (composerDisabled) {
+									return;
+								}
+								onReply(value);
+							}}
+						/>
+					</div>
+				{/if}
 			</div>
 		{/if}
 	</div>

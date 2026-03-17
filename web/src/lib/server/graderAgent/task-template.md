@@ -21,7 +21,7 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
      - problem statement target,
      - official solution / mark-scheme target.
    - treat uploaded files as the primary source of truth.
-   - if a file role is uncertain, make your best guess and note uncertainty in the grading output.
+   - if a file role is uncertain, make your best guess and note uncertainty in the worksheet references.
 2. Run one extraction-first transcription pass:
    - use exactly one initial `extract_text` call to transcribe all primary targets.
    - include all transcription targets in `documentPaths`:
@@ -36,10 +36,10 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
    - for uploaded problem statements and official solutions, keep the source wording as verbatim as possible: preserve numbering, labels, examples, punctuation, variable names, and displayed math.
    - only fix obvious OCR/layout issues when meaning is unchanged; do NOT paraphrase, summarize, or rewrite problem statements into "cleaned" canonical wording.
    - if any problem-statement wording remains uncertain after extraction, mark the uncertainty explicitly instead of silently rewriting it.
-   - after extraction, normalize each student solution into an enumerated list of statements/sentences in source order; each numbered item should capture one clear mathematical step, sentence, or claim.
+   - after extraction, identify the worksheet questions and the student's submitted answer for each one.
    - keep student math, variable naming, terminology, and method choice as verbatim as possible (do not rename variables, rewrite formulas, swap in more advanced methods, or change mathematical expressions).
-   - you may improve readability only by splitting into numbered lines, adding line breaks/sectioning, and fixing obvious spelling mistakes when meaning is unchanged.
-   - do not merge, reorder, or silently omit student steps that are part of the solution.
+   - you may improve readability only by splitting content into worksheet questions / blanks / answer fields, adding light structure, and fixing obvious spelling mistakes when meaning is unchanged.
+   - do not merge, reorder, or silently omit student work that is part of the submission.
    - ignore unrelated scribbles/doodles that are clearly not part of the solution.
    - do not pass these target files via `supportingPaths`; they are primary transcription targets.
    - after this call, read `grader/output/transcription.md` for cleanup and do not repeat an identical call.
@@ -58,11 +58,11 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
    - if official solutions are unavailable, solve each problem yourself very carefully before grading.
    - when self-solving, match the student's level where reasonable: prefer their terminology, notation style, and method family so the derived solution is easier for that student to follow.
    - do not introduce substantially more advanced machinery unless it is necessary for correctness; if you must, say so explicitly.
-   - when self-solving, clearly mark this in `## Official solution` as "Derived solution (official solution unavailable)".
+   - when self-solving, clearly mark this in worksheet references as "Derived solution (official solution unavailable)".
 5. Use subagents selectively for solving and assessment:
    - perform transcription and reference gathering (steps 1-4) with the main agent only.
    - once references are ready, decide whether any problem actually needs a subagent.
-   - keep short routine problems in the main agent; do NOT spawn subagents just because there are many small questions.
+   - keep short routine worksheet questions in the main agent; do NOT spawn subagents just because there are many small questions.
    - spawn a subagent only when a problem needs substantial independent reasoning, for example olympiad-style work or a solution/explanation that would normally take about a page or more.
    - at most 6 subagents can be live at once; close finished subagents before spawning more.
    - when spawning a grader subagent, use exactly one text instruction field (`prompt` or `message`) and do not include `items` for workspace files or uploads; tell the subagent which workspace paths to read or view itself.
@@ -70,41 +70,114 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
      - establish/verify the solution baseline (official or derived),
      - assess the student's solution and draft grading rationale.
    - do not split one problem across multiple subagents.
-   - the main agent must consolidate final outputs and may grade all problems itself when subagents are unnecessary.
-6. Grade each problem deeply:
-   - compare against official guidance when available; otherwise compare against your carefully derived solution.
-   - award marks fairly even when the student's method differs, if mathematically correct.
-   - anchor grading and annotation to the numbered student statements so feedback can be read line-by-line against the transcript.
-   - reference paper / mark-scheme / official solution URLs when available.
-   - keep the tone empathetic and teacherly: if an attempt is understandable, plausible, or nearly right, first say what makes sense before naming the gap.
-   - prefer a next-step cue, rule of thumb, contrast, or methodological direction before giving the answer away outright.
-   - do not treat a response as sufficient just because it points in the right direction; check whether it actually meets the task being asked.
-   - when the student has the right structure but misses one small word or piece, say that explicitly and identify the precise omission.
-7. Write one markdown file per problem under `grader/output/problems/`:
-   - file path pattern: `grader/output/problems/<problem-id>.md`
-   - use Markdown with LaTeX math notation (`$...$` and `$$...$$`) when writing mathematics.
-   - required section headings (exact):
-     - `## Problem statement`
-     - `## Official problem statement`
-     - `## Official solution`
-     - `## Student solution transcript`
-     - `## Grading`
-     - `## Annotation and feedback`
-     - `## Overall feedback`
-   - `## Problem statement` should contain the transcribed statement from the learner-provided context.
-   - `## Official problem statement` should contain the official/reference statement used for grading, copied as verbatim as possible from the best available source.
-   - in `## Official problem statement`, preserve numbering, labels, examples, punctuation, variable names, and displayed math; do not paraphrase, standardize notation, rename variables, or add framing text such as "cleaned wording".
-   - in `## Official problem statement`, only apply minimal OCR/layout cleanup that leaves meaning unchanged; if wording is still uncertain, mark the uncertainty explicitly or note it nearby.
-   - `## Official solution` should summarize official solutions (with URLs) when available, or your derived solution when official solutions are unavailable.
-   - `## Official solution` should match the student's level, terminology, and method style where reasonable when it is a derived solution rather than an official one.
-   - `## Student solution transcript` must contain the complete student solution transcription for that problem as an enumerated list of statements/sentences in source order (cleanly structured, but not retold).
-   - in `## Student solution transcript`, preserve student variable names, formulas, terminology, and method choices as verbatim as possible; do not rename variables, alter formula text, or rewrite the method into a stronger one.
-   - when the student answered on the same page as the prompt, each relevant numbered transcript item must clearly separate original prompt text from the student's contributed answer.
-   - `## Annotation and feedback` must be line-by-line against the numbered transcript: reference every numbered student line in order and explain whether it is correct, incomplete, unjustified, or irrelevant.
-   - in `## Annotation and feedback`, keep numbering aligned with `## Student solution transcript` and quote the student text where useful.
-   - every numbered student line should receive corresponding feedback, even if the note is brief.
-   - `## Annotation and feedback` should sound like a thoughtful reviewer, not a blunt judge: acknowledge sensible partial thinking before correction, especially on near-misses and omissions.
-   - if the task asks for a definition/explanation, do not accept loose synonyms alone; say what definitional meaning is still missing.
+   - the main agent must consolidate the final worksheet output and may grade all problems itself when subagents are unnecessary.
+6. Convert the graded worksheet into one worksheet report:
+   - write one JSON file at `grader/output/sheet.json`.
+   - the whole uploaded worksheet/submission becomes one sheet artifact.
+   - if the worksheet has several questions or problems, represent them inside `sheet.sections[].questions[]`; do NOT create separate top-level report files such as `p1.json`, `p2.json`, etc.
+   - the JSON must be renderable by the worksheet UI and must validate against this conceptual shape:
+
+```json
+{
+	"schemaVersion": 1,
+	"sheet": {
+		"id": "string",
+		"subject": "string",
+		"level": "string",
+		"title": "string",
+		"subtitle": "string",
+		"color": "#123456",
+		"accent": "#123456",
+		"light": "#123456",
+		"border": "#123456",
+		"sections": [
+			{ "type": "hook", "text": "string" },
+			{
+				"id": "A",
+				"label": "string",
+				"theory": "string",
+				"infoBox": { "icon": "string", "title": "string", "text": "string" },
+				"questions": [
+					{
+						"id": "q1",
+						"type": "lines",
+						"marks": 2,
+						"prompt": "string",
+						"lines": 4
+					}
+				]
+			}
+		]
+	},
+	"answers": {},
+	"review": {
+		"score": { "got": 0, "total": 0 },
+		"label": "string",
+		"message": "string",
+		"note": "string",
+		"questions": {}
+	},
+	"references": {
+		"problemMarkdown": "string",
+		"officialProblemMarkdown": "string",
+		"officialSolutionMarkdown": "string",
+		"studentTranscriptMarkdown": "string",
+		"gradingMarkdown": "string",
+		"overallFeedbackMarkdown": "string",
+		"paperUrl": "string",
+		"markSchemeUrl": "string"
+	}
+}
+```
+
+7. Worksheet-report rules:
+   - the worksheet UI only supports these question types: `fill`, `mcq`, `lines`, `calc`, `match`, `spelling`.
+   - choose the most natural supported worksheet type for each student-facing prompt:
+     - `fill` for literal blanks / short phrase completions,
+     - `mcq` for multiple choice,
+     - `calc` for short numeric / formula answers with a unit,
+     - `match` for matching prompts,
+     - `spelling` for spelling-correction prompts,
+     - `lines` for any longer explanation, proof, justification, or working that does not cleanly fit the other types.
+   - when in doubt, use `lines`; do not invent unsupported question types.
+   - every worksheet question must include `marks`.
+   - `lines` questions must include `lines` as a positive integer.
+   - `fill` questions must use the real schema shape:
+     - `prompt`: text before the first blank,
+     - `blanks`: an array of 1 or 2 blank objects like `{ "placeholder": "..." }`,
+     - `conjunction`: optional text between blank 1 and blank 2,
+     - `after`: text after the final blank.
+   - `fill` supports only 1 or 2 blanks. If the worksheet has 3 or more blanks in one printed sentence, either split that work into multiple supported questions or use `lines`. Do NOT emit a 3-blank `fill` question.
+   - `lines` questions may optionally set `renderMode: "markdown"` when the prompt or the student's written answer should render with Markdown/LaTeX formatting in the sheet UI; use this for maths-heavy working, aligned equations, proofs, or structured multiline responses.
+   - question ids must be unique across the whole worksheet, not just within a section.
+   - the worksheet should reflect the real student-facing task text as closely as possible.
+   - keep prompt wording verbatim where possible: preserve numbering, labels, examples, punctuation, variable names, and displayed math.
+   - use `sheet.sections[].theory` / `infoBox` only when it helps explain context already present in the original materials; do not invent large teaching passages just to decorate the UI.
+   - `answers` must be keyed by worksheet `question.id`.
+   - answer-shape rules:
+     - `mcq`, `lines`, and `calc` answers are strings.
+     - `fill` answers are objects keyed by blank index (`"0"`, `"1"`).
+     - `match` answers are objects keyed by the shown term.
+     - `spelling` answers are objects keyed by word index (`"0"`, `"1"`, ...).
+   - preserve the student's wording, variables, formulas, method, and mistakes in `answers` wherever possible.
+   - when the worksheet page mixed prompt text and student writing, the stored answer should contain only the student's contributed words, not the full printed prompt repeated back.
+   - `review.score.total` must equal the total worksheet marks; `review.score.got` is the awarded mark total for the whole sheet.
+   - `review.questions` must contain one entry per worksheet question.
+   - each review entry must use one of these statuses:
+     - `correct` for fully satisfied questions,
+     - `incorrect` for clearly wrong / missing short-answer items,
+     - `teacher-review` for partial answers, nuanced near-misses, or longer free-response work that still needs interactive follow-up.
+   - each review entry must include a short, student-facing `note` that will be shown directly in the worksheet feedback card as the first assistant message.
+   - review-note tone:
+     - acknowledge sensible structure or plausible thinking before naming the exact gap,
+     - prefer a next-step cue, rule of thumb, contrast, or method reminder before giving away the full answer,
+     - do not treat a near-miss as resolved when the actual task is still unmet.
+   - use `replyPlaceholder` and `followUp` when helpful so the interactive feedback flow can continue inside the worksheet question card.
+   - `references.*Markdown` should preserve the grading/reference audit trail:
+     - `officialProblemMarkdown` and `officialSolutionMarkdown` remain as verbatim as possible,
+     - `studentTranscriptMarkdown` records the faithful transcription / normalization,
+     - `gradingMarkdown` explains marks and rationale,
+     - `overallFeedbackMarkdown` summarizes the whole sheet.
 8. Write run summary JSON to `grader/output/run-summary.json` with this shape:
 
 ```json
@@ -120,35 +193,35 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
 		"title": "string",
 		"summaryMarkdown": "string"
 	},
-	"problems": [
-		{
-			"id": "p1",
-			"index": 1,
-			"title": "string",
-			"awardedMarks": 0,
-			"maxMarks": 0,
-			"verdict": "correct|partial|incorrect|ungraded",
-			"filePath": "grader/output/problems/p1.md"
-		}
-	]
+	"sheet": {
+		"title": "string",
+		"filePath": "grader/output/sheet.json"
+	}
 }
 ```
 
 - `presentation.title` is required and should be a concise, user-facing card title.
 - `presentation.title` should adapt to the uploaded scope:
-  - use the actual paper name when confidently identified,
-  - otherwise describe what was graded, for example `Problem 8 submission` or `Problems 2, 5, 7, and 8 submission`.
-- Base `presentation.title` on the uploaded content and identified source context rather than a generic subject label.
+   - use the actual paper name when confidently identified,
+   - otherwise describe the worksheet that was graded, for example `Section 2 Test 5 worksheet` or `Uploaded worksheet`.
+- base `presentation.title` on the uploaded content and identified source context rather than a generic subject label.
 - `presentation.summaryMarkdown` is required and should be short Markdown suitable for direct UI rendering:
-  - one short paragraph or 2-3 short bullet points,
-  - focus on what was graded and any important caveats,
-  - do not repeat marks / problems / percent because the UI shows those separately.
-- In both `presentation.title` and `presentation.summaryMarkdown`, do NOT mention:
-  - run IDs, workspace IDs, file paths, tool names, source-policy labels, or implementation/process details.
-- Include `paperUrl` and `markSchemeUrl` only when known.
-- Omit `contextLabel`, `year`, `paperName`, `paperUrl`, and `markSchemeUrl` when they are unknown; do not fill them with placeholder text such as `Unknown`.
+   - one short paragraph or 2-3 short bullet points,
+   - focus on what was graded and any important caveats,
+   - do not repeat marks / question counts / percent because the UI shows those separately.
+- in both `presentation.title` and `presentation.summaryMarkdown`, do NOT mention:
+   - run IDs, workspace IDs, file paths, tool names, source-policy labels, or implementation/process details.
+- `sheet.filePath` must be exactly `grader/output/sheet.json`.
+- include `paperUrl` and `markSchemeUrl` only when known.
+- omit `contextLabel`, `year`, `paperName`, `paperUrl`, and `markSchemeUrl` when they are unknown; do not fill them with placeholder text such as `Unknown`.
 
-9. Call `done({summary})` with:
+9. Publish the worksheet artifact:
+   - call `publish_sheet({})` after both `grader/output/sheet.json` and `grader/output/run-summary.json` are written.
+   - `publish_sheet` validates both files against the live worksheet contract used by `/spark/sheets`.
+   - if `publish_sheet` fails, fix the files and retry until it returns `status = "published"`.
+   - do NOT call `done` before `publish_sheet` succeeds.
+
+10. Call `done({summary})` with:
    - the same user-facing Markdown used in `presentation.summaryMarkdown`
    - no run IDs, file paths, tool names, or process-log wording
    - no headings; keep it brief enough for a summary card
@@ -157,5 +230,6 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
 
 - Keep transcriptions faithful to source text.
 - Keep grading explicit and auditable.
+- Keep worksheet questions and stored answers faithful to what the student actually saw and wrote.
 - Keep feedback corrective, specific, and close to the student's attempted logic.
 - When official solutions are unavailable, keep derived solutions and explanations at the student's level whenever reasonable.

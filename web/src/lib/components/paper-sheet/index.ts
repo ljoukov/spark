@@ -6,6 +6,8 @@ export type {
 	PaperSheetCalcQuestion,
 	PaperSheetContentSection,
 	PaperSheetData,
+	PaperSheetFeedbackThread,
+	PaperSheetFeedbackTurn,
 	PaperSheetFillQuestion,
 	PaperSheetHookSection,
 	PaperSheetInfoBox,
@@ -16,6 +18,7 @@ export type {
 	PaperSheetQuestionReview,
 	PaperSheetQuestionReviewStatus,
 	PaperSheetQuestion,
+	PaperSheetReview,
 	PaperSheetScore,
 	PaperSheetSection,
 	PaperSheetSpellingQuestion

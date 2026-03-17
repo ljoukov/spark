@@ -97,6 +97,14 @@ export const load: PageServerLoad = async ({ params }) => {
 	);
 
 	const serializedSessions = sessions.map((session) => {
+		const source = {
+			kind: session.source.kind,
+			runId: session.source.runId,
+			sheetTitle: session.source.sheetTitle,
+			awardedMarks:
+				typeof session.source.awardedMarks === 'number' ? session.source.awardedMarks : null,
+			maxMarks: typeof session.source.maxMarks === 'number' ? session.source.maxMarks : null
+		};
 		const raw = {
 			id: session.id,
 			workspaceId: session.workspaceId,
@@ -106,17 +114,7 @@ export const load: PageServerLoad = async ({ params }) => {
 			focusLabel: session.focusLabel ?? null,
 			activeTurnAgentId: session.activeTurnAgentId ?? null,
 			graderAgentId: graderRunsById.get(session.source.runId) ?? null,
-			source: {
-				kind: session.source.kind,
-				runId: session.source.runId,
-				problemId: session.source.problemId,
-				problemIndex: session.source.problemIndex,
-				problemTitle: session.source.problemTitle,
-				verdict: session.source.verdict ?? null,
-				awardedMarks:
-					typeof session.source.awardedMarks === 'number' ? session.source.awardedMarks : null,
-				maxMarks: typeof session.source.maxMarks === 'number' ? session.source.maxMarks : null
-			},
+			source,
 			createdAt: toIso(session.createdAt),
 			updatedAt: toIso(session.updatedAt),
 			completedAt: session.completedAt ? toIso(session.completedAt) : null,
@@ -151,7 +149,7 @@ export const actions: Actions = {
 		const sessions = await listTutorSessions(userId, TUTOR_SESSION_LIST_LIMIT);
 		const session = sessions.find((entry) => entry.id === sessionId) ?? null;
 		if (!session) {
-			return fail(404, { error: `Tutor session ${sessionId} was not found.` });
+			return fail(404, { error: `Sheet interaction ${sessionId} was not found.` });
 		}
 
 		try {
@@ -176,10 +174,10 @@ export const actions: Actions = {
 				sessionId
 			});
 
-			return { success: { message: `Deleted tutor session ${sessionId}.` } as const };
+			return { success: { message: `Deleted sheet interaction ${sessionId}.` } as const };
 		} catch (error) {
-			console.error('Failed to delete tutor session', { userId, sessionId, error });
-			return fail(500, { error: 'Failed to delete tutor session. Please try again.' });
+			console.error('Failed to delete sheet interaction', { userId, sessionId, error });
+			return fail(500, { error: 'Failed to delete sheet interaction. Please try again.' });
 		}
 	}
 };

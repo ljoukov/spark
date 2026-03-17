@@ -265,20 +265,20 @@
 		}
 		switch (graderStatus) {
 			case 'created':
-				return 'Preparing the grader workspace.';
+				return 'Preparing the sheet workspace.';
 			case 'executing':
-				return 'Grading uploaded documents and compiling problem-by-problem feedback.';
+				return 'Reviewing the upload and building the worksheet sheet view.';
 			case 'done':
 				if (graderRun?.totals) {
-					return `${formatMarks(graderRun.totals.awardedMarks, graderRun.totals.maxMarks)} marks across ${graderRun.totals.problemCount.toString()} ${pluralise('problem', graderRun.totals.problemCount)}.`;
+					return `${formatMarks(graderRun.totals.awardedMarks, graderRun.totals.maxMarks)} across ${graderRun.totals.problemCount.toString()} ${pluralise('question', graderRun.totals.problemCount)}.`;
 				}
-				return graderRun?.resultSummary?.trim() || 'Grader run complete.';
+				return graderRun?.resultSummary?.trim() || 'Sheet ready.';
 			case 'failed':
-				return graderRun?.error?.trim() || 'Grader run failed. Open the run for details.';
+				return graderRun?.error?.trim() || 'Sheet generation failed. Open the sheet for details.';
 			case 'stopped':
-				return graderRun?.resultSummary?.trim() || 'Grader run stopped.';
+				return graderRun?.resultSummary?.trim() || 'Sheet generation stopped.';
 			case null:
-				return 'Preparing the grader workspace.';
+				return 'Preparing the sheet workspace.';
 		}
 	});
 
@@ -316,13 +316,9 @@
 		previewState?.liveStatusError ? 'preview' : liveStatusError
 	);
 
-	const primaryLabel = $derived.by(() =>
-		'Open'
-	);
+	const primaryLabel = $derived.by(() => (runCard.kind === 'lesson' ? 'Open' : 'Open sheet'));
 
-	const secondaryHref = $derived.by(() =>
-		runCard.kind === 'lesson' ? runCard.listHref : null
-	);
+	const secondaryHref = $derived.by(() => runCard.listHref ?? null);
 
 	onMount(() => {
 		if (!browser) {
@@ -409,7 +405,7 @@
 					graderRun = parsed.data;
 				},
 				(error) => {
-					console.warn('Grader run card subscription failed', error);
+					console.warn('Sheet run card subscription failed', error);
 					liveStatusError = 'grader';
 				}
 			);
@@ -440,7 +436,7 @@
 	</div>
 
 	<div class="agent-run-card__copy">
-		<p class="agent-run-card__eyebrow">{runCard.kind === 'lesson' ? 'Lesson task' : 'Grading task'}</p>
+		<p class="agent-run-card__eyebrow">{runCard.kind === 'lesson' ? 'Lesson task' : 'Sheet task'}</p>
 		<h3>{title}</h3>
 		{#if subtitle}
 			<p class="agent-run-card__subtitle">{subtitle}</p>
@@ -467,7 +463,7 @@
 					<p>{formatMarks(graderTotals.awardedMarks, graderTotals.maxMarks)}</p>
 				</div>
 				<div>
-					<span>Problems</span>
+					<span>Questions</span>
 					<p>{graderTotals.problemCount}</p>
 				</div>
 				<div>
@@ -485,7 +481,9 @@
 	<div class="agent-run-card__actions">
 		<a class="agent-run-card__button is-primary" href={runCard.href}>{primaryLabel}</a>
 		{#if secondaryHref}
-			<a class="agent-run-card__button" href={secondaryHref}>All lessons</a>
+			<a class="agent-run-card__button" href={secondaryHref}>
+				{runCard.kind === 'lesson' ? 'All lessons' : 'All sheets'}
+			</a>
 		{/if}
 	</div>
 </article>

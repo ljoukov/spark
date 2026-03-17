@@ -1948,8 +1948,7 @@
 				New chat
 			</Button>
 			<Button variant="ghost" size="sm" href="/spark/lessons">Lessons</Button>
-			<Button variant="ghost" size="sm" href="/spark/grader">Grader</Button>
-			<Button variant="ghost" size="sm" href="/spark/sessions">Tutor sessions</Button>
+			<Button variant="ghost" size="sm" href="/spark/sheets">Sheets</Button>
 			<Button variant="ghost" size="sm" href="/spark/agents">Agents</Button>
 		</div>
 

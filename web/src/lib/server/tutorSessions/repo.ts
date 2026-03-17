@@ -92,18 +92,14 @@ export async function listTutorSessions(userId: string, limit = 100): Promise<Sp
 	return sessions;
 }
 
-export async function findTutorSessionForGraderProblem(options: {
+export async function findTutorSessionForSheet(options: {
 	userId: string;
 	runId: string;
-	problemId: string;
 }): Promise<SparkTutorSession | null> {
 	const sessions = await listTutorSessions(options.userId, 200);
 	return (
 		sessions.find(
-			(session) =>
-				session.source.kind === 'grader-problem' &&
-				session.source.runId === options.runId &&
-				session.source.problemId === options.problemId
+			(session) => session.source.kind === 'sheet' && session.source.runId === options.runId
 		) ?? null
 	);
 }

@@ -5,7 +5,7 @@ import graderTaskTemplate from './task-template.md?raw';
 describe('grader task template', () => {
 	it('does not force one subagent per problem', () => {
 		expect(graderTaskTemplate).not.toContain('spawn exactly one subagent per problem');
-		expect(graderTaskTemplate).toContain('keep short routine problems in the main agent');
+		expect(graderTaskTemplate).toContain('keep short routine worksheet questions in the main agent');
 		expect(graderTaskTemplate).toContain(
 			'solution/explanation that would normally take about a page or more'
 		);

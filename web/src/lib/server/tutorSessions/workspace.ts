@@ -1,8 +1,10 @@
 import {
+	SparkGraderWorksheetReportSchema,
 	SparkTutorComposerStateSchema,
 	SparkTutorHistoryEntrySchema,
 	SparkTutorReviewStateSchema,
 	SparkTutorScreenStateSchema,
+	type SparkGraderWorksheetReport,
 	type SparkTutorComposerState,
 	type SparkTutorHistoryEntry,
 	type SparkTutorReviewState,
@@ -11,17 +13,14 @@ import {
 } from '@spark/schemas';
 import { buildWorkspaceFileDocPath, upsertWorkspaceTextFileDoc } from '@spark/llm';
 import { getFirestoreDocument } from '$lib/server/gcp/firestoreRest';
-import type { GraderProblemReportSections } from '$lib/server/grader/problemReport';
-import {
-	buildEmptyTutorReviewState,
-	buildInitialTutorReviewState,
-} from '$lib/server/tutorSessions/reviewState';
+import { buildEmptyTutorReviewState, buildInitialTutorReviewState } from '$lib/server/tutorSessions/reviewState';
+import { listWorksheetQuestionEntries } from '$lib/server/grader/problemReport';
 
+export const TUTOR_CONTEXT_REPORT_PATH = 'context/report.json' as const;
 export const TUTOR_CONTEXT_PROBLEM_PATH = 'context/problem.md' as const;
 export const TUTOR_CONTEXT_OFFICIAL_SOLUTION_PATH = 'context/official-solution.md' as const;
 export const TUTOR_CONTEXT_STUDENT_TRANSCRIPT_PATH = 'context/student-transcript.md' as const;
 export const TUTOR_CONTEXT_GRADING_PATH = 'context/grading.md' as const;
-export const TUTOR_CONTEXT_ANNOTATIONS_PATH = 'context/annotations.md' as const;
 export const TUTOR_CONTEXT_OVERALL_FEEDBACK_PATH = 'context/overall-feedback.md' as const;
 
 export const TUTOR_UI_TOP_PANEL_PATH = 'ui/tutor.md' as const;
@@ -29,9 +28,66 @@ export const TUTOR_STATE_SESSION_PATH = 'state/session.json' as const;
 export const TUTOR_STATE_COMPOSER_PATH = 'state/composer.json' as const;
 export const TUTOR_STATE_REVIEW_PATH = 'state/review.json' as const;
 export const TUTOR_HISTORY_TURNS_PATH = 'history/turns.jsonl' as const;
+export const TUTOR_FEEDBACK_ROOT_DIR = 'feedback/questions' as const;
+
+const EMPTY_REPORT: SparkGraderWorksheetReport = SparkGraderWorksheetReportSchema.parse({
+	schemaVersion: 1,
+	sheet: {
+		id: 'empty-sheet',
+		subject: 'Unknown',
+		level: 'Unknown',
+		title: 'Tutor sheet',
+		subtitle: 'Worksheet data unavailable.',
+		color: '#36587a',
+		accent: '#4d7aa5',
+		light: '#e8f2fb',
+		border: '#bfd0e0',
+		sections: [
+			{
+				type: 'hook',
+				text: 'Worksheet data unavailable.'
+			}
+		]
+	},
+	answers: {},
+	review: {
+		score: {
+			got: 0,
+			total: 0
+		},
+		label: 'Worksheet unavailable',
+		message: 'No worksheet review data is available for this tutor session.',
+		note: 'Tutor review could not be loaded.',
+		questions: {}
+	}
+});
 
 function stringifyJson(value: unknown): string {
 	return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+export function buildTutorQuestionDirectoryPath(questionId: string): string {
+	return `${TUTOR_FEEDBACK_ROOT_DIR}/${questionId}`;
+}
+
+export function buildTutorQuestionMetadataPath(questionId: string): string {
+	return `${buildTutorQuestionDirectoryPath(questionId)}/question.json`;
+}
+
+export function buildTutorQuestionTurnsDirectoryPath(questionId: string): string {
+	return `${buildTutorQuestionDirectoryPath(questionId)}/turns`;
+}
+
+function formatTurnFileStamp(now: Date): string {
+	return now.toISOString().replace(/[:.]/g, '-');
+}
+
+export function buildTutorQuestionTurnPath(options: {
+	questionId: string;
+	author: 'assistant' | 'student';
+	now: Date;
+}): string {
+	return `${buildTutorQuestionTurnsDirectoryPath(options.questionId)}/${formatTurnFileStamp(options.now)}-${options.author}.json`;
 }
 
 export function buildTutorComposerState(
@@ -110,41 +166,41 @@ export async function seedTutorWorkspace(options: {
 	userId: string;
 	workspaceId: string;
 	session: SparkTutorSession;
-	sections: GraderProblemReportSections;
+	report: SparkGraderWorksheetReport;
 	now: Date;
 }): Promise<void> {
-	const problemContent =
-		options.sections.officialStatement ??
-		options.sections.statement ??
-		'Problem statement unavailable.';
-	const officialSolutionContent =
-		options.sections.officialSolution ?? 'Official solution unavailable.';
-	const transcriptContent = options.sections.transcript ?? 'Student transcript unavailable.';
-	const gradingContent = options.sections.grading ?? 'Grading unavailable.';
-	const annotationsContent = options.sections.annotations ?? 'Line-by-line annotation unavailable.';
-	const overallContent = options.sections.overall ?? 'Overall feedback unavailable.';
-
 	const initialScreenState = buildTutorScreenState({
 		session: options.session
 	});
 	const initialComposerState = buildTutorComposerState({
-		placeholder: 'Reply to a comment thread.',
+		placeholder: 'Reply to the tutor on any open worksheet question.',
 		disabled: options.session.status !== 'awaiting_student',
 		allowConfidence: false,
 		hintButtons: []
 	});
 	const initialReviewState = buildInitialTutorReviewState({
-		sections: options.sections,
+		report: options.report,
 		now: options.now
 	});
+	const questionEntries = listWorksheetQuestionEntries(options.report.sheet);
+
+	const references = options.report.references ?? {};
 
 	await Promise.all([
 		writeTutorWorkspaceTextFile({
 			serviceAccountJson: options.serviceAccountJson,
 			userId: options.userId,
 			workspaceId: options.workspaceId,
+			filePath: TUTOR_CONTEXT_REPORT_PATH,
+			content: stringifyJson(options.report),
+			now: options.now
+		}),
+		writeTutorWorkspaceTextFile({
+			serviceAccountJson: options.serviceAccountJson,
+			userId: options.userId,
+			workspaceId: options.workspaceId,
 			filePath: TUTOR_CONTEXT_PROBLEM_PATH,
-			content: problemContent,
+			content: (references.officialProblemMarkdown ?? references.problemMarkdown ?? '').trim(),
 			now: options.now
 		}),
 		writeTutorWorkspaceTextFile({
@@ -152,7 +208,7 @@ export async function seedTutorWorkspace(options: {
 			userId: options.userId,
 			workspaceId: options.workspaceId,
 			filePath: TUTOR_CONTEXT_OFFICIAL_SOLUTION_PATH,
-			content: officialSolutionContent,
+			content: (references.officialSolutionMarkdown ?? '').trim(),
 			now: options.now
 		}),
 		writeTutorWorkspaceTextFile({
@@ -160,7 +216,7 @@ export async function seedTutorWorkspace(options: {
 			userId: options.userId,
 			workspaceId: options.workspaceId,
 			filePath: TUTOR_CONTEXT_STUDENT_TRANSCRIPT_PATH,
-			content: transcriptContent,
+			content: (references.studentTranscriptMarkdown ?? '').trim(),
 			now: options.now
 		}),
 		writeTutorWorkspaceTextFile({
@@ -168,15 +224,7 @@ export async function seedTutorWorkspace(options: {
 			userId: options.userId,
 			workspaceId: options.workspaceId,
 			filePath: TUTOR_CONTEXT_GRADING_PATH,
-			content: gradingContent,
-			now: options.now
-		}),
-		writeTutorWorkspaceTextFile({
-			serviceAccountJson: options.serviceAccountJson,
-			userId: options.userId,
-			workspaceId: options.workspaceId,
-			filePath: TUTOR_CONTEXT_ANNOTATIONS_PATH,
-			content: annotationsContent,
+			content: (references.gradingMarkdown ?? '').trim(),
 			now: options.now
 		}),
 		writeTutorWorkspaceTextFile({
@@ -184,7 +232,7 @@ export async function seedTutorWorkspace(options: {
 			userId: options.userId,
 			workspaceId: options.workspaceId,
 			filePath: TUTOR_CONTEXT_OVERALL_FEEDBACK_PATH,
-			content: overallContent,
+			content: (references.overallFeedbackMarkdown ?? '').trim(),
 			now: options.now
 		}),
 		writeTutorWorkspaceTextFile({
@@ -192,7 +240,7 @@ export async function seedTutorWorkspace(options: {
 			userId: options.userId,
 			workspaceId: options.workspaceId,
 			filePath: TUTOR_UI_TOP_PANEL_PATH,
-			content: 'Reply on each review thread until every comment is resolved.\n',
+			content: 'Worksheet tutor ready.\n',
 			now: options.now
 		}),
 		writeTutorWorkspaceTextFile({
@@ -226,7 +274,25 @@ export async function seedTutorWorkspace(options: {
 			filePath: TUTOR_HISTORY_TURNS_PATH,
 			content: '',
 			now: options.now
-		})
+		}),
+		...questionEntries.map((entry) =>
+			writeTutorWorkspaceTextFile({
+				serviceAccountJson: options.serviceAccountJson,
+				userId: options.userId,
+				workspaceId: options.workspaceId,
+				filePath: buildTutorQuestionMetadataPath(entry.question.id),
+				content: stringifyJson({
+					questionId: entry.question.id,
+					questionNumber: entry.number,
+					sectionId: entry.section.id,
+					sectionLabel: entry.section.label,
+					prompt: entry.question.prompt,
+					initialStatus: initialReviewState.threads[entry.question.id]?.status ?? 'open',
+					initialNote: initialReviewState.review.questions[entry.question.id]?.note ?? ''
+				}),
+				now: options.now
+			})
+		)
 	]);
 }
 
@@ -272,91 +338,50 @@ export async function readTutorWorkspaceState(options: {
 	screenState: SparkTutorScreenState;
 	composerState: SparkTutorComposerState;
 	reviewState: SparkTutorReviewState;
-	context: {
-		problem: string;
-		officialSolution: string;
-		transcript: string;
-		grading: string;
-		annotations: string;
-		overallFeedback: string;
-	};
+	report: SparkGraderWorksheetReport;
 }> {
-	const [
-		tutorMarkdown,
-		sessionStateRaw,
-		composerStateRaw,
-		reviewStateRaw,
-		problem,
-		officialSolution,
-		transcript,
-		grading,
-		annotations,
-		overallFeedback
-	] = await Promise.all([
-		readTutorWorkspaceTextFile({
-			serviceAccountJson: options.serviceAccountJson,
-			userId: options.userId,
-			workspaceId: options.workspaceId,
-			filePath: TUTOR_UI_TOP_PANEL_PATH
-		}),
-		readTutorWorkspaceTextFile({
-			serviceAccountJson: options.serviceAccountJson,
-			userId: options.userId,
-			workspaceId: options.workspaceId,
-			filePath: TUTOR_STATE_SESSION_PATH
-		}),
-		readTutorWorkspaceTextFile({
-			serviceAccountJson: options.serviceAccountJson,
-			userId: options.userId,
-			workspaceId: options.workspaceId,
-			filePath: TUTOR_STATE_COMPOSER_PATH
-		}),
-		readTutorWorkspaceTextFile({
-			serviceAccountJson: options.serviceAccountJson,
-			userId: options.userId,
-			workspaceId: options.workspaceId,
-			filePath: TUTOR_STATE_REVIEW_PATH
-		}),
-		readTutorWorkspaceTextFile({
-			serviceAccountJson: options.serviceAccountJson,
-			userId: options.userId,
-			workspaceId: options.workspaceId,
-			filePath: TUTOR_CONTEXT_PROBLEM_PATH
-		}),
-		readTutorWorkspaceTextFile({
-			serviceAccountJson: options.serviceAccountJson,
-			userId: options.userId,
-			workspaceId: options.workspaceId,
-			filePath: TUTOR_CONTEXT_OFFICIAL_SOLUTION_PATH
-		}),
-		readTutorWorkspaceTextFile({
-			serviceAccountJson: options.serviceAccountJson,
-			userId: options.userId,
-			workspaceId: options.workspaceId,
-			filePath: TUTOR_CONTEXT_STUDENT_TRANSCRIPT_PATH
-		}),
-		readTutorWorkspaceTextFile({
-			serviceAccountJson: options.serviceAccountJson,
-			userId: options.userId,
-			workspaceId: options.workspaceId,
-			filePath: TUTOR_CONTEXT_GRADING_PATH
-		}),
-		readTutorWorkspaceTextFile({
-			serviceAccountJson: options.serviceAccountJson,
-			userId: options.userId,
-			workspaceId: options.workspaceId,
-			filePath: TUTOR_CONTEXT_ANNOTATIONS_PATH
-		}),
-		readTutorWorkspaceTextFile({
-			serviceAccountJson: options.serviceAccountJson,
-			userId: options.userId,
-			workspaceId: options.workspaceId,
-			filePath: TUTOR_CONTEXT_OVERALL_FEEDBACK_PATH
-		})
-	]);
+	const [tutorMarkdown, sessionStateRaw, composerStateRaw, reviewStateRaw, reportRaw] =
+		await Promise.all([
+			readTutorWorkspaceTextFile({
+				serviceAccountJson: options.serviceAccountJson,
+				userId: options.userId,
+				workspaceId: options.workspaceId,
+				filePath: TUTOR_UI_TOP_PANEL_PATH
+			}),
+			readTutorWorkspaceTextFile({
+				serviceAccountJson: options.serviceAccountJson,
+				userId: options.userId,
+				workspaceId: options.workspaceId,
+				filePath: TUTOR_STATE_SESSION_PATH
+			}),
+			readTutorWorkspaceTextFile({
+				serviceAccountJson: options.serviceAccountJson,
+				userId: options.userId,
+				workspaceId: options.workspaceId,
+				filePath: TUTOR_STATE_COMPOSER_PATH
+			}),
+			readTutorWorkspaceTextFile({
+				serviceAccountJson: options.serviceAccountJson,
+				userId: options.userId,
+				workspaceId: options.workspaceId,
+				filePath: TUTOR_STATE_REVIEW_PATH
+			}),
+			readTutorWorkspaceTextFile({
+				serviceAccountJson: options.serviceAccountJson,
+				userId: options.userId,
+				workspaceId: options.workspaceId,
+				filePath: TUTOR_CONTEXT_REPORT_PATH
+			})
+		]);
+
+	const report = parseJsonWithSchema(
+		reportRaw,
+		(value) => SparkGraderWorksheetReportSchema.parse(value),
+		EMPTY_REPORT
+	);
 
 	return {
-		tutorMarkdown: tutorMarkdown ?? 'Preparing your tutor session...',
+		tutorMarkdown: tutorMarkdown ?? 'Worksheet tutor ready.',
 		screenState: parseJsonWithSchema(
 			sessionStateRaw,
 			(value) => SparkTutorScreenStateSchema.parse(value),
@@ -372,13 +397,6 @@ export async function readTutorWorkspaceState(options: {
 			(value) => SparkTutorReviewStateSchema.parse(value),
 			buildEmptyTutorReviewState(options.session.updatedAt)
 		),
-		context: {
-			problem: problem ?? '',
-			officialSolution: officialSolution ?? '',
-			transcript: transcript ?? '',
-			grading: grading ?? '',
-			annotations: annotations ?? '',
-			overallFeedback: overallFeedback ?? ''
-		}
+		report
 	};
 }

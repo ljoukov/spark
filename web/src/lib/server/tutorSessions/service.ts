@@ -54,6 +54,8 @@ export async function createTutorTurnAgentRun(options: {
 	title: string;
 	action: TutorTurnAction;
 	now: Date;
+	questionId?: string;
+	turnFilePath?: string;
 	studentText?: string;
 	confidence?: SparkTutorConfidence;
 	hintLevel?: SparkTutorHintLevel;
@@ -73,6 +75,8 @@ export async function createTutorTurnAgentRun(options: {
 			tutorSessionId: options.sessionId,
 			tutorInteractionKind: 'full_turn',
 			tutorAction: options.action,
+			...(options.questionId ? { tutorQuestionId: options.questionId } : {}),
+			...(options.turnFilePath ? { tutorTurnFilePath: options.turnFilePath } : {}),
 			...(options.studentText ? { tutorStudentText: options.studentText } : {}),
 			...(options.confidence ? { tutorConfidence: options.confidence } : {}),
 			...(options.hintLevel ? { tutorHintLevel: options.hintLevel } : {}),

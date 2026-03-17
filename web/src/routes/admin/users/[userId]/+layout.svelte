@@ -133,13 +133,13 @@
 			href={gradersHref}
 			class={cn(buttonVariants({ variant: isGradersActive ? 'default' : 'secondary', size: 'sm' }))}
 		>
-			Graders
+			Sheets
 		</a>
 		<a
 			href={tutorsHref}
 			class={cn(buttonVariants({ variant: isTutorsActive ? 'default' : 'secondary', size: 'sm' }))}
 		>
-			Tutors
+			Interactions
 		</a>
 		<a
 			href={agentsHref}

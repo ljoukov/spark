@@ -1564,7 +1564,7 @@ function buildSparkChatTools(options: {
 						olympiadKey: plan.launchTitleKey,
 						olympiadLabel: plan.launchTitle,
 						summaryPath: plan.summaryPath,
-						problemsDir: plan.problemsDir,
+						sheetPath: plan.sheetPath,
 						sourceAttachmentIds: plan.runAttachments.map((attachment) => attachment.id),
 						sourceAttachmentCount: plan.runAttachments.length,
 						status: 'created',
@@ -1644,7 +1644,7 @@ function buildSparkChatTools(options: {
 							workspaceId: plan.workspaceId,
 							graderRunId: plan.runId,
 							graderSummaryPath: plan.summaryPath,
-							graderProblemsDir: plan.problemsDir,
+							graderSheetPath: plan.sheetPath,
 							inputAttachments: plan.runAttachments,
 							graderInputAttachments: plan.runAttachments,
 							createdAt: plan.createdAt,
@@ -1669,8 +1669,8 @@ function buildSparkChatTools(options: {
 						runId: plan.runId,
 						title: plan.launchTitle,
 						sourceAttachmentCount: plan.runAttachments.length,
-						href: `/spark/grader/${plan.runId}`,
-						listHref: '/spark/grader'
+						href: `/spark/sheets/${plan.runId}`,
+						listHref: '/spark/sheets'
 					};
 					if (onRunCard) {
 						try {

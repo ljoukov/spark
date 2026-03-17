@@ -1,6 +1,11 @@
 import { z } from "zod";
 
 import { FirestoreTimestampSchema } from "./firestore";
+import {
+  PaperSheetAnswersSchema,
+  PaperSheetDataSchema,
+  PaperSheetReviewSchema,
+} from "./paperSheet";
 
 const trimmedString = z.string().trim().min(1);
 
@@ -30,12 +35,9 @@ export type SparkTutorHintLevel = z.infer<typeof SparkTutorHintLevelSchema>;
 
 export const SparkTutorSessionSourceSchema = z.discriminatedUnion("kind", [
   z.object({
-    kind: z.literal("grader-problem"),
+    kind: z.literal("sheet"),
     runId: trimmedString,
-    problemId: trimmedString,
-    problemIndex: z.number().int().min(1),
-    problemTitle: trimmedString,
-    verdict: z.enum(["correct", "partial", "incorrect", "ungraded"]).optional(),
+    sheetTitle: trimmedString,
     awardedMarks: z.number().min(0).optional(),
     maxMarks: z.number().min(0).optional(),
   }),
@@ -116,23 +118,6 @@ export type SparkTutorReviewThreadStatus = z.infer<
   typeof SparkTutorReviewThreadStatusSchema
 >;
 
-export const SparkTutorReviewThreadAnchorSchema = z.discriminatedUnion(
-  "kind",
-  [
-    z.object({
-      kind: z.literal("transcript_line"),
-      lineNumber: z.number().int().min(1),
-    }),
-    z.object({
-      kind: z.literal("problem"),
-    }),
-  ],
-);
-
-export type SparkTutorReviewThreadAnchor = z.infer<
-  typeof SparkTutorReviewThreadAnchorSchema
->;
-
 export const SparkTutorReviewMessageSchema = z.object({
   id: trimmedString,
   author: z.enum(["assistant", "student"]),
@@ -144,22 +129,10 @@ export type SparkTutorReviewMessage = z.infer<
   typeof SparkTutorReviewMessageSchema
 >;
 
-export const SparkTutorTranscriptLineSchema = z.object({
-  lineNumber: z.number().int().min(1),
-  markdown: z.string().trim().min(1),
-});
-
-export type SparkTutorTranscriptLine = z.infer<
-  typeof SparkTutorTranscriptLineSchema
->;
-
 export const SparkTutorReviewThreadSchema = z.object({
-  id: trimmedString,
-  label: trimmedString,
+  questionId: trimmedString,
   status: SparkTutorReviewThreadStatusSchema,
-  anchor: SparkTutorReviewThreadAnchorSchema,
-  excerpt: trimmedString.optional(),
-  messages: z.array(SparkTutorReviewMessageSchema).min(1),
+  messages: z.array(SparkTutorReviewMessageSchema),
   resolvedAt: z.string().datetime({ offset: true }).optional(),
 });
 
@@ -168,8 +141,10 @@ export type SparkTutorReviewThread = z.infer<
 >;
 
 export const SparkTutorReviewStateSchema = z.object({
-  transcriptLines: z.array(SparkTutorTranscriptLineSchema),
-  threads: z.array(SparkTutorReviewThreadSchema),
+  sheet: PaperSheetDataSchema,
+  answers: PaperSheetAnswersSchema,
+  review: PaperSheetReviewSchema,
+  threads: z.record(trimmedString, SparkTutorReviewThreadSchema),
   updatedAt: z.string().datetime({ offset: true }),
 });
 

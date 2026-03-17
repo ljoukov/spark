@@ -109,7 +109,7 @@ export async function launchSparkLocalGraderRun(options: {
     useSubagents: options.useSubagents ?? true,
     grader: {
       summaryPath: options.plan.summaryPath,
-      problemsDir: options.plan.problemsDir,
+      sheetPath: options.plan.sheetPath,
     },
   });
   const resultPromise = runSparkGraderLocal({

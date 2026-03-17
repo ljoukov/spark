@@ -25,8 +25,8 @@
 	const graderRunCard = {
 		kind: 'grader',
 		runId: 'preview-uploaded-work-p8',
-		href: '/spark/grader/preview-uploaded-work-p8',
-		listHref: '/spark/grader',
+		href: '/spark/sheets/preview-uploaded-work-p8',
+		listHref: '/spark/sheets',
 		title: 'Uploaded work',
 		sourceAttachmentCount: 2
 	} as const;
@@ -57,7 +57,7 @@
 								subtitle: 'Problem 8 • Uploaded-only references',
 								meta: '2 uploads attached',
 								startedAt: new Date(now - 5_000),
-								summary: 'Preparing the grader workspace and attaching the uploaded documents.'
+								summary: 'Preparing the sheet workspace and attaching the uploaded documents.'
 							}
 						}
 					]
@@ -90,7 +90,7 @@
 								meta: '2 uploads attached',
 								startedAt: new Date(now - 72_000),
 								summary:
-									'Grading uploaded documents, transcribing the student work, and compiling line-by-line feedback.'
+									'Grading uploaded documents, transcribing the student work, and building the worksheet sheet.'
 							}
 						}
 					],
@@ -122,8 +122,7 @@
 								title: 'Problem 8 submission',
 								subtitle: 'Year 2024 • Problem 8',
 								meta: '60% scored',
-								summary:
-									'6/10 marks across 2 problems, with the main loss coming from an unsupported step in part (b).',
+								summary: '6/10 marks across 2 questions, with the main loss coming from an unsupported step in part (b).',
 								totals: {
 									awardedMarks: 6,
 									maxMarks: 10,
@@ -162,7 +161,7 @@
 								subtitle: 'Problem 8 • Uploaded-only references',
 								meta: '2 uploads attached',
 								summary:
-									'The grader could not extract a reliable transcript from one upload. Open the run for the failure details.'
+									'The sheet pipeline could not extract a reliable transcript from one upload. Open the sheet for the failure details.'
 							}
 						}
 					],

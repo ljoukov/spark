@@ -307,7 +307,7 @@ const hamiltonSampleReview: PaperSheetMockReview = {
 	teacherReviewQuestionCount: 6,
 	label: 'Sample grading summary',
 	message: 'Hamilton 2023 combined grading file transcribed into the sheet preview.',
-	note: 'Use Show Mock Review to reveal problem-level notes seeded from the original grader comments.',
+	note: 'Use Show Mock Review to reveal problem-level notes seeded from the original review comments.',
 	questions: {
 		'H1:response': {
 			status: 'incorrect',

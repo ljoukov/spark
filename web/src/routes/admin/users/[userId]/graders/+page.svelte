@@ -66,12 +66,12 @@
 
 <Card.Root class="border-border/70 bg-card/95 shadow-sm">
 	<Card.Header>
-		<Card.Title>Graders</Card.Title>
+		<Card.Title>Sheets</Card.Title>
 		<Card.Description>
 			{#if runs.length === 0}
-				No grader runs found.
+				No sheet runs found.
 			{:else}
-				Showing {runs.length} run{runs.length === 1 ? '' : 's'}.
+				Showing {runs.length} sheet run{runs.length === 1 ? '' : 's'}.
 			{/if}
 		</Card.Description>
 	</Card.Header>
@@ -122,8 +122,8 @@
 								<span class="ml-1">{run.sourceAttachmentCount}</span>
 							</p>
 							<p>
-								<span class="text-foreground/70">Problems</span>
-								<span class="ml-1">{run.totals ? run.totals.problemCount : run.problems.length}</span>
+								<span class="text-foreground/70">Questions</span>
+								<span class="ml-1">{run.totals ? run.totals.problemCount : '—'}</span>
 							</p>
 							<p>
 								<span class="text-foreground/70">Marks</span>
@@ -166,7 +166,7 @@
 							variant="destructive"
 							size="sm"
 							onclick={(event) => {
-								if (!confirm('Delete this grader run document? This cannot be undone.')) {
+								if (!confirm('Delete this sheet run document? This cannot be undone.')) {
 									event.preventDefault();
 								}
 							}}

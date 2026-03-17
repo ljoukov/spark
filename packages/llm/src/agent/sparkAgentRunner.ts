@@ -1,7 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import {
   mkdir,
@@ -45,8 +45,10 @@ import {
   SessionSchema,
   SessionMediaDocSchema,
   SparkAgentStateTimelineSchema,
+  SparkGraderWorksheetReportSchema,
   SparkTutorComposerStateSchema,
   SparkTutorHistoryEntrySchema,
+  SparkTutorReviewStateSchema,
   SparkTutorScreenStateSchema,
   SparkAgentWorkspaceFileSchema,
   type CodeProblem,
@@ -54,7 +56,9 @@ import {
   type Session,
   type SessionMediaDoc,
   type SparkAgentStateTimeline,
+  type SparkGraderWorksheetReport,
   type SparkTutorComposerState,
+  type SparkTutorReviewState,
 } from "@spark/schemas";
 
 import { errorAsString } from "../utils/error";
@@ -174,6 +178,7 @@ const EXTRACT_TEXT_DEFAULT_SUPPORTING_PROMPT =
 const PDF_DIAGRAM_DEFAULT_MAX_ITEMS = 32;
 const PDF_DIAGRAM_MAX_ITEMS = 64;
 const TUTOR_CONTEXT_PROBLEM_PATH = "context/problem.md";
+const TUTOR_CONTEXT_REPORT_PATH = "context/report.json";
 const TUTOR_CONTEXT_OFFICIAL_SOLUTION_PATH = "context/official-solution.md";
 const TUTOR_CONTEXT_STUDENT_TRANSCRIPT_PATH = "context/student-transcript.md";
 const TUTOR_CONTEXT_GRADING_PATH = "context/grading.md";
@@ -183,7 +188,9 @@ const TUTOR_UI_TOP_PANEL_PATH = "ui/tutor.md";
 const TUTOR_UI_INLINE_FEEDBACK_PATH = "ui/inline-feedback.md";
 const TUTOR_STATE_SESSION_PATH = "state/session.json";
 const TUTOR_STATE_COMPOSER_PATH = "state/composer.json";
+const TUTOR_STATE_REVIEW_PATH = "state/review.json";
 const TUTOR_HISTORY_TURNS_PATH = "history/turns.jsonl";
+const TUTOR_FEEDBACK_ROOT_DIR = "feedback/questions";
 
 async function loadSparkGraderRequestPayloadFromWorkspace(rootDir: string) {
   const requestPath = path.join(rootDir, "request.json");
@@ -712,13 +719,19 @@ const AgentAttachmentInputSchema = z.object({
 
 type AgentAttachmentInput = z.infer<typeof AgentAttachmentInputSchema>;
 
-const GraderSummaryProblemSchema = z.object({
-  id: z.string().trim().min(1),
-  index: z.number().int().min(1),
+type GraderPublishConfig =
+  | {
+      mode: "live";
+      runId: string;
+    }
+  | {
+      mode: "mock";
+      runId?: string;
+      href?: string;
+    };
+
+const GraderSummarySheetSchema = z.object({
   title: z.string().trim().min(1).optional(),
-  awardedMarks: z.number().min(0).optional(),
-  maxMarks: z.number().min(0).optional(),
-  verdict: z.enum(["correct", "partial", "incorrect", "ungraded"]).optional(),
   filePath: z.string().trim().min(1),
 });
 
@@ -742,7 +755,7 @@ const GraderRunSummarySchema = z
         maxMarks: z.number().min(0),
       })
       .optional(),
-    problems: z.array(GraderSummaryProblemSchema).min(1),
+    sheet: GraderSummarySheetSchema,
   })
   .transform(({ contextLabel, olympiad, ...rest }) => ({
     ...rest,
@@ -752,6 +765,36 @@ const GraderRunSummarySchema = z
   }));
 
 type GraderRunSummary = z.infer<typeof GraderRunSummarySchema>;
+
+type PublishedGraderSheetArtifacts = {
+  summaryPath: string;
+  sheetPath: string;
+  summarySha256: string;
+  sheetSha256: string;
+  paper?: {
+    contextLabel?: string;
+    year?: string;
+    paperName?: string;
+    paperUrl?: string;
+    markSchemeUrl?: string;
+  };
+  presentation: {
+    title: string;
+    summaryMarkdown: string;
+  };
+  totals: {
+    awardedMarks: number;
+    maxMarks: number;
+    problemCount: number;
+    gradedCount: number;
+    percentage: number;
+  };
+  sheet: {
+    title?: string;
+    filePath: string;
+  };
+  resultSummary?: string;
+};
 
 function selectGraderResultSummary(options: {
   doneSummary?: string;
@@ -1344,39 +1387,182 @@ function summariseGraderTotals(summary: GraderRunSummary): {
   gradedCount: number;
   percentage: number;
 } {
-  const awardedFromProblems = summary.problems.reduce((sum, problem) => {
-    if (typeof problem.awardedMarks === "number") {
-      return sum + problem.awardedMarks;
-    }
-    return sum;
-  }, 0);
-  const maxFromProblems = summary.problems.reduce((sum, problem) => {
-    if (typeof problem.maxMarks === "number") {
-      return sum + problem.maxMarks;
-    }
-    return sum;
-  }, 0);
   const awardedMarks =
     typeof summary.totals?.awardedMarks === "number"
       ? summary.totals.awardedMarks
-      : awardedFromProblems;
+      : 0;
   const maxMarks =
     typeof summary.totals?.maxMarks === "number"
       ? summary.totals.maxMarks
-      : maxFromProblems;
-  const gradedCount = summary.problems.filter(
-    (problem) =>
-      typeof problem.awardedMarks === "number" &&
-      typeof problem.maxMarks === "number",
-  ).length;
+      : 0;
   const percentage = maxMarks > 0 ? (awardedMarks / maxMarks) * 100 : 0;
   return {
     awardedMarks,
     maxMarks,
-    problemCount: summary.problems.length,
-    gradedCount,
+    problemCount: 1,
+    gradedCount: 1,
     percentage: Number.isFinite(percentage) ? percentage : 0,
   };
+}
+
+function formatZodIssueSummary(
+  error: z.ZodError<unknown>,
+  maxIssues = 10,
+): string {
+  const summary = error.issues
+    .slice(0, maxIssues)
+    .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
+    .join("; ");
+  return summary.length > 0 ? summary : "unknown schema issue";
+}
+
+async function validateGraderWorkspaceForPublish(options: {
+  rootDir: string;
+  summaryPath: string;
+  sheetPath: string;
+}): Promise<PublishedGraderSheetArtifacts> {
+  const normalizeWorkspacePath = (value: string): string =>
+    value.replace(/\\/gu, "/").trim();
+
+  const resolvedSummaryPath = normalizeWorkspacePath(options.summaryPath);
+  const resolvedSheetPath = normalizeWorkspacePath(options.sheetPath);
+
+  const summaryRaw = await readFile(
+    resolveWorkspacePath(options.rootDir, resolvedSummaryPath),
+    {
+      encoding: "utf8",
+    },
+  ).catch((error) => {
+    throw new Error(
+      `Missing required grader summary "${resolvedSummaryPath}": ${errorAsString(error)}`,
+    );
+  });
+  let summaryJson: unknown;
+  try {
+    summaryJson = JSON.parse(summaryRaw);
+  } catch (error) {
+    throw new Error(
+      `Grader summary "${resolvedSummaryPath}" is invalid JSON: ${errorAsString(error)}`,
+    );
+  }
+  const parsedSummary = GraderRunSummarySchema.safeParse(summaryJson);
+  if (!parsedSummary.success) {
+    throw new Error(
+      `Grader summary "${resolvedSummaryPath}" failed schema validation: ${formatZodIssueSummary(parsedSummary.error)}`,
+    );
+  }
+  const summary = parsedSummary.data;
+
+  if (normalizeWorkspacePath(summary.sheet.filePath) !== resolvedSheetPath) {
+    throw new Error(
+      `Grader summary sheet.filePath must be "${resolvedSheetPath}" before publish.`,
+    );
+  }
+
+  const presentationTitle = summary.presentation?.title?.trim();
+  if (!presentationTitle) {
+    throw new Error(
+      `Grader summary "${resolvedSummaryPath}" is missing presentation.title.`,
+    );
+  }
+  const presentationSummary = summary.presentation?.summaryMarkdown?.trim();
+  if (!presentationSummary) {
+    throw new Error(
+      `Grader summary "${resolvedSummaryPath}" is missing presentation.summaryMarkdown.`,
+    );
+  }
+  if (!summary.totals) {
+    throw new Error(
+      `Grader summary "${resolvedSummaryPath}" is missing totals.`,
+    );
+  }
+
+  const sheetRaw = await readFile(
+    resolveWorkspacePath(options.rootDir, resolvedSheetPath),
+    {
+      encoding: "utf8",
+    },
+  ).catch((error) => {
+    throw new Error(
+      `Missing required worksheet artifact "${resolvedSheetPath}": ${errorAsString(error)}`,
+    );
+  });
+  let sheetJson: unknown;
+  try {
+    sheetJson = JSON.parse(sheetRaw);
+  } catch (error) {
+    throw new Error(
+      `Worksheet artifact "${resolvedSheetPath}" is invalid JSON: ${errorAsString(error)}`,
+    );
+  }
+  const parsedSheet = SparkGraderWorksheetReportSchema.safeParse(sheetJson);
+  if (!parsedSheet.success) {
+    throw new Error(
+      `Worksheet artifact "${resolvedSheetPath}" failed schema validation: ${formatZodIssueSummary(parsedSheet.error)}`,
+    );
+  }
+  const report = parsedSheet.data;
+
+  if (summary.totals.awardedMarks !== report.review.score.got) {
+    throw new Error(
+      `Grader summary totals.awardedMarks (${summary.totals.awardedMarks.toString()}) must equal worksheet review.score.got (${report.review.score.got.toString()}).`,
+    );
+  }
+  if (summary.totals.maxMarks !== report.review.score.total) {
+    throw new Error(
+      `Grader summary totals.maxMarks (${summary.totals.maxMarks.toString()}) must equal worksheet review.score.total (${report.review.score.total.toString()}).`,
+    );
+  }
+
+  const paper: PublishedGraderSheetArtifacts["paper"] = {};
+  if (summary.contextLabel) {
+    paper.contextLabel = summary.contextLabel;
+  }
+  if (summary.year) {
+    paper.year = summary.year;
+  }
+  if (summary.paperName) {
+    paper.paperName = summary.paperName;
+  }
+  if (summary.paperUrl) {
+    paper.paperUrl = summary.paperUrl;
+  }
+  if (summary.markSchemeUrl) {
+    paper.markSchemeUrl = summary.markSchemeUrl;
+  }
+
+  return {
+    summaryPath: resolvedSummaryPath,
+    sheetPath: resolvedSheetPath,
+    summarySha256: createHash("sha256").update(summaryRaw).digest("hex"),
+    sheetSha256: createHash("sha256").update(sheetRaw).digest("hex"),
+    ...(Object.keys(paper).length > 0 ? { paper } : {}),
+    presentation: {
+      title: presentationTitle,
+      summaryMarkdown: presentationSummary,
+    },
+    totals: summariseGraderTotals(summary),
+    sheet: {
+      filePath: resolvedSheetPath,
+      title: summary.sheet.title?.trim() || report.sheet.title,
+    },
+    resultSummary: selectGraderResultSummary({
+      runSummary: summary,
+    }),
+  };
+}
+
+async function computeWorkspaceFileSha256(options: {
+  rootDir: string;
+  filePath: string;
+}): Promise<string> {
+  const raw = await readFile(
+    resolveWorkspacePath(options.rootDir, options.filePath),
+    {
+      encoding: "utf8",
+    },
+  );
+  return createHash("sha256").update(raw).digest("hex");
 }
 
 async function patchGraderRunStatus(options: {
@@ -1437,6 +1623,135 @@ function buildTutorComposerState(
     ],
     ...overrides,
   });
+}
+
+function parseTutorReviewStateFromWorkspace(
+  raw: string | null,
+): SparkTutorReviewState | null {
+  if (!raw) {
+    return null;
+  }
+  try {
+    return SparkTutorReviewStateSchema.parse(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+function parseWorksheetReportFromWorkspace(
+  raw: string | null,
+): SparkGraderWorksheetReport | null {
+  if (!raw) {
+    return null;
+  }
+  try {
+    return SparkGraderWorksheetReportSchema.parse(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+function listWorksheetQuestionIds(
+  report: SparkGraderWorksheetReport,
+): string[] {
+  const ids: string[] = [];
+  for (const section of report.sheet.sections) {
+    if (!("id" in section)) {
+      continue;
+    }
+    for (const question of section.questions ?? []) {
+      ids.push(question.id);
+    }
+  }
+  return ids;
+}
+
+function buildTutorQuestionTurnFilePath(options: {
+  questionId: string;
+  author: "assistant" | "student";
+  now: Date;
+}): string {
+  const stamp = options.now.toISOString().replace(/[:.]/gu, "-");
+  return `${TUTOR_FEEDBACK_ROOT_DIR}/${options.questionId}/turns/${stamp}-${options.author}.json`;
+}
+
+function summarizeTutorReviewThreads(
+  reviewState: SparkTutorReviewState,
+  questionIds: readonly string[],
+): {
+  totalThreads: number;
+  resolvedThreads: number;
+  respondingThreads: number;
+  nextQuestionId: string | null;
+  allResolved: boolean;
+} {
+  let resolvedThreads = 0;
+  let respondingThreads = 0;
+  let nextQuestionId: string | null = null;
+  for (const questionId of questionIds) {
+    const thread = reviewState.threads[questionId];
+    if (!thread) {
+      continue;
+    }
+    if (thread.status === "resolved") {
+      resolvedThreads += 1;
+      continue;
+    }
+    if (!nextQuestionId) {
+      nextQuestionId = questionId;
+    }
+    if (thread.status === "responding") {
+      respondingThreads += 1;
+    }
+  }
+  const totalThreads = Object.keys(reviewState.threads).length;
+  return {
+    totalThreads,
+    resolvedThreads,
+    respondingThreads,
+    nextQuestionId,
+    allResolved: totalThreads === 0 || resolvedThreads === totalThreads,
+  };
+}
+
+function buildTutorFocusLabelForQuestion(options: {
+  report: SparkGraderWorksheetReport;
+  questionId: string | null;
+}): string | null {
+  if (!options.questionId) {
+    return null;
+  }
+  let counter = 1;
+  for (const section of options.report.sheet.sections) {
+    if (!("id" in section)) {
+      continue;
+    }
+    for (const question of section.questions ?? []) {
+      if (question.id === options.questionId) {
+        return `Question ${counter.toString()}`;
+      }
+      counter += 1;
+    }
+  }
+  return null;
+}
+
+function buildTutorPreviewFromSummary(summary: {
+  totalThreads: number;
+  resolvedThreads: number;
+  allResolved: boolean;
+}): string {
+  if (summary.totalThreads === 0) {
+    return "No worksheet feedback threads are available.";
+  }
+  if (summary.allResolved) {
+    return `All ${summary.totalThreads.toString()} worksheet feedback threads are resolved.`;
+  }
+  const remaining = summary.totalThreads - summary.resolvedThreads;
+  if (remaining === 1) {
+    return "1 worksheet question still needs revision.";
+  }
+  return `${remaining.toString()} worksheet questions still need revision.`;
 }
 
 function stringifyJsonFile(value: unknown): string {
@@ -3685,6 +4000,11 @@ function buildAgentTools(options: {
   onToolLlmCost?: (toolName: ToolLlmCostName, costUsd: number) => void;
   enforceLessonPipeline?: boolean;
   allowPythonExec?: boolean;
+  graderPublish?: GraderPublishConfig;
+  beforePublishSheet?: () => Promise<void>;
+  onPublishSheet?: (
+    publication: PublishedGraderSheetArtifacts,
+  ) => Promise<void> | void;
   debug?: LlmDebugOptions;
   extractTextDebugRootDir?: string;
 }): LlmToolSet {
@@ -3697,6 +4017,9 @@ function buildAgentTools(options: {
     onToolLlmCost,
     enforceLessonPipeline,
     allowPythonExec,
+    graderPublish,
+    beforePublishSheet,
+    onPublishSheet,
     debug,
     extractTextDebugRootDir,
   } = options;
@@ -6774,6 +7097,71 @@ function buildAgentTools(options: {
       },
     }),
   };
+  if (graderPublish) {
+    const publish_sheet = tool({
+      description:
+        "Validate and publish the grader worksheet artifact for /spark/sheets. Requires a valid grader/output/run-summary.json plus grader/output/sheet.json. Fix any validation errors and retry until status='published'.",
+      inputSchema: z
+        .object({
+          summaryPath: z.string().trim().min(1).optional(),
+          sheetPath: z.string().trim().min(1).optional(),
+        })
+        .strict(),
+      execute: async ({ summaryPath, sheetPath }) => {
+        const publication = await validateGraderWorkspaceForPublish({
+          rootDir,
+          summaryPath: summaryPath ?? "grader/output/run-summary.json",
+          sheetPath: sheetPath ?? "grader/output/sheet.json",
+        });
+        await beforePublishSheet?.();
+
+        const href = (() => {
+          if (graderPublish.mode === "live") {
+            return `/spark/sheets/${graderPublish.runId}`;
+          }
+          if (graderPublish.href) {
+            return graderPublish.href;
+          }
+          if (graderPublish.runId) {
+            return `/spark/sheets/${graderPublish.runId}`;
+          }
+          return "/spark/sheets";
+        })();
+
+        if (graderPublish.mode === "live") {
+          await patchGraderRunStatus({
+            serviceAccountJson,
+            userId,
+            runId: graderPublish.runId,
+            updates: {
+              updatedAt: new Date(),
+              ...(publication.paper ? { paper: publication.paper } : {}),
+              presentation: publication.presentation,
+              totals: publication.totals,
+              sheet: publication.sheet,
+              summaryPath: publication.summaryPath,
+              sheetPath: publication.sheetPath,
+              ...(publication.resultSummary
+                ? { resultSummary: publication.resultSummary }
+                : {}),
+            },
+          });
+        }
+
+        await onPublishSheet?.(publication);
+
+        return {
+          status: "published" as const,
+          mode: graderPublish.mode,
+          href,
+          presentationTitle: publication.presentation.title,
+          awardedMarks: publication.totals.awardedMarks,
+          maxMarks: publication.totals.maxMarks,
+        };
+      },
+    });
+    tools.publish_sheet = publish_sheet;
+  }
   if (!shouldAllowPythonExec) {
     delete (tools as Record<string, unknown>).python_exec;
   }
@@ -6789,6 +7177,11 @@ export function buildSparkAgentTools(options: {
   onToolLlmCost?: (toolName: ToolLlmCostName, costUsd: number) => void;
   enforceLessonPipeline?: boolean;
   allowPythonExec?: boolean;
+  graderPublish?: GraderPublishConfig;
+  beforePublishSheet?: () => Promise<void>;
+  onPublishSheet?: (
+    publication: PublishedGraderSheetArtifacts,
+  ) => Promise<void> | void;
   debug?: LlmDebugOptions;
   extractTextDebugRootDir?: string;
 }): LlmToolSet {
@@ -7033,9 +7426,11 @@ export async function runSparkAgentTask(
   let workspaceSync: WorkspaceSync | undefined;
   let graderRunId: string | null = null;
   let graderSummaryPath = "grader/output/run-summary.json";
-  let graderProblemsDir = "grader/output/problems";
+  let graderSheetPath = "grader/output/sheet.json";
   let tutorSessionId: string | null = null;
   let tutorAction: "initial" | "reply" | "hint" | null = null;
+  let tutorQuestionId: string | null = null;
+  let tutorTurnFilePath: string | null = null;
   let tutorStudentText: string | null = null;
   let tutorConfidence: string | null = null;
   let tutorHintLevel: string | null = null;
@@ -7044,6 +7439,7 @@ export async function runSparkAgentTask(
   let tutorDraftRevision = 0;
   let tutorFocusLabel: string | null = null;
   let tutorSnapshot: TutorWorkspaceSnapshot | null = null;
+  let publishedGraderSheet: PublishedGraderSheetArtifacts | null = null;
   let agentMetricType: SparkAgentMetricType = "chat";
   let agentMetricStatus: "ok" | "error" | "stopped" = "error";
   const monitoringJob = "spark-task-runner";
@@ -7090,12 +7486,12 @@ export async function runSparkAgentTask(
     if (rawSummaryPath.length > 0) {
       graderSummaryPath = rawSummaryPath;
     }
-    const rawProblemsDir =
-      typeof agentData.graderProblemsDir === "string"
-        ? agentData.graderProblemsDir.trim()
+    const rawSheetPath =
+      typeof agentData.graderSheetPath === "string"
+        ? agentData.graderSheetPath.trim()
         : "";
-    if (rawProblemsDir.length > 0) {
-      graderProblemsDir = rawProblemsDir;
+    if (rawSheetPath.length > 0) {
+      graderSheetPath = rawSheetPath;
     }
     const rawTutorSessionId =
       typeof agentData.tutorSessionId === "string"
@@ -7115,6 +7511,16 @@ export async function runSparkAgentTask(
     ) {
       tutorAction = rawTutorAction;
     }
+    tutorQuestionId =
+      typeof agentData.tutorQuestionId === "string" &&
+      agentData.tutorQuestionId.trim().length > 0
+        ? agentData.tutorQuestionId.trim()
+        : null;
+    tutorTurnFilePath =
+      typeof agentData.tutorTurnFilePath === "string" &&
+      agentData.tutorTurnFilePath.trim().length > 0
+        ? agentData.tutorTurnFilePath.trim()
+        : null;
     tutorStudentText =
       typeof agentData.tutorStudentText === "string" &&
       agentData.tutorStudentText.trim().length > 0
@@ -7291,6 +7697,13 @@ export async function runSparkAgentTask(
           : null;
       if (
         source &&
+        source.kind === "sheet" &&
+        typeof source.sheetTitle === "string"
+      ) {
+        tutorSourceLabel = source.sheetTitle;
+      }
+      if (
+        source &&
         source.kind === "grader-problem" &&
         typeof source.problemIndex === "number" &&
         typeof source.problemTitle === "string"
@@ -7434,8 +7847,33 @@ export async function runSparkAgentTask(
         logSync?.setStats(statsTracker.snapshot());
         await workspaceSync?.flushAll();
         await logSync?.flushAll();
+        if (graderRunId && !publishedGraderSheet) {
+          throw new Error(
+            "Grader sheet is not published yet. Call publish_sheet and fix any validation errors before done().",
+          );
+        }
+        if (graderRunId && workspaceRoot && publishedGraderSheet) {
+          const [currentSummarySha256, currentSheetSha256] = await Promise.all([
+            computeWorkspaceFileSha256({
+              rootDir: workspaceRoot,
+              filePath: publishedGraderSheet.summaryPath,
+            }),
+            computeWorkspaceFileSha256({
+              rootDir: workspaceRoot,
+              filePath: publishedGraderSheet.sheetPath,
+            }),
+          ]);
+          if (
+            currentSummarySha256 !== publishedGraderSheet.summarySha256 ||
+            currentSheetSha256 !== publishedGraderSheet.sheetSha256
+          ) {
+            throw new Error(
+              "Published grader artifacts changed after publish_sheet. Call publish_sheet again before done().",
+            );
+          }
+        }
         const runSummary =
-          graderRunId && workspaceRoot
+          graderRunId && workspaceRoot && !publishedGraderSheet
             ? await readGraderRunSummaryFromWorkspace({
                 rootDir: workspaceRoot,
                 summaryPath: graderSummaryPath,
@@ -7444,10 +7882,12 @@ export async function runSparkAgentTask(
                 },
               })
             : null;
-        const resultSummary = selectGraderResultSummary({
-          doneSummary: summary,
-          runSummary,
-        });
+        const resultSummary =
+          publishedGraderSheet?.resultSummary ??
+          selectGraderResultSummary({
+            doneSummary: summary,
+            runSummary,
+          });
         await updateAgentStatus({
           serviceAccountJson,
           agentDocPath,
@@ -7456,266 +7896,244 @@ export async function runSparkAgentTask(
         });
         if (graderRunId && workspaceRoot) {
           const now = new Date();
-          if (runSummary) {
-            const totals = summariseGraderTotals(runSummary);
-            const paper: Record<string, string> = {};
-            const presentation: Record<string, string> = {};
-            if (runSummary.contextLabel) {
-              paper.contextLabel = runSummary.contextLabel;
-            }
-            if (runSummary.year) {
-              paper.year = runSummary.year;
-            }
-            if (runSummary.paperName) {
-              paper.paperName = runSummary.paperName;
-            }
-            if (runSummary.paperUrl) {
-              paper.paperUrl = runSummary.paperUrl;
-            }
-            if (runSummary.markSchemeUrl) {
-              paper.markSchemeUrl = runSummary.markSchemeUrl;
-            }
-            if (runSummary.presentation?.title) {
-              presentation.title = runSummary.presentation.title;
-            }
-            if (runSummary.presentation?.summaryMarkdown) {
-              presentation.summaryMarkdown =
-                runSummary.presentation.summaryMarkdown;
-            }
-            await patchGraderRunStatus({
-              serviceAccountJson,
-              userId: options.userId,
-              runId: graderRunId,
-              updates: {
-                status: "done",
-                updatedAt: now,
-                completedAt: now,
-                resultSummary,
-                ...(Object.keys(paper).length > 0 ? { paper } : {}),
-                ...(Object.keys(presentation).length > 0
-                  ? { presentation }
-                  : {}),
-                totals,
-                problems: runSummary.problems,
-                summaryPath: graderSummaryPath,
-                problemsDir: graderProblemsDir,
-              },
-            }).catch((error) => {
-              logSync?.append(
-                `warn: failed to patch grader run summary: ${errorAsString(error)}`,
-              );
-            });
-          } else {
-            await patchGraderRunStatus({
-              serviceAccountJson,
-              userId: options.userId,
-              runId: graderRunId,
-              updates: {
-                status: "done",
-                updatedAt: now,
-                completedAt: now,
-                resultSummary,
-                summaryPath: graderSummaryPath,
-                problemsDir: graderProblemsDir,
-              },
-            }).catch((error) => {
-              logSync?.append(
-                `warn: failed to patch grader run status: ${errorAsString(error)}`,
-              );
-            });
+          const publication = publishedGraderSheet;
+          if (!publication) {
+            throw new Error(
+              "Grader sheet publish metadata is missing at completion time.",
+            );
           }
+          await patchGraderRunStatus({
+            serviceAccountJson,
+            userId: options.userId,
+            runId: graderRunId,
+            updates: {
+              status: "done",
+              updatedAt: now,
+              completedAt: now,
+              ...(resultSummary ? { resultSummary } : {}),
+              ...(publication.paper ? { paper: publication.paper } : {}),
+              presentation: publication.presentation,
+              totals: publication.totals,
+              sheet: publication.sheet,
+              summaryPath: publication.summaryPath,
+              sheetPath: publication.sheetPath,
+            },
+          }).catch((error) => {
+            logSync?.append(
+              `warn: failed to patch grader run summary: ${errorAsString(error)}`,
+            );
+          });
         }
         return { status: "done", summary: resultSummary };
       },
     });
 
+    const loadTutorQuestionReviewContext = async (): Promise<{
+      reviewState: SparkTutorReviewState;
+      report: SparkGraderWorksheetReport;
+      questionIds: string[];
+    }> => {
+      if (!tutorSessionId || !workspaceRoot || !tutorQuestionId) {
+        throw new Error(
+          "Tutor question context is missing for this sheet feedback turn.",
+        );
+      }
+      const [reviewRaw, reportRaw] = await Promise.all([
+        readWorkspaceTextFileIfExists({
+          rootDir: workspaceRoot,
+          filePath: TUTOR_STATE_REVIEW_PATH,
+        }),
+        readWorkspaceTextFileIfExists({
+          rootDir: workspaceRoot,
+          filePath: TUTOR_CONTEXT_REPORT_PATH,
+        }),
+      ]);
+      const reviewState = parseTutorReviewStateFromWorkspace(reviewRaw);
+      if (!reviewState) {
+        throw new Error("Tutor review state is missing or invalid.");
+      }
+      const report = parseWorksheetReportFromWorkspace(reportRaw);
+      if (!report) {
+        throw new Error("Worksheet report is missing or invalid.");
+      }
+      return {
+        reviewState,
+        report,
+        questionIds: listWorksheetQuestionIds(report),
+      };
+    };
+
+    const commitTutorQuestionReply = async (input: {
+      assistantReplyMarkdown: string;
+      resolved: boolean;
+      preview?: string;
+    }): Promise<{
+      sessionStatus: "awaiting_student" | "completed";
+      preview: string;
+    }> => {
+      if (!tutorSessionId || !workspaceRoot || !tutorQuestionId) {
+        throw new Error(
+          "Tutor question context is missing for this sheet feedback turn.",
+        );
+      }
+      const { reviewState, report, questionIds } =
+        await loadTutorQuestionReviewContext();
+      const currentThread = reviewState.threads[tutorQuestionId];
+      if (!currentThread) {
+        throw new Error(
+          `Tutor review thread "${tutorQuestionId}" was not found.`,
+        );
+      }
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const nextThread = {
+        ...currentThread,
+        status: input.resolved ? "resolved" : "open",
+        messages: [
+          ...currentThread.messages,
+          {
+            id: randomUUID(),
+            author: "assistant",
+            markdown: input.assistantReplyMarkdown,
+            createdAt: nowIso,
+          },
+        ],
+        ...(input.resolved ? { resolvedAt: nowIso } : { resolvedAt: undefined }),
+      };
+      const nextReviewState = SparkTutorReviewStateSchema.parse({
+        ...reviewState,
+        threads: {
+          ...reviewState.threads,
+          [tutorQuestionId]: nextThread,
+        },
+        updatedAt: nowIso,
+      });
+      const summary = summarizeTutorReviewThreads(nextReviewState, questionIds);
+      const focusLabel = summary.allResolved
+        ? "Resolved"
+        : buildTutorFocusLabelForQuestion({
+            report,
+            questionId: summary.nextQuestionId,
+          });
+      const sessionStatus = summary.allResolved
+        ? "completed"
+        : "awaiting_student";
+      const preview =
+        parseOptionalString(input.preview) ??
+        buildTutorPreviewFromSummary(summary);
+      const screenState = SparkTutorScreenStateSchema.parse({
+        status: sessionStatus,
+        title: tutorSessionTitle,
+        ...(focusLabel ? { focusLabel } : {}),
+        updatedAt: nowIso,
+      });
+      const composerState = buildTutorComposerState({
+        placeholder: summary.allResolved
+          ? "All worksheet feedback is resolved."
+          : "Reply inside any open feedback card.",
+        disabled: summary.allResolved,
+        allowConfidence: false,
+        hintButtons: [],
+      });
+      const turnFilePath = buildTutorQuestionTurnFilePath({
+        questionId: tutorQuestionId,
+        author: "assistant",
+        now,
+      });
+      await Promise.all([
+        writeTutorWorkspaceTextFile({
+          rootDir: workspaceRoot,
+          workspaceSync,
+          filePath: turnFilePath,
+          content: stringifyJsonFile({
+            author: "assistant",
+            markdown: input.assistantReplyMarkdown,
+            createdAt: nowIso,
+            resolved: input.resolved,
+          }),
+        }),
+        writeTutorWorkspaceTextFile({
+          rootDir: workspaceRoot,
+          workspaceSync,
+          filePath: TUTOR_STATE_REVIEW_PATH,
+          content: stringifyJsonFile(nextReviewState),
+        }),
+        writeTutorWorkspaceTextFile({
+          rootDir: workspaceRoot,
+          workspaceSync,
+          filePath: TUTOR_STATE_SESSION_PATH,
+          content: stringifyJsonFile(screenState),
+        }),
+        writeTutorWorkspaceTextFile({
+          rootDir: workspaceRoot,
+          workspaceSync,
+          filePath: TUTOR_STATE_COMPOSER_PATH,
+          content: stringifyJsonFile(composerState),
+        }),
+        patchFirestoreDocument({
+          serviceAccountJson,
+          documentPath: resolveTutorSessionDocPath(
+            options.userId,
+            tutorSessionId,
+          ),
+          updates: {
+            status: sessionStatus,
+            preview,
+            updatedAt: now,
+            activeTurnAgentId: options.agentId,
+            ...(focusLabel ? { focusLabel } : {}),
+            ...(summary.allResolved ? { completedAt: now } : {}),
+          },
+        }),
+      ]);
+      tutorFocusLabel = focusLabel ?? null;
+      return {
+        sessionStatus,
+        preview,
+      };
+    };
+
     const wait_for_student_input = tool({
       description:
-        "Update the tutor screen with the next coaching turn, enable the composer, and pause for the student's next reply. Call done() immediately after this tool.",
+        "Append an assistant reply to the selected worksheet question, leave the question open, and wait for the student's next revision. Call done() immediately after this tool.",
       inputSchema: z
         .object({
-          tutorMarkdown: z.string().trim().min(1),
-          focusLabel: z.string().trim().min(1).optional(),
-          composerPlaceholder: z.string().trim().min(1).optional(),
-          askForConfidence: z.boolean().optional(),
+          assistantReplyMarkdown: z.string().trim().min(1),
           preview: z.string().trim().min(1).optional(),
         })
         .strict(),
-      execute: async ({
-        tutorMarkdown,
-        focusLabel,
-        composerPlaceholder,
-        askForConfidence,
-        preview,
-      }) => {
-        if (!tutorSessionId || !workspaceRoot) {
-          throw new Error(
-            "wait_for_student_input is only available for tutor sessions.",
-          );
-        }
-        const now = new Date();
-        const resolvedFocusLabel =
-          parseOptionalString(focusLabel) ?? tutorFocusLabel ?? undefined;
-        const resolvedPreview =
-          parseOptionalString(preview) ??
-          firstNonEmptyLine(tutorMarkdown) ??
-          "Tutor turn ready.";
-        const composerState = buildTutorComposerState({
-          placeholder:
-            parseOptionalString(composerPlaceholder) ??
-            "Write your next thought here.",
-          disabled: false,
-          allowConfidence: askForConfidence ?? true,
+      execute: async ({ assistantReplyMarkdown, preview }) => {
+        const result = await commitTutorQuestionReply({
+          assistantReplyMarkdown,
+          resolved: false,
+          preview,
         });
-        const screenState = SparkTutorScreenStateSchema.parse({
-          status: "awaiting_student",
-          title: tutorSessionTitle,
-          ...(resolvedFocusLabel ? { focusLabel: resolvedFocusLabel } : {}),
-          draftRevision: tutorDraftRevision,
-          updatedAt: now.toISOString(),
-        });
-        await Promise.all([
-          writeTutorWorkspaceTextFile({
-            rootDir: workspaceRoot,
-            workspaceSync,
-            filePath: TUTOR_UI_TOP_PANEL_PATH,
-            content: tutorMarkdown,
-          }),
-          writeTutorWorkspaceTextFile({
-            rootDir: workspaceRoot,
-            workspaceSync,
-            filePath: TUTOR_UI_INLINE_FEEDBACK_PATH,
-            content: "",
-          }),
-          writeTutorWorkspaceTextFile({
-            rootDir: workspaceRoot,
-            workspaceSync,
-            filePath: TUTOR_STATE_SESSION_PATH,
-            content: stringifyJsonFile(screenState),
-          }),
-          writeTutorWorkspaceTextFile({
-            rootDir: workspaceRoot,
-            workspaceSync,
-            filePath: TUTOR_STATE_COMPOSER_PATH,
-            content: stringifyJsonFile(composerState),
-          }),
-          appendTutorHistoryEntryFile({
-            rootDir: workspaceRoot,
-            workspaceSync,
-            entry: {
-              role: "assistant",
-              kind: "full_turn",
-              text: tutorMarkdown,
-              createdAt: now.toISOString(),
-            },
-          }),
-          patchFirestoreDocument({
-            serviceAccountJson,
-            documentPath: resolveTutorSessionDocPath(
-              options.userId,
-              tutorSessionId,
-            ),
-            updates: {
-              status: "awaiting_student",
-              preview: resolvedPreview,
-              updatedAt: now,
-              activeTurnAgentId: options.agentId,
-              ...(resolvedFocusLabel ? { focusLabel: resolvedFocusLabel } : {}),
-            },
-          }),
-        ]);
-        tutorFocusLabel = resolvedFocusLabel ?? tutorFocusLabel;
-        return { status: "awaiting_student", preview: resolvedPreview };
+        return {
+          status: result.sessionStatus,
+          preview: result.preview,
+        };
       },
     });
 
     const complete_tutor_session = tool({
       description:
-        "Write the final tutor screen, disable the composer, and mark the session complete. Call done() immediately after this tool.",
+        "Append an assistant reply to the selected worksheet question and resolve it. The overall sheet is marked complete only if no open questions remain. Call done() immediately after this tool.",
       inputSchema: z
         .object({
-          tutorMarkdown: z.string().trim().min(1),
-          focusLabel: z.string().trim().min(1).optional(),
+          assistantReplyMarkdown: z.string().trim().min(1),
           preview: z.string().trim().min(1).optional(),
         })
         .strict(),
-      execute: async ({ tutorMarkdown, focusLabel, preview }) => {
-        if (!tutorSessionId || !workspaceRoot) {
-          throw new Error(
-            "complete_tutor_session is only available for tutor sessions.",
-          );
-        }
-        const now = new Date();
-        const resolvedFocusLabel =
-          parseOptionalString(focusLabel) ?? tutorFocusLabel ?? undefined;
-        const resolvedPreview =
-          parseOptionalString(preview) ??
-          firstNonEmptyLine(tutorMarkdown) ??
-          "Tutor session complete.";
-        const composerState = buildTutorComposerState({
-          placeholder: "This tutor session is complete.",
-          disabled: true,
+      execute: async ({ assistantReplyMarkdown, preview }) => {
+        const result = await commitTutorQuestionReply({
+          assistantReplyMarkdown,
+          resolved: true,
+          preview,
         });
-        const screenState = SparkTutorScreenStateSchema.parse({
-          status: "completed",
-          title: tutorSessionTitle,
-          ...(resolvedFocusLabel ? { focusLabel: resolvedFocusLabel } : {}),
-          draftRevision: 0,
-          updatedAt: now.toISOString(),
-        });
-        await Promise.all([
-          writeTutorWorkspaceTextFile({
-            rootDir: workspaceRoot,
-            workspaceSync,
-            filePath: TUTOR_UI_TOP_PANEL_PATH,
-            content: tutorMarkdown,
-          }),
-          writeTutorWorkspaceTextFile({
-            rootDir: workspaceRoot,
-            workspaceSync,
-            filePath: TUTOR_UI_INLINE_FEEDBACK_PATH,
-            content: "",
-          }),
-          writeTutorWorkspaceTextFile({
-            rootDir: workspaceRoot,
-            workspaceSync,
-            filePath: TUTOR_STATE_SESSION_PATH,
-            content: stringifyJsonFile(screenState),
-          }),
-          writeTutorWorkspaceTextFile({
-            rootDir: workspaceRoot,
-            workspaceSync,
-            filePath: TUTOR_STATE_COMPOSER_PATH,
-            content: stringifyJsonFile(composerState),
-          }),
-          appendTutorHistoryEntryFile({
-            rootDir: workspaceRoot,
-            workspaceSync,
-            entry: {
-              role: "assistant",
-              kind: "full_turn",
-              text: tutorMarkdown,
-              createdAt: now.toISOString(),
-            },
-          }),
-          patchFirestoreDocument({
-            serviceAccountJson,
-            documentPath: resolveTutorSessionDocPath(
-              options.userId,
-              tutorSessionId,
-            ),
-            updates: {
-              status: "completed",
-              preview: resolvedPreview,
-              updatedAt: now,
-              completedAt: now,
-              activeTurnAgentId: options.agentId,
-              ...(resolvedFocusLabel ? { focusLabel: resolvedFocusLabel } : {}),
-            },
-          }),
-        ]);
-        tutorFocusLabel = resolvedFocusLabel ?? tutorFocusLabel;
-        return { status: "completed", preview: resolvedPreview };
+        return {
+          status: result.sessionStatus,
+          preview: result.preview,
+        };
       },
     });
 
@@ -7751,6 +8169,25 @@ export async function runSparkAgentTask(
                 },
                 enforceLessonPipeline: isLessonRun,
                 allowPythonExec: graderRunId === null,
+                ...(graderRunId
+                  ? {
+                      graderPublish: {
+                        mode: "live" as const,
+                        runId: graderRunId,
+                      },
+                      beforePublishSheet: async () => {
+                        await workspaceSync?.flushAll();
+                        await logSync?.flushAll();
+                      },
+                      onPublishSheet: async (
+                        publication: PublishedGraderSheetArtifacts,
+                      ) => {
+                        publishedGraderSheet = publication;
+                        graderSummaryPath = publication.summaryPath;
+                        graderSheetPath = publication.sheetPath;
+                      },
+                    }
+                  : {}),
                 debug: llmDebug,
                 extractTextDebugRootDir:
                   resolveSparkAgentToolCallsDir(workspaceRoot),
@@ -7789,13 +8226,13 @@ export async function runSparkAgentTask(
 
     const agentSystemPrompt = tutorSessionId
       ? [
-          "You are Spark's experimental maths tutor screen.",
-          "This is not a running chat transcript. The UI shows one current tutor response at the top and one student composer below it.",
-          "Work from the graded report and the student's level. Focus on the most important next gap rather than rewriting the whole solution.",
-          "Keep the student doing the thinking. Do not give away a full solution unless absolutely necessary.",
-          "When the turn is ready, call either wait_for_student_input or complete_tutor_session.",
+          "You are replying inside Spark's sheet feedback workflow.",
+          "Focus only on the selected worksheet question and the current feedback thread.",
+          "Keep the student doing the thinking. Do not give away a full solution unless it is necessary for correctness.",
+          "Use wait_for_student_input when the question still needs another student revision.",
+          "Use complete_tutor_session when your reply resolves the selected question. The tool will mark the whole sheet complete only if every question is resolved.",
           "After calling one of those tools, immediately call done with a short summary.",
-          "Do not use markdown headings unless they help readability. Prefer concise paragraphs or short bullet points.",
+          "Prefer concise markdown without headings.",
         ].join("\n")
       : buildSparkAgentSystemPrompt({
           includePdfTranscriptionSkill: graderRunId !== null,
@@ -7813,7 +8250,7 @@ export async function runSparkAgentTask(
           useSubagents: true,
           grader: {
             summaryPath: graderSummaryPath,
-            problemsDir: graderProblemsDir,
+            sheetPath: graderSheetPath,
           },
         });
         logSync?.append(
@@ -7826,7 +8263,23 @@ export async function runSparkAgentTask(
       }
     }
     let initialInput: LlmInputMessage[] | null = null;
-    if (tutorSessionId && tutorAction && tutorSnapshot) {
+    if (tutorSessionId && prompt.trim().length > 0) {
+      initialInput = [
+        {
+          role: "system",
+          content: [{ type: "text", text: agentSystemPrompt }],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: prompt,
+            },
+          ],
+        },
+      ];
+    } else if (tutorSessionId && tutorAction && tutorSnapshot) {
       initialInput = [
         {
           role: "system",
@@ -8013,8 +8466,7 @@ export async function runSparkAgentTask(
 
       if (tutorSessionId && responseText.length > 0) {
         await wait_for_student_input.execute({
-          tutorMarkdown: responseText,
-          ...(tutorFocusLabel ? { focusLabel: tutorFocusLabel } : {}),
+          assistantReplyMarkdown: responseText,
         });
       } else if (responseText.length > 0 && workspaceRoot) {
         const outputPath = "agent-output.md";

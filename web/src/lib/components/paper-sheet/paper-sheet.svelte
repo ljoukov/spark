@@ -8,11 +8,14 @@
 		PaperSheetBlank,
 		PaperSheetContentSection,
 		PaperSheetData,
+		PaperSheetFeedbackThread,
 		PaperSheetHookSection,
 		PaperSheetMockReview,
 		PaperSheetQuestion,
 		PaperSheetQuestionReview,
 		PaperSheetQuestionReviewStatus,
+		PaperSheetLinesQuestion,
+		PaperSheetReview,
 		PaperSheetScore
 	} from './types';
 
@@ -21,13 +24,7 @@
 		question: PaperSheetQuestion;
 	};
 
-	type PaperSheetReviewMode = 'none' | 'mock';
-
-	type PaperSheetQuestionFeedbackTurn = {
-		id: string;
-		speaker: 'student' | 'tutor';
-		text: string;
-	};
+	type PaperSheetReviewMode = 'none' | 'mock' | 'live';
 
 	function isHookSection(
 		section: PaperSheetData['sections'][number]
@@ -41,8 +38,8 @@
 		return 'id' in section;
 	}
 
-	function buildQuestionKey(sectionId: string, questionId: string): string {
-		return `${sectionId}:${questionId}`;
+	function buildQuestionKey(_sectionId: string, questionId: string): string {
+		return questionId;
 	}
 
 	function getQuestionEntries(sheet: PaperSheetData): PaperSheetQuestionEntry[] {
@@ -138,6 +135,10 @@
 		return next;
 	}
 
+	function shouldRenderLinesAnswerAsMarkdown(question: PaperSheetLinesQuestion): boolean {
+		return question.renderMode === 'markdown' || areInputsLocked();
+	}
+
 	function createScoreTone(score: PaperSheetScore): {
 		background: string;
 		border: string;
@@ -178,8 +179,8 @@
 				status,
 				label: 'Response space',
 				statusLabel: 'reflection prompt',
-				note: 'This is a longer written answer, so the demo tutor leaves it open for **teacher review**. Reply with what you would improve, and the tutor will nudge you toward a stronger final version.',
-				replyPlaceholder: 'Write your response to the tutor...',
+				note: 'This is a longer written answer, so the demo keeps it open for **teacher review**. Reply with what you would improve, and the next note will nudge you toward a stronger final version.',
+				replyPlaceholder: 'Write your reply here...',
 				followUp:
 					'Good. When you redraft, keep one clear point per sentence and pull in one exact detail from the theory box so the explanation feels anchored.'
 			};
@@ -192,8 +193,8 @@
 						status,
 						label: 'Strong move',
 						statusLabel: 'optional reply',
-						note: 'Nice. You landed the key fact cleanly here. If you want to stretch yourself, reply with **how** you found the answer so the tutor can suggest a faster checking strategy.',
-						replyPlaceholder: 'Optional reply to the tutor...',
+						note: 'Nice. You landed the key fact cleanly here. If you want to stretch yourself, reply with **how** you found the answer so the next note can suggest a faster checking strategy.',
+						replyPlaceholder: 'Optional reply...',
 						followUp:
 							'That method works. On similar retrieval questions, scan for the bold detail in the theory box first, then copy it exactly.'
 					};
@@ -202,8 +203,8 @@
 						status,
 						label: 'Strong move',
 						statusLabel: 'optional reply',
-						note: 'You chose the strongest option here. If you reply, the tutor will turn that choice into a one-sentence explanation you could use in a written answer.',
-						replyPlaceholder: 'Optional reply to the tutor...',
+						note: 'You chose the strongest option here. If you reply, the next note will turn that choice into a one-sentence explanation you could use in a written answer.',
+						replyPlaceholder: 'Optional reply...',
 						followUp:
 							'Good instinct. The next step is saying **why** that answer fits, not just spotting it in the list.'
 					};
@@ -212,8 +213,8 @@
 						status,
 						label: 'Strong move',
 						statusLabel: 'optional reply',
-						note: 'The method looks secure on this calculation. If you reply, the tutor will show you how to present the same method even more clearly.',
-						replyPlaceholder: 'Optional reply to the tutor...',
+						note: 'The method looks secure on this calculation. If you reply, the next note will show you how to present the same method even more clearly.',
+						replyPlaceholder: 'Optional reply...',
 						followUp:
 							'To make it even stronger, write the formula first, then substitute the values, then finish with the unit.'
 					};
@@ -222,8 +223,8 @@
 						status,
 						label: 'Strong move',
 						statusLabel: 'optional reply',
-						note: 'Your matching looks settled. If you reply, the tutor can turn one of those pairs into a quick memory rule.',
-						replyPlaceholder: 'Optional reply to the tutor...',
+						note: 'Your matching looks settled. If you reply, the next note can turn one of those pairs into a quick memory rule.',
+						replyPlaceholder: 'Optional reply...',
 						followUp:
 							'A good revision trick is to say each term and meaning out loud as one phrase, so the pair sticks together.'
 					};
@@ -232,8 +233,8 @@
 						status,
 						label: 'Strong move',
 						statusLabel: 'optional reply',
-						note: 'This spelling looks secure. If you reply, the tutor can point out the letter pattern that made it work.',
-						replyPlaceholder: 'Optional reply to the tutor...',
+						note: 'This spelling looks secure. If you reply, the next note can point out the letter pattern that made it work.',
+						replyPlaceholder: 'Optional reply...',
 						followUp:
 							'Keep noticing the sound pattern in the middle of the word. That is often what prevents the slip on a second attempt.'
 					};
@@ -243,7 +244,7 @@
 						label: 'Response space',
 						statusLabel: 'reflection prompt',
 						note: 'This written response still needs teacher judgement in the demo.',
-						replyPlaceholder: 'Write your response to the tutor...',
+						replyPlaceholder: 'Write your reply here...',
 						followUp:
 							'When you refine it, keep your explanation tight and include one concrete piece of evidence from the sheet.'
 					};
@@ -257,7 +258,7 @@
 					label: 'Quick note',
 					statusLabel: 'response needed',
 					note: 'Have another look at the **theory section**. The exact fact for this blank is stated directly in the reading above, so slow down and copy the date or term exactly as it appears.',
-					replyPlaceholder: 'Write your response to the tutor...',
+					replyPlaceholder: 'Write your reply here...',
 					followUp:
 						'That is a better direction. Before you move on, rewrite the full sentence in your head so the blank fits the question smoothly.'
 				};
@@ -267,7 +268,7 @@
 					label: 'Quick note',
 					statusLabel: 'response needed',
 					note: 'You are in the right topic area, but not on the **exact detail** yet. Re-read the theory box and eliminate the options that were never mentioned at all before choosing again.',
-					replyPlaceholder: 'Write your response to the tutor...',
+					replyPlaceholder: 'Write your reply here...',
 					followUp:
 						'Good. Now turn that option into a short explanation: “I chose this because...” That makes the knowledge easier to keep.'
 				};
@@ -277,7 +278,7 @@
 					label: 'Quick note',
 					statusLabel: 'response needed',
 					note: 'Set the **method** out first. Use the formula from the hint, substitute the values carefully, and only then write the final answer with the unit.',
-					replyPlaceholder: 'Write your response to the tutor...',
+					replyPlaceholder: 'Write your reply here...',
 					followUp:
 						'That plan is better. On the next attempt, keep each step on its own line so the arithmetic is easier to check.'
 				};
@@ -287,7 +288,7 @@
 					label: 'Quick note',
 					statusLabel: 'response needed',
 					note: 'At least one pair has crossed over. Rebuild the matches **one term at a time** and say what each word means before you click.',
-					replyPlaceholder: 'Write your response to the tutor...',
+					replyPlaceholder: 'Write your reply here...',
 					followUp:
 						'That makes sense. Try matching the easiest term first, then use process of elimination on the final pair.'
 				};
@@ -297,7 +298,7 @@
 					label: 'Quick note',
 					statusLabel: 'response needed',
 					note: 'Say the word aloud and listen for the **missing sound**. The mistake is usually not random, so focus on the letter pattern that should sit in the middle of the word.',
-					replyPlaceholder: 'Write your response to the tutor...',
+					replyPlaceholder: 'Write your reply here...',
 					followUp:
 						'That is the right habit. After you fix it once, write the corrected spelling again from memory so it sticks.'
 				};
@@ -306,8 +307,8 @@
 					status,
 					label: 'Response space',
 					statusLabel: 'reflection prompt',
-					note: 'This answer needs teacher judgement, but the tutor can still help you improve it. Reply with what you think your strongest point was, or where you felt unsure.',
-					replyPlaceholder: 'Write your response to the tutor...',
+					note: 'This answer needs teacher judgement, but the sheet can still help you improve it. Reply with what you think your strongest point was, or where you felt unsure.',
+					replyPlaceholder: 'Write your reply here...',
 					followUp:
 						'Useful reflection. On the redraft, keep one clear idea per sentence and tie it back to the theory text.'
 				};
@@ -466,35 +467,58 @@
 
 	let {
 		sheet,
-		reviewMode = 'none'
+		reviewMode = 'none',
+		answers: initialAnswers = {},
+		review: initialReview = null,
+		feedbackThreads: initialFeedbackThreads = {},
+		feedbackSending: initialFeedbackSending = {},
+		editable = true,
+		allowFeedbackReplies = false,
+		showFooter = true,
+		onReplyToTutor = undefined
 	}: {
 		sheet: PaperSheetData;
 		reviewMode?: PaperSheetReviewMode;
+		answers?: PaperSheetAnswers;
+		review?: PaperSheetReview | null;
+		feedbackThreads?: Record<string, PaperSheetFeedbackThread>;
+		feedbackSending?: Record<string, boolean>;
+		editable?: boolean;
+		allowFeedbackReplies?: boolean;
+		showFooter?: boolean;
+		onReplyToTutor?: ((questionId: string, draft: string) => void | Promise<void>) | undefined;
 	} = $props();
 
-	let answers = $state<PaperSheetAnswers>({});
+	let localAnswers = $state<PaperSheetAnswers>({});
 	let checked = $state(false);
-	let review = $state<PaperSheetMockReview | null>(null);
+	let mockReview = $state<PaperSheetMockReview | null>(null);
 	let feedbackDrafts = $state<Record<string, string>>({});
-	let feedbackThreads = $state<Record<string, PaperSheetQuestionFeedbackTurn[]>>({});
-	let feedbackSending = $state<Record<string, boolean>>({});
+	let mockFeedbackThreads = $state<Record<string, PaperSheetFeedbackThread>>({});
+	let mockFeedbackSending = $state<Record<string, boolean>>({});
 	let feedbackRequestTokens = $state<Record<string, number>>({});
 	let openFeedbackCards = $state<Record<string, boolean>>({});
 	let openSections = $state<Record<string, boolean>>({});
 	let activeMatchTerms = $state<Record<string, string | null>>({});
 	let previousSheetSignature = $state<string | null>(null);
 
+	function getSeedAnswers(): PaperSheetAnswers {
+		if (Object.keys(initialAnswers).length > 0) {
+			return initialAnswers;
+		}
+		return sheet.initialAnswers ?? {};
+	}
+
 	$effect(() => {
 		const nextSheetSignature = buildSheetSignature(sheet);
 		if (nextSheetSignature === previousSheetSignature) {
 			return;
 		}
-		answers = cloneAnswers(sheet.initialAnswers);
+		localAnswers = cloneAnswers(getSeedAnswers());
 		checked = false;
-		review = null;
+		mockReview = null;
 		feedbackDrafts = {};
-		feedbackThreads = {};
-		feedbackSending = {};
+		mockFeedbackThreads = {};
+		mockFeedbackSending = {};
 		feedbackRequestTokens = {};
 		openFeedbackCards = {};
 		openSections = createOpenSections(sheet);
@@ -524,29 +548,46 @@
 	const questionNumbers = $derived(buildQuestionNumbers(sheet));
 	const totalSheetMarks = $derived(totalMarks(sheet));
 	const paperStyle = $derived(buildPaperThemeStyle(sheet));
-	const scoreTone = $derived(review ? createScoreTone(review.score) : null);
+	const currentAnswers = $derived.by(() =>
+		reviewMode === 'mock' || editable ? localAnswers : getSeedAnswers()
+	);
+	const currentReview = $derived.by(() =>
+		reviewMode === 'mock' ? mockReview : initialReview
+	);
+	const currentFeedbackThreads = $derived.by(() =>
+		reviewMode === 'mock' ? mockFeedbackThreads : initialFeedbackThreads
+	);
+	const currentFeedbackSending = $derived.by(() =>
+		reviewMode === 'mock' ? mockFeedbackSending : initialFeedbackSending
+	);
+	const scoreTone = $derived(currentReview ? createScoreTone(currentReview.score) : null);
+	const feedbackRepliesEnabled = $derived(allowFeedbackReplies || reviewMode === 'mock');
+
+	function areInputsLocked(): boolean {
+		return !editable || checked || reviewMode === 'live';
+	}
 
 	function handleCheck(): void {
 		if (reviewMode !== 'mock') {
 			return;
 		}
-		review = buildMockReview(sheet);
+		mockReview = buildMockReview(sheet);
 		feedbackDrafts = {};
-		feedbackThreads = {};
-		feedbackSending = {};
+		mockFeedbackThreads = {};
+		mockFeedbackSending = {};
 		feedbackRequestTokens = {};
 		openFeedbackCards = {};
 		checked = true;
 	}
 
 	function handleReset(): void {
-		answers = cloneAnswers(sheet.initialAnswers);
+		localAnswers = cloneAnswers(getSeedAnswers());
 		activeMatchTerms = {};
 		checked = false;
-		review = null;
+		mockReview = null;
 		feedbackDrafts = {};
-		feedbackThreads = {};
-		feedbackSending = {};
+		mockFeedbackThreads = {};
+		mockFeedbackSending = {};
 		feedbackRequestTokens = {};
 		openFeedbackCards = {};
 		openSections = createOpenSections(sheet);
@@ -574,12 +615,12 @@
 		return feedbackDrafts[questionKey] ?? '';
 	}
 
-	function getFeedbackThread(questionKey: string): PaperSheetQuestionFeedbackTurn[] {
-		return feedbackThreads[questionKey] ?? [];
+	function getFeedbackThread(questionKey: string): PaperSheetFeedbackThread | null {
+		return currentFeedbackThreads[questionKey] ?? null;
 	}
 
 	function isFeedbackSending(questionKey: string): boolean {
-		return feedbackSending[questionKey] ?? false;
+		return currentFeedbackSending[questionKey] ?? false;
 	}
 
 	function replyToTutor(
@@ -587,21 +628,23 @@
 		questionReview: PaperSheetQuestionReview,
 		draftOverride?: string
 	): void {
-		if (reviewMode !== 'mock') {
-			return;
-		}
 		const draft = (draftOverride ?? getFeedbackDraft(questionKey)).trim();
 		if (!draft || isFeedbackSending(questionKey)) {
 			return;
 		}
-		const sentAt = Date.now();
 
+		if (reviewMode !== 'mock') {
+			onReplyToTutor?.(questionKey, draft);
+			return;
+		}
+
+		const sentAt = Date.now();
 		feedbackDrafts = {
 			...feedbackDrafts,
 			[questionKey]: ''
 		};
-		feedbackSending = {
-			...feedbackSending,
+		mockFeedbackSending = {
+			...mockFeedbackSending,
 			[questionKey]: true
 		};
 		feedbackRequestTokens = {
@@ -614,28 +657,29 @@
 				return;
 			}
 
-			const nextThread: PaperSheetQuestionFeedbackTurn[] = [
-				...getFeedbackThread(questionKey),
-				{
-					id: `${questionKey}-student-${sentAt}`,
-					speaker: 'student',
-					text: draft
-				},
-				{
-					id: `${questionKey}-tutor-${sentAt + 1}`,
-					speaker: 'tutor',
-					text:
-						questionReview.followUp ??
-						'That is a sensible next step. Use the theory box to sharpen one exact detail before you move on.'
+			mockFeedbackThreads = {
+				...mockFeedbackThreads,
+				[questionKey]: {
+					status: 'open',
+					turns: [
+						...(getFeedbackThread(questionKey)?.turns ?? []),
+						{
+							id: `${questionKey}-student-${sentAt}`,
+							speaker: 'student',
+							text: draft
+						},
+						{
+							id: `${questionKey}-tutor-${sentAt + 1}`,
+							speaker: 'tutor',
+							text:
+								questionReview.followUp ??
+								'That is a sensible next step. Use the theory box to sharpen one exact detail before you move on.'
+						}
+					]
 				}
-			];
-
-			feedbackThreads = {
-				...feedbackThreads,
-				[questionKey]: nextThread
 			};
-			feedbackSending = {
-				...feedbackSending,
+			mockFeedbackSending = {
+				...mockFeedbackSending,
 				[questionKey]: false
 			};
 			feedbackRequestTokens = {
@@ -657,26 +701,32 @@
 	}
 
 	function updateTextAnswer(key: string, value: string): void {
-		answers = {
-			...answers,
+		if (!editable || areInputsLocked()) {
+			return;
+		}
+		localAnswers = {
+			...localAnswers,
 			[key]: value
 		};
 	}
 
 	function updateObjectAnswer(key: string, value: Record<string, string>): void {
-		answers = {
-			...answers,
+		if (!editable || areInputsLocked()) {
+			return;
+		}
+		localAnswers = {
+			...localAnswers,
 			[key]: value
 		};
 	}
 
 	function getTextAnswer(key: string): string {
-		const value = answers[key] ?? sheet.initialAnswers?.[key];
+		const value = currentAnswers[key];
 		return typeof value === 'string' ? value : '';
 	}
 
 	function getObjectAnswer(key: string): Record<string, string> {
-		const value = answers[key] ?? sheet.initialAnswers?.[key];
+		const value = currentAnswers[key];
 		if (!value || typeof value === 'string') {
 			return {};
 		}
@@ -684,7 +734,11 @@
 	}
 
 	function updateFillAnswer(questionKey: string, index: number, value: string): void {
-		updateTextAnswer(`${questionKey}_${index}`, value);
+		const current = getObjectAnswer(questionKey);
+		updateObjectAnswer(questionKey, {
+			...current,
+			[String(index)]: value
+		});
 	}
 
 	function updateSpellingAnswer(questionKey: string, index: number, value: string): void {
@@ -696,7 +750,7 @@
 	}
 
 	function selectMatchTerm(questionKey: string, term: string): void {
-		if (checked) {
+		if (areInputsLocked()) {
 			return;
 		}
 		const current = activeMatchTerms[questionKey] ?? null;
@@ -707,7 +761,7 @@
 	}
 
 	function assignMatch(questionKey: string, matchValue: string): void {
-		if (checked) {
+		if (areInputsLocked()) {
 			return;
 		}
 		const activeTerm = activeMatchTerms[questionKey] ?? null;
@@ -739,7 +793,7 @@
 	}
 
 	function getQuestionReview(questionKey: string): PaperSheetQuestionReview | null {
-		return review?.questions[questionKey] ?? null;
+		return currentReview?.questions[questionKey] ?? null;
 	}
 
 	function buildSheetSignature(value: PaperSheetData): string {
@@ -815,18 +869,18 @@
 					{#each section.questions ?? [] as question (`${section.id}-${question.id}`)}
 						{@const questionKey = buildQuestionKey(section.id, question.id)}
 						{@const questionReview = getQuestionReview(questionKey)}
-						{@const reviewStatus = checked ? (questionReview?.status ?? null) : null}
+						{@const reviewStatus = currentReview ? (questionReview?.status ?? null) : null}
 
-						{@const showQuestionFeedback =
-							checked && questionReview && shouldShowQuestionFeedback(questionReview)}
+						{@const showQuestionFeedback = questionReview && shouldShowQuestionFeedback(questionReview)}
 
 						<div class={`paper-sheet__question ${showQuestionFeedback ? 'has-feedback' : ''}`}>
 							<div class="paper-sheet__question-number">{questionNumbers[questionKey]}</div>
 
 							<div class="paper-sheet__question-body">
 								{#if question.type === 'fill'}
-									{@const value0 = getTextAnswer(`${questionKey}_0`)}
-									{@const value1 = getTextAnswer(`${questionKey}_1`)}
+									{@const fillAnswers = getObjectAnswer(questionKey)}
+									{@const value0 = fillAnswers['0'] ?? ''}
+									{@const value1 = fillAnswers['1'] ?? ''}
 									{@const blank0 = getBlankConfig(question, 0)}
 									{@const blank1 = getBlankConfig(question, 1)}
 
@@ -844,7 +898,7 @@
 												updateFillAnswer(questionKey, 0, readInputValue(event));
 											}}
 											placeholder={blank0?.placeholder ?? '...'}
-											readonly={checked}
+											readonly={areInputsLocked()}
 										/>
 
 										{#if blank1}
@@ -861,7 +915,7 @@
 													updateFillAnswer(questionKey, 1, readInputValue(event));
 												}}
 												placeholder={blank1.placeholder ?? '...'}
-												readonly={checked}
+												readonly={areInputsLocked()}
 											/>
 										{/if}
 
@@ -883,7 +937,7 @@
 												type="button"
 												class={`paper-sheet__mcq-option ${selectedOption ? 'is-selected' : ''}`}
 												style={buildMcqOptionStyle(selectedOption, reviewStatus)}
-												disabled={checked}
+												disabled={areInputsLocked()}
 												onclick={() => {
 													updateTextAnswer(questionKey, option);
 												}}
@@ -904,7 +958,7 @@
 									{@const textValue = getTextAnswer(questionKey)}
 
 									<MarkdownContent markdown={question.prompt} class="paper-sheet__prompt" />
-									{#if question.renderMode === 'markdown'}
+									{#if shouldRenderLinesAnswerAsMarkdown(question)}
 										<div class="paper-sheet__lines-markdown">
 											<MarkdownContent markdown={textValue} class="paper-sheet__answer-markdown" />
 										</div>
@@ -917,7 +971,7 @@
 												updateTextAnswer(questionKey, readInputValue(event));
 											}}
 											placeholder="Write your answer here..."
-											readonly={checked}
+											readonly={areInputsLocked()}
 										></textarea>
 									{/if}
 								{:else if question.type === 'calc'}
@@ -943,7 +997,7 @@
 												updateTextAnswer(questionKey, readInputValue(event));
 											}}
 											placeholder="..."
-											readonly={checked}
+											readonly={areInputsLocked()}
 										/>
 										<MarkdownContent
 											inline
@@ -973,7 +1027,7 @@
 													type="button"
 													class="paper-sheet__match-button paper-sheet__match-button--term"
 													style={buildMatchTermStyle(isActive, hasMatch, reviewStatus)}
-													disabled={checked}
+													disabled={areInputsLocked()}
 													onclick={() => {
 														selectMatchTerm(questionKey, pair.term);
 													}}
@@ -995,7 +1049,7 @@
 													type="button"
 													class="paper-sheet__match-button"
 													style={buildMatchValueStyle(taken, Boolean(activeTerm))}
-													disabled={checked || !activeTerm}
+													disabled={areInputsLocked() || !activeTerm}
 													onclick={() => {
 														assignMatch(questionKey, pair.match);
 													}}
@@ -1032,7 +1086,7 @@
 														updateSpellingAnswer(questionKey, index, readInputValue(event));
 													}}
 													placeholder="correct spelling..."
-													readonly={checked}
+													readonly={areInputsLocked()}
 												/>
 											</div>
 										{/each}
@@ -1051,6 +1105,7 @@
 										draft={getFeedbackDraft(questionKey)}
 										thread={getFeedbackThread(questionKey)}
 										processing={isFeedbackSending(questionKey)}
+										showComposer={feedbackRepliesEnabled}
 										onToggle={() => {
 											toggleFeedbackCard(questionKey);
 										}}
@@ -1069,22 +1124,22 @@
 			</section>
 		{/each}
 
-		{#if reviewMode === 'mock' && checked && review && scoreTone}
+		{#if currentReview && scoreTone}
 			<div
 				class="paper-sheet__score-card"
 				style={`background:${scoreTone.background}; border-color:${scoreTone.border};`}
 			>
-				<p class="paper-sheet__score-label">{review.label}</p>
+				<p class="paper-sheet__score-label">{currentReview.label}</p>
 				<p class="paper-sheet__score-value" style={`color:${scoreTone.text};`}>
-					{review.score.got} / {review.score.total}
+					{currentReview.score.got} / {currentReview.score.total}
 				</p>
 				<p class="paper-sheet__score-message">{scoreTone.message}</p>
-				<p class="paper-sheet__score-note">{review.message}</p>
-				<p class="paper-sheet__score-note">{review.note}</p>
-				{#if review.objectiveQuestionCount !== undefined || review.teacherReviewQuestionCount !== undefined}
+				<p class="paper-sheet__score-note">{currentReview.message}</p>
+				<p class="paper-sheet__score-note">{currentReview.note}</p>
+				{#if currentReview.objectiveQuestionCount !== undefined || currentReview.teacherReviewQuestionCount !== undefined}
 					<p class="paper-sheet__score-note">
-						{review.objectiveQuestionCount ?? 0} objective questions ·
-						{review.teacherReviewQuestionCount ?? 0} teacher-reviewed responses
+						{currentReview.objectiveQuestionCount ?? 0} objective questions ·
+						{currentReview.teacherReviewQuestionCount ?? 0} teacher-reviewed responses
 					</p>
 				{/if}
 			</div>
@@ -1112,10 +1167,12 @@
 			</div>
 		{/if}
 
-		<footer class="paper-sheet__footer">
-			<span>{sheet.level} · {sheet.subject} · {sheet.title}</span>
-			<span>Interactive Tutor Sheet</span>
-		</footer>
+		{#if showFooter}
+			<footer class="paper-sheet__footer">
+				<span>{sheet.level} · {sheet.subject} · {sheet.title}</span>
+				<span>Spark Sheet</span>
+			</footer>
+		{/if}
 	</div>
 </div>
 

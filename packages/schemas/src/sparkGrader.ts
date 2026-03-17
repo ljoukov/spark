@@ -25,16 +25,6 @@ export type SparkGraderProblemVerdict = z.infer<
   typeof SparkGraderProblemVerdictSchema
 >;
 
-export const SparkGraderTotalsSchema = z.object({
-  awardedMarks: z.number().min(0),
-  maxMarks: z.number().min(0),
-  problemCount: z.number().int().min(0),
-  gradedCount: z.number().int().min(0),
-  percentage: z.number().min(0).max(100).optional(),
-});
-
-export type SparkGraderTotals = z.infer<typeof SparkGraderTotalsSchema>;
-
 export const SparkGraderProblemSummarySchema = z.object({
   id: trimmedString,
   index: z.number().int().min(1),
@@ -47,6 +37,25 @@ export const SparkGraderProblemSummarySchema = z.object({
 
 export type SparkGraderProblemSummary = z.infer<
   typeof SparkGraderProblemSummarySchema
+>;
+
+export const SparkGraderTotalsSchema = z.object({
+  awardedMarks: z.number().min(0),
+  maxMarks: z.number().min(0),
+  problemCount: z.number().int().min(0),
+  gradedCount: z.number().int().min(0),
+  percentage: z.number().min(0).max(100).optional(),
+});
+
+export type SparkGraderTotals = z.infer<typeof SparkGraderTotalsSchema>;
+
+export const SparkGraderSheetSummarySchema = z.object({
+  title: trimmedString.optional(),
+  filePath: trimmedString,
+});
+
+export type SparkGraderSheetSummary = z.infer<
+  typeof SparkGraderSheetSummarySchema
 >;
 
 export const SparkGraderPaperSchema = z
@@ -83,7 +92,8 @@ export const SparkGraderRunSchema = z.object({
   olympiadKey: trimmedString,
   olympiadLabel: trimmedString,
   summaryPath: trimmedString,
-  problemsDir: trimmedString,
+  problemsDir: trimmedString.optional(),
+  sheetPath: trimmedString,
   sourceAttachmentIds: z.array(trimmedString).optional(),
   sourceAttachmentCount: z.number().int().min(0).optional(),
   status: SparkGraderRunStatusSchema,
@@ -91,6 +101,7 @@ export const SparkGraderRunSchema = z.object({
   presentation: SparkGraderPresentationSchema.optional(),
   totals: SparkGraderTotalsSchema.optional(),
   problems: z.array(SparkGraderProblemSummarySchema).optional(),
+  sheet: SparkGraderSheetSummarySchema.optional(),
   resultSummary: z.string().trim().optional(),
   error: z.string().trim().optional(),
   createdAt: FirestoreTimestampSchema,

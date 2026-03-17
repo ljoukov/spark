@@ -442,10 +442,10 @@
 						<DropdownMenu.Item
 							class="app-user-menu__link"
 							onSelect={() => {
-								void goto('/spark/grader');
+								void goto('/spark/sheets');
 							}}
 						>
-							Grader runs
+							Sheets
 						</DropdownMenu.Item>
 						<DropdownMenu.Separator />
 						<DropdownMenu.Sub>

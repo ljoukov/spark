@@ -62,12 +62,12 @@
 
 <Card.Root class="border-border/70 bg-card/95 shadow-sm">
 	<Card.Header>
-		<Card.Title>Tutors</Card.Title>
+		<Card.Title>Sheet Interactions</Card.Title>
 		<Card.Description>
 			{#if sessions.length === 0}
-				No tutor sessions found.
+				No sheet interactions found.
 			{:else}
-				Showing {sessions.length} session{sessions.length === 1 ? '' : 's'}.
+				Showing {sessions.length} interaction{sessions.length === 1 ? '' : 's'}.
 			{/if}
 		</Card.Description>
 	</Card.Header>
@@ -90,7 +90,7 @@
 
 						<p class="text-sm font-semibold text-foreground">{session.title}</p>
 						<p class="text-xs text-muted-foreground">
-							Problem {session.source.problemIndex}. {session.source.problemTitle}
+							Sheet: {session.source.sheetTitle}
 						</p>
 
 						<div class="grid gap-x-6 gap-y-1 text-xs text-muted-foreground md:grid-cols-2">
@@ -99,7 +99,7 @@
 								<span class="ml-1 font-mono break-all">{session.workspaceId}</span>
 							</p>
 							<p>
-								<span class="text-foreground/70">Tutor agent</span>
+								<span class="text-foreground/70">Reply agent</span>
 								{#if session.activeTurnAgentId}
 									<a
 										href={`/admin/users/${data.user.uid}/agents/${session.activeTurnAgentId}`}
@@ -112,7 +112,7 @@
 								{/if}
 							</p>
 							<p>
-								<span class="text-foreground/70">Grader agent</span>
+								<span class="text-foreground/70">Sheet agent</span>
 								{#if session.graderAgentId}
 									<a
 										href={`/admin/users/${data.user.uid}/agents/${session.graderAgentId}`}
@@ -125,7 +125,7 @@
 								{/if}
 							</p>
 							<p>
-								<span class="text-foreground/70">Source grader run</span>
+								<span class="text-foreground/70">Source sheet run</span>
 								<a
 									href={`/admin/users/${data.user.uid}/graders#grader-run-${session.source.runId}`}
 									class="ml-1 font-mono break-all text-foreground hover:underline"
@@ -134,8 +134,8 @@
 								</a>
 							</p>
 							<p>
-								<span class="text-foreground/70">Problem ID</span>
-								<span class="ml-1 font-mono break-all">{session.source.problemId}</span>
+								<span class="text-foreground/70">Sheet title</span>
+								<span class="ml-1">{session.source.sheetTitle}</span>
 							</p>
 							<p>
 								<span class="text-foreground/70">Marks</span>
@@ -192,7 +192,7 @@
 							onclick={(event) => {
 								if (
 									!confirm(
-										'Delete this tutor session and its workspace files? This cannot be undone.'
+										'Delete this sheet interaction and its workspace files? This cannot be undone.'
 									)
 								) {
 									event.preventDefault();

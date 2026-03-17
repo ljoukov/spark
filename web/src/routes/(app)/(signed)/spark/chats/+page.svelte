@@ -20,7 +20,7 @@
 
 	type ClientUser = NonNullable<PageData['user']> | null;
 	type ChatKind = 'general' | 'grading' | 'quiz' | 'lesson';
-	type ChatFilter = 'All' | 'Chat' | 'Grading' | 'Quiz' | 'Lesson';
+	type ChatFilter = 'All' | 'Chat' | 'Sheets' | 'Quiz' | 'Lesson';
 	type ChatSectionKey = 'today' | 'yesterday' | 'last7Days' | 'last30Days' | 'older';
 	type ChatTaskState = 'pending' | 'in_progress' | 'done' | 'failed';
 	type ChatTask = {
@@ -47,7 +47,7 @@
 	};
 
 	const CHAT_LIST_LIMIT = 50;
-	const FILTERS: ChatFilter[] = ['All', 'Chat', 'Grading', 'Quiz', 'Lesson'];
+	const FILTERS: ChatFilter[] = ['All', 'Chat', 'Sheets', 'Quiz', 'Lesson'];
 	const SECTION_ORDER: Array<{ key: ChatSectionKey; label: string }> = [
 		{ key: 'today', label: 'Today' },
 		{ key: 'yesterday', label: 'Yesterday' },
@@ -57,7 +57,7 @@
 	];
 	const TYPE_LABEL: Record<ChatKind, ChatFilter> = {
 		general: 'Chat',
-		grading: 'Grading',
+		grading: 'Sheets',
 		quiz: 'Quiz',
 		lesson: 'Lesson'
 	};
@@ -257,7 +257,7 @@
 		if (run.status === 'done') {
 			return {
 				state: 'done',
-				label: 'Graded',
+				label: 'Sheet ready',
 				score: run.score
 			};
 		}
@@ -270,7 +270,7 @@
 		if (run.status === 'failed' || run.status === 'stopped') {
 			return {
 				state: 'failed',
-				label: run.status === 'stopped' ? 'Grading stopped' : 'Grading failed'
+				label: run.status === 'stopped' ? 'Sheet stopped' : 'Sheet failed'
 			};
 		}
 		return {

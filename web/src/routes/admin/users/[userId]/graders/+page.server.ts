@@ -41,7 +41,7 @@ export const load: PageServerLoad = async ({ params }) => {
 			olympiadKey: run.olympiadKey,
 			olympiadLabel: run.olympiadLabel,
 			summaryPath: run.summaryPath,
-			problemsDir: run.problemsDir,
+			sheetPath: run.sheetPath,
 			sourceAttachmentIds: run.sourceAttachmentIds ?? [],
 			sourceAttachmentCount: run.sourceAttachmentCount ?? 0,
 			status: run.status,
@@ -69,16 +69,12 @@ export const load: PageServerLoad = async ({ params }) => {
 						percentage: run.totals.percentage ?? null
 					}
 				: null,
-			problems:
-				run.problems?.map((problem) => ({
-					id: problem.id,
-					index: problem.index,
-					title: problem.title ?? null,
-					awardedMarks: typeof problem.awardedMarks === 'number' ? problem.awardedMarks : null,
-					maxMarks: typeof problem.maxMarks === 'number' ? problem.maxMarks : null,
-					verdict: problem.verdict ?? null,
-					filePath: problem.filePath
-				})) ?? [],
+			sheet: run.sheet
+				? {
+						title: run.sheet.title ?? null,
+						filePath: run.sheet.filePath
+					}
+				: null,
 			resultSummary: run.resultSummary ?? null,
 			error: run.error ?? null,
 			createdAt: toIso(run.createdAt),
@@ -118,10 +114,10 @@ export const actions: Actions = {
 				documentPath: resolveGraderRunDocPath(userId, runId)
 			});
 
-			return { success: { message: `Deleted grader run ${runId}.` } as const };
+			return { success: { message: `Deleted sheet run ${runId}.` } as const };
 		} catch (error) {
-			console.error('Failed to delete grader run', { userId, runId, error });
-			return fail(500, { error: 'Failed to delete grader run. Please try again.' });
+			console.error('Failed to delete sheet run', { userId, runId, error });
+			return fail(500, { error: 'Failed to delete sheet run. Please try again.' });
 		}
 	}
 };
