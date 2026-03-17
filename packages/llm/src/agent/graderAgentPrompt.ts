@@ -22,6 +22,7 @@ export function buildSparkGraderAgentPrompt(options?: {
     "- Keep official/reference problem statements verbatim where possible; do not rewrite them into cleaned canonical wording.",
     "- Keep the user-facing run summary concise, derived from the uploaded content, and free of IDs, paths, and tool/process narration.",
     "- Use subagents selectively: keep short routine problems in the main agent, and only spawn a subagent when a problem needs substantial independent reasoning. Keep no more than 6 subagents live at once, and close finished ones before spawning more.",
+    "- When spawning a grader subagent, pass one text instruction via `prompt` or `message` only. Do not include `items` for workspace files or uploads; instead tell the subagent which workspace paths to read itself.",
     "",
     "Deliverables:",
     "1) Write `grader/output/transcription.md` from a transcription-first extraction pass, then normalize student work into numbered statements/sentences (not a summary)",

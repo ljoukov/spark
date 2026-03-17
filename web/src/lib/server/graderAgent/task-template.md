@@ -65,6 +65,7 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
    - keep short routine problems in the main agent; do NOT spawn subagents just because there are many small questions.
    - spawn a subagent only when a problem needs substantial independent reasoning, for example olympiad-style work or a solution/explanation that would normally take about a page or more.
    - at most 6 subagents can be live at once; close finished subagents before spawning more.
+   - when spawning a grader subagent, use exactly one text instruction field (`prompt` or `message`) and do not include `items` for workspace files or uploads; tell the subagent which workspace paths to read or view itself.
    - if you use a subagent, give it one problem only and have it do both tasks for that problem:
      - establish/verify the solution baseline (official or derived),
      - assess the student's solution and draft grading rationale.

@@ -13,5 +13,11 @@ describe('grader task template', () => {
 			'at most 6 subagents can be live at once; close finished subagents before spawning more'
 		);
 		expect(graderTaskTemplate).toContain('if you use a subagent, give it one problem only');
+		expect(graderTaskTemplate).toContain(
+			'use exactly one text instruction field (`prompt` or `message`)'
+		);
+		expect(graderTaskTemplate).toContain(
+			'do not include `items` for workspace files or uploads'
+		);
 	});
 });

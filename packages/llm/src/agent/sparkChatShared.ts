@@ -251,7 +251,8 @@ export function renderSparkGraderTask(taskTemplate: string): string {
     "",
     "Run-mode constraints for grader runs:",
     "- Keep transcription and source gathering on the main agent only.",
-    "- After transcription, use subagents for per-problem work: exactly 1 subagent per problem for solving/assessment.",
+    "- After transcription, decide whether any problem actually needs a subagent. If you do use one, use at most 1 subagent per problem for solving/assessment.",
+    "- For grader subagents, call `spawn_agent` with a single text instruction in `prompt` or `message` only. Do not send workspace files or uploads via `items`; tell the subagent which workspace paths to read or view itself.",
     "- Keep reference-text extraction disabled; rely on explicit `extract_text` instructions and direct source fidelity.",
   ].join("\n");
   return `${baseTask}${transcriptionSkillSection}`.trim().concat("\n");
