@@ -14,7 +14,10 @@ import {
   type LlmToolSet,
 } from "@ljoukov/llm";
 
-import { buildSparkAgentTools } from "@spark/llm/agent/sparkAgentRunner";
+import {
+  buildSparkAgentFilesystemToolConfig,
+  buildSparkAgentTools,
+} from "@spark/llm/agent/sparkAgentRunner";
 import {
   assertFileExists,
   createRepoPathHelpers,
@@ -41,7 +44,7 @@ const DEFAULT_SOURCE_FILE_PATH = path.join(BENCHMARK_DIR, "data", "clipboard-1.p
 const OUTPUT_ROOT_DIR = path.join(BENCHMARK_DIR, "output");
 const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4";
 const MAX_STEPS = 40;
-const REQUIRED_TOOL_NAMES = ["list_files", "read_file", "extract_text", "done"] as const;
+const REQUIRED_CUSTOM_TOOL_NAMES = ["extract_text", "done"] as const;
 
 type CliArgs = {
   sourceFilePath: string;
@@ -265,10 +268,10 @@ async function runBenchmark(options: {
       void inputPath;
     },
     deleteFile: async (): Promise<void> => {
-      // Filesystem deletion already happened inside buildSparkAgentTools.
+      // Native filesystem tools already updated the local workspace.
     },
     moveFile: async (): Promise<void> => {
-      // Filesystem move already happened inside buildSparkAgentTools.
+      // Native filesystem tools already updated the local workspace.
     },
   };
   const allTools = buildSparkAgentTools({
@@ -291,7 +294,7 @@ async function runBenchmark(options: {
     done: doneTool,
   };
   const selectedTools: LlmToolSet = {};
-  for (const toolName of REQUIRED_TOOL_NAMES) {
+  for (const toolName of REQUIRED_CUSTOM_TOOL_NAMES) {
     const candidate = (allToolsWithDone as Record<string, unknown>)[toolName];
     if (!candidate) {
       throw new Error(`Required tool missing: ${toolName}`);
@@ -313,6 +316,10 @@ async function runBenchmark(options: {
     input: createAgentPrompt(),
     maxSteps: MAX_STEPS,
     ...(thinkingLevel ? { thinkingLevel } : {}),
+    filesystemTool: buildSparkAgentFilesystemToolConfig({
+      workspace,
+      rootDir: paths.workspaceDir,
+    }),
     tools: selectedTools,
     subagents: options.useSubagents ? { promptPattern: "codex" } : false,
     logging: {

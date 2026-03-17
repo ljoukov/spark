@@ -15,7 +15,10 @@ import {
   type LlmToolSet,
 } from "@ljoukov/llm";
 
-import { buildSparkAgentTools } from "@spark/llm/agent/sparkAgentRunner";
+import {
+  buildSparkAgentFilesystemToolConfig,
+  buildSparkAgentTools,
+} from "@spark/llm/agent/sparkAgentRunner";
 import { applyPdfTranscriptionSkillTools } from "@spark/llm/agent/skills/pdfTranscription";
 import { HANDWRITING_TRANSCRIPTION_SKILL_TEXT } from "@spark/llm/agent/skills/handwritingTranscription";
 import {
@@ -51,15 +54,8 @@ const DEFAULT_INPUT_FILE_PATHS = [
 const OUTPUT_ROOT_DIR = path.join(BENCHMARK_DIR, "output");
 const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4";
 const MAX_STEPS = 160;
-const REQUIRED_TOOL_NAMES = [
-  "list_files",
-  "read_file",
-  "read_files",
+const REQUIRED_CUSTOM_TOOL_NAMES = [
   "extract_text",
-  "write_file",
-  "move_file",
-  "delete_file",
-  "view_image",
   "crop_image",
   "done",
 ] as const;
@@ -446,10 +442,10 @@ async function runAgenticBenchmark(options: {
       void inputPath;
     },
     deleteFile: async (): Promise<void> => {
-      // Filesystem deletion already happened inside buildSparkAgentTools.
+      // Native filesystem tools already updated the local workspace.
     },
     moveFile: async (): Promise<void> => {
-      // Filesystem move already happened inside buildSparkAgentTools.
+      // Native filesystem tools already updated the local workspace.
     },
   };
   const allTools = buildSparkAgentTools({
@@ -473,7 +469,7 @@ async function runAgenticBenchmark(options: {
     done: doneTool,
   };
   const selectedToolsBase: LlmToolSet = {};
-  for (const toolName of REQUIRED_TOOL_NAMES) {
+  for (const toolName of REQUIRED_CUSTOM_TOOL_NAMES) {
     const candidate = (allToolsWithDone as Record<string, unknown>)[toolName];
     if (!candidate) {
       throw new Error(`Required tool missing: ${toolName}`);
@@ -505,6 +501,10 @@ async function runAgenticBenchmark(options: {
     input: createAgentPrompt(),
     maxSteps: MAX_STEPS,
     ...(thinkingLevel ? { thinkingLevel } : {}),
+    filesystemTool: buildSparkAgentFilesystemToolConfig({
+      workspace,
+      rootDir: paths.workspaceDir,
+    }),
     tools: selectedTools,
     subagents: options.useSubagents ? { promptPattern: "codex" } : false,
     logging: {

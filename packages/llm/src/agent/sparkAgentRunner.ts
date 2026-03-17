@@ -16,8 +16,11 @@ import {
 import type { PyodideInterface } from "pyodide";
 import { z } from "zod";
 import {
+  type AgentFilesystem,
+  type AgentFilesystemToolAccessContext,
+  type AgentFilesystemToolConfig,
   type AgentSubagentToolSelection,
-  createFilesystemToolSetForModel,
+  createNodeAgentFilesystem,
   estimateCallCostUsd,
   generateText,
   getCurrentToolCallContext,
@@ -108,6 +111,14 @@ import type {
 } from "../utils/concurrency";
 
 const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4";
+const SPARK_AGENT_FILESYSTEM_TOOL_PROFILE = "codex" as const;
+const SPARK_AGENT_FILESYSTEM_TOOL_NAMES = [
+  "apply_patch",
+  "read_file",
+  "list_dir",
+  "grep_files",
+  "view_image",
+] as const;
 
 type LlmDebugOptions = {
   readonly rootDir: string;
@@ -978,6 +989,20 @@ function resolveWorkspacePath(
     throw new Error(`Path "${targetPath}" is outside workspace.`);
   }
   return resolved;
+}
+
+function resolveWorkspaceRelativePath(
+  workspaceDir: string,
+  absolutePath: string,
+): string {
+  const relative = path.relative(path.resolve(workspaceDir), path.resolve(absolutePath));
+  if (relative.length === 0) {
+    throw new Error(`Path "${absolutePath}" resolves to the workspace root.`);
+  }
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error(`Path "${absolutePath}" is outside workspace.`);
+  }
+  return relative.replace(/\\/gu, "/");
 }
 
 function isUserUploadPath(userId: string, storagePath: string): boolean {
@@ -2134,33 +2159,139 @@ async function persistExtractTextResponseDebugArtifacts(options: {
   );
 }
 
-async function listFilesRecursive(options: {
+type SparkAgentPendingFilesystemMove = {
+  fromAbsolutePath: string;
+  fromPath: string;
+  toAbsolutePath: string;
+  toPath: string;
+  destinationWritten: boolean;
+};
+
+export function resolveSparkAgentFilesystemToolNames(): readonly string[] {
+  return SPARK_AGENT_FILESYSTEM_TOOL_NAMES;
+}
+
+export function buildSparkAgentFilesystemToolConfig(options: {
+  workspace: SparkAgentWorkspace;
   rootDir: string;
-  maxDepth: number;
-  subDir?: string;
-}): Promise<string[]> {
-  const { rootDir, maxDepth, subDir = "" } = options;
-  if (maxDepth < 0) {
-    return [];
-  }
-  const baseDir = path.join(rootDir, subDir);
-  const entries = await readdir(baseDir, { withFileTypes: true });
-  const results: string[] = [];
-  for (const entry of entries) {
-    const relative = path.join(subDir, entry.name);
-    if (entry.isDirectory()) {
-      results.push(`${relative}/`);
-      const nested = await listFilesRecursive({
-        rootDir,
-        maxDepth: maxDepth - 1,
-        subDir: relative,
-      });
-      results.push(...nested);
-    } else {
-      results.push(relative);
+}): AgentFilesystemToolConfig {
+  const rootDir = path.resolve(options.rootDir);
+  const baseFilesystem = createNodeAgentFilesystem();
+  const pendingMovesBySource = new Map<string, SparkAgentPendingFilesystemMove>();
+  const pendingMovesByDestination = new Map<
+    string,
+    SparkAgentPendingFilesystemMove
+  >();
+
+  const clearPendingMove = (move: SparkAgentPendingFilesystemMove): void => {
+    pendingMovesBySource.delete(move.fromAbsolutePath);
+    pendingMovesByDestination.delete(move.toAbsolutePath);
+  };
+
+  const registerPendingMove = (
+    context: AgentFilesystemToolAccessContext,
+  ): void => {
+    if (
+      typeof context.fromPath !== "string" ||
+      typeof context.toPath !== "string"
+    ) {
+      return;
     }
+    const existingSource = pendingMovesBySource.get(context.fromPath);
+    if (existingSource) {
+      clearPendingMove(existingSource);
+    }
+    const existingDestination = pendingMovesByDestination.get(context.toPath);
+    if (existingDestination) {
+      clearPendingMove(existingDestination);
+    }
+    const pendingMove: SparkAgentPendingFilesystemMove = {
+      fromAbsolutePath: context.fromPath,
+      fromPath: resolveWorkspaceRelativePath(rootDir, context.fromPath),
+      toAbsolutePath: context.toPath,
+      toPath: resolveWorkspaceRelativePath(rootDir, context.toPath),
+      destinationWritten: false,
+    };
+    pendingMovesBySource.set(pendingMove.fromAbsolutePath, pendingMove);
+    pendingMovesByDestination.set(pendingMove.toAbsolutePath, pendingMove);
+  };
+
+  const filesystem: AgentFilesystem = {
+    readTextFile: async (filePath) => {
+      return await baseFilesystem.readTextFile(filePath);
+    },
+    writeTextFile: async (filePath, content) => {
+      const pendingMove = pendingMovesByDestination.get(filePath);
+      try {
+        await baseFilesystem.writeTextFile(filePath, content);
+      } catch (error) {
+        if (pendingMove) {
+          clearPendingMove(pendingMove);
+        }
+        throw error;
+      }
+      if (pendingMove) {
+        pendingMove.destinationWritten = true;
+        return;
+      }
+      options.workspace.scheduleUpdate(
+        resolveWorkspaceRelativePath(rootDir, filePath),
+      );
+    },
+    deleteFile: async (filePath) => {
+      const pendingMove = pendingMovesBySource.get(filePath);
+      try {
+        await baseFilesystem.deleteFile(filePath);
+      } catch (error) {
+        if (pendingMove?.destinationWritten) {
+          clearPendingMove(pendingMove);
+          options.workspace.scheduleUpdate(pendingMove.toPath);
+        }
+        throw error;
+      }
+      if (pendingMove?.destinationWritten) {
+        clearPendingMove(pendingMove);
+        await options.workspace.moveFile(pendingMove.fromPath, pendingMove.toPath);
+        return;
+      }
+      if (pendingMove) {
+        clearPendingMove(pendingMove);
+      }
+      await options.workspace.deleteFile(
+        resolveWorkspaceRelativePath(rootDir, filePath),
+      );
+    },
+    ensureDir: async (directoryPath) => {
+      await baseFilesystem.ensureDir(directoryPath);
+    },
+    readDir: async (directoryPath) => {
+      return await baseFilesystem.readDir(directoryPath);
+    },
+    stat: async (entryPath) => {
+      return await baseFilesystem.stat(entryPath);
+    },
+  };
+
+  const readBinaryFile = baseFilesystem.readBinaryFile;
+  if (typeof readBinaryFile === "function") {
+    filesystem.readBinaryFile = async (filePath) => {
+      return await readBinaryFile.call(baseFilesystem, filePath);
+    };
   }
-  return results;
+
+  return {
+    profile: SPARK_AGENT_FILESYSTEM_TOOL_PROFILE,
+    options: {
+      cwd: rootDir,
+      fs: filesystem,
+      allowOutsideCwd: false,
+      checkAccess: (context) => {
+        if (context.action === "move") {
+          registerPendingMove(context);
+        }
+      },
+    },
+  };
 }
 
 class WorkspaceSync {
@@ -3136,11 +3267,10 @@ export function buildSparkAgentSystemPrompt(options?: {
     "",
     "General rules:",
     "- Work with workspace-relative paths only (no absolute paths, no .. segments).",
-    "- Use list_files/read_file/read_files to inspect text files in the workspace before editing.",
+    "- Use list_dir/read_file/grep_files to inspect text files in the workspace before editing.",
     "- Use view_image for image files (read_file is text-only).",
-    "- Use write_file to create/overwrite files; use apply_patch for small edits to existing files.",
-    "- Use move_file for renames and delete_file for deletions.",
-    "- Prefer fewer, larger writes over many tiny edits.",
+    "- Use apply_patch for all workspace file edits, including create, update, rename, and delete operations.",
+    "- Prefer fewer, larger patches over many tiny edits.",
     "- Use web_search when you need to look up facts or check details.",
     "- Use web_fetch to retrieve NON-PDF source pages/files from URLs discovered via web_search.",
     "- Use extract_text to transcribe workspace document files (images/PDFs) into markdown with LaTeX formulas.",
@@ -5092,36 +5222,6 @@ function buildAgentTools(options: {
     };
   };
 
-  const filesystemToolSet = createFilesystemToolSetForModel(
-    DEFAULT_AGENT_MODEL_ID,
-    {
-      cwd: rootDir,
-      allowOutsideCwd: false,
-    },
-  );
-  const requireFilesystemTool = (
-    toolName: "read_file" | "view_image",
-  ): LlmToolSet[string] => {
-    const candidate = (filesystemToolSet as LlmToolSet)[toolName];
-    if (!candidate) {
-      throw new Error(
-        `Missing filesystem tool "${toolName}" in @ljoukov/llm toolset.`,
-      );
-    }
-    return candidate;
-  };
-  const codexReadFileTool = requireFilesystemTool("read_file");
-  const codexViewImageTool = requireFilesystemTool("view_image");
-  const executeCodexReadFile = async (input: {
-    file_path: string;
-    offset?: number | null;
-    limit?: number | null;
-  }): Promise<unknown> => {
-    return await (
-      codexReadFileTool as { execute: (value: unknown) => Promise<unknown> }
-    ).execute(input);
-  };
-
   const tools: LlmToolSet = {
     publish_lesson: tool({
       description:
@@ -6673,179 +6773,6 @@ function buildAgentTools(options: {
         };
       },
     }),
-    list_files: tool({
-      description: "Recursively list files under a workspace path.",
-      inputSchema: z.object({
-        path: z.string().trim().min(1),
-        maxDepth: z.number().int().min(0).max(20).optional(),
-      }),
-      execute: async ({ path: inputPath, maxDepth }) => {
-        const resolved = resolveWorkspacePath(rootDir, inputPath);
-        const entries = await listFilesRecursive({
-          rootDir: resolved,
-          maxDepth: maxDepth ?? 4,
-        });
-        const results: Array<{
-          path: string;
-          type: "file" | "dir";
-          sizeBytes?: number;
-        }> = [];
-        for (const entry of entries) {
-          const normalized = entry.endsWith("/") ? entry.slice(0, -1) : entry;
-          if (!normalized) {
-            continue;
-          }
-          const fullPath = path.join(resolved, normalized);
-          const stats = await stat(fullPath).catch(() => undefined);
-          if (!stats) {
-            continue;
-          }
-          results.push({
-            path: normalized + (stats.isDirectory() ? "/" : ""),
-            type: stats.isDirectory() ? "dir" : "file",
-            ...(stats.isFile() ? { sizeBytes: stats.size } : {}),
-          });
-        }
-        return { path: inputPath, entries: results };
-      },
-    }),
-    read_file: codexReadFileTool,
-    view_image: codexViewImageTool,
-    read_files: tool({
-      description: "Read multiple text files from the workspace.",
-      inputSchema: z.object({
-        paths: z.array(z.string().trim().min(1)).min(1),
-      }),
-      execute: async ({ paths }) => {
-        const files = await Promise.all(
-          paths.map(async (entry) => {
-            const output = await executeCodexReadFile({
-              file_path: entry,
-            });
-            const content = (() => {
-              if (typeof output === "string") {
-                return output;
-              }
-              if (
-                Array.isArray(output) &&
-                output.every((value) => typeof value === "string")
-              ) {
-                return output.join("\n");
-              }
-              if (
-                output &&
-                typeof output === "object" &&
-                !Array.isArray(output)
-              ) {
-                const candidate = output as Record<string, unknown>;
-                if (typeof candidate.content === "string") {
-                  return candidate.content;
-                }
-                if (typeof candidate.text === "string") {
-                  return candidate.text;
-                }
-              }
-              return "";
-            })();
-            return {
-              path: entry,
-              content,
-              bytes: Buffer.byteLength(content, "utf8"),
-            };
-          }),
-        );
-        return { files };
-      },
-    }),
-    write_file: tool({
-      description: "Create or overwrite a text file in the workspace.",
-      inputSchema: z.object({
-        path: z.string().trim().min(1),
-        content: z.string(),
-      }),
-      execute: async ({ path: inputPath, content }) => {
-        const resolved = resolveWorkspacePath(rootDir, inputPath);
-        await ensureDir(path.dirname(resolved));
-        await writeFile(resolved, content, { encoding: "utf8" });
-        workspace.scheduleUpdate(inputPath);
-        return { path: inputPath, status: "written" };
-      },
-    }),
-    delete_file: tool({
-      description: "Delete a file from the workspace.",
-      inputSchema: z.object({
-        path: z.string().trim().min(1),
-      }),
-      execute: async ({ path: inputPath }) => {
-        const resolved = resolveWorkspacePath(rootDir, inputPath);
-        await rm(resolved);
-        await workspace.deleteFile(inputPath);
-        return { path: inputPath, status: "deleted" };
-      },
-    }),
-    move_file: tool({
-      description: "Move or rename a file inside the workspace.",
-      inputSchema: z.object({
-        from: z.string().trim().min(1),
-        to: z.string().trim().min(1),
-      }),
-      execute: async ({ from, to }) => {
-        const resolvedFrom = resolveWorkspacePath(rootDir, from);
-        const resolvedTo = resolveWorkspacePath(rootDir, to);
-        await ensureDir(path.dirname(resolvedTo));
-        await rename(resolvedFrom, resolvedTo);
-        await workspace.moveFile(from, to);
-        return { from, to, status: "moved" };
-      },
-    }),
-    apply_patch: tool({
-      description:
-        "Apply patch operations to existing files (update only). Use unified diffs or full file contents.",
-      inputSchema: z.object({
-        operations: z
-          .array(
-            z.object({
-              type: z.enum(["create_file", "update_file", "delete_file"]),
-              path: z.string().trim().min(1),
-              diff: z.string().optional(),
-            }),
-          )
-          .min(1),
-      }),
-      execute: async ({ operations }) => {
-        const results: Array<{
-          path: string;
-          status: "completed" | "failed";
-          error?: string;
-        }> = [];
-        for (const operation of operations) {
-          try {
-            const resolved = resolveWorkspacePath(rootDir, operation.path);
-            if (operation.type !== "update_file") {
-              throw new Error(
-                `Use write_file/move_file/delete_file instead of apply_patch for ${operation.type}`,
-              );
-            }
-            if (!operation.diff) {
-              throw new Error("diff is required for update_file");
-            }
-            const original = await readFile(resolved, { encoding: "utf8" });
-            const nextContent = applyDiff(original, operation.diff);
-            await ensureDir(path.dirname(resolved));
-            await writeFile(resolved, nextContent, { encoding: "utf8" });
-            workspace.scheduleUpdate(operation.path);
-            results.push({ path: operation.path, status: "completed" });
-          } catch (error) {
-            results.push({
-              path: operation.path,
-              status: "failed",
-              error: errorAsString(error),
-            });
-          }
-        }
-        return { results };
-      },
-    }),
   };
   if (!shouldAllowPythonExec) {
     delete (tools as Record<string, unknown>).python_exec;
@@ -6899,14 +6826,11 @@ export async function runSparkLessonAgentLocal(options: {
   const workspace: SparkAgentWorkspace = {
     scheduleUpdate: () => {},
     deleteFile: async (inputPath) => {
-      const resolved = resolveWorkspacePath(options.rootDir, inputPath);
-      await rm(resolved, { recursive: true, force: true });
+      void inputPath;
     },
     moveFile: async (from, to) => {
-      const resolvedFrom = resolveWorkspacePath(options.rootDir, from);
-      const resolvedTo = resolveWorkspacePath(options.rootDir, to);
-      await ensureDir(path.dirname(resolvedTo));
-      await rename(resolvedFrom, resolvedTo);
+      void from;
+      void to;
     },
   };
 
@@ -7012,6 +6936,10 @@ export async function runSparkLessonAgentLocal(options: {
     model: modelId,
     instructions: buildSparkAgentSystemPrompt(),
     input: options.prompt,
+    filesystemTool: buildSparkAgentFilesystemToolConfig({
+      workspace,
+      rootDir: options.rootDir,
+    }),
     tools: {
       ...baseTools,
       publish_lesson,
@@ -7036,198 +6964,6 @@ export async function runSparkLessonAgentLocal(options: {
     publishResult,
     doneSummary,
   };
-}
-
-function splitLines(text: string): string[] {
-  return text.split("\n");
-}
-
-function parseHunkHeader(line: string): {
-  oldStart: number;
-  oldLines: number;
-  newStart: number;
-  newLines: number;
-} {
-  const match = line.match(/^@@\s*-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s*@@/);
-  if (!match) {
-    throw new Error(`Invalid hunk header: ${line}`);
-  }
-  const oldStart = Number.parseInt(match[1], 10);
-  const oldLines = match[2] ? Number.parseInt(match[2], 10) : 1;
-  const newStart = Number.parseInt(match[3], 10);
-  const newLines = match[4] ? Number.parseInt(match[4], 10) : 1;
-  return { oldStart, oldLines, newStart, newLines };
-}
-
-function applyUnifiedDiff(original: string, diff: string): string {
-  const originalLines = splitLines(original);
-  const diffLines = splitLines(diff);
-  const output: string[] = [];
-  let originalIndex = 0;
-  let diffIndex = 0;
-  while (diffIndex < diffLines.length) {
-    const line = diffLines[diffIndex];
-    if (line.startsWith("---") || line.startsWith("+++")) {
-      diffIndex += 1;
-      continue;
-    }
-    if (!line.startsWith("@@")) {
-      throw new Error(`Invalid diff hunk header: ${line}`);
-    }
-    const header = parseHunkHeader(line);
-    const expectedIndex = header.oldStart - 1;
-    if (expectedIndex < originalIndex) {
-      throw new Error("Diff hunk overlaps previous hunk");
-    }
-    output.push(...originalLines.slice(originalIndex, expectedIndex));
-    originalIndex = expectedIndex;
-    diffIndex += 1;
-    let hunkLineCount = 0;
-    while (diffIndex < diffLines.length) {
-      const hunkLine = diffLines[diffIndex];
-      if (hunkLine.startsWith("@@")) {
-        break;
-      }
-      if (hunkLine.startsWith(" ")) {
-        output.push(hunkLine.slice(1));
-        originalIndex += 1;
-        hunkLineCount += 1;
-      } else if (hunkLine.startsWith("-")) {
-        const expected = hunkLine.slice(1);
-        const actual = originalLines[originalIndex];
-        if (actual !== expected) {
-          throw new Error(
-            `Patch removal mismatch: expected "${expected}" got "${actual}"`,
-          );
-        }
-        originalIndex += 1;
-        hunkLineCount += 1;
-      } else if (hunkLine.startsWith("+")) {
-        output.push(hunkLine.slice(1));
-      } else if (hunkLine.startsWith("\\ No newline")) {
-        // ignore
-      } else {
-        throw new Error(`Unsupported diff line: ${hunkLine}`);
-      }
-      diffIndex += 1;
-    }
-    if (hunkLineCount !== header.oldLines) {
-      throw new Error(
-        `Diff hunk length mismatch: expected ${header.oldLines} got ${hunkLineCount}`,
-      );
-    }
-  }
-  output.push(...originalLines.slice(originalIndex));
-  return output.join("\n");
-}
-
-function applyV4Patch(original: string, diff: string): string {
-  const originalLines = splitLines(original);
-  const diffLines = splitLines(diff);
-  let originalIndex = 0;
-  let diffIndex = 0;
-  const output: string[] = [];
-  while (diffIndex < diffLines.length) {
-    const line = diffLines[diffIndex];
-    if (line.startsWith("*** Begin Patch")) {
-      diffIndex += 1;
-      continue;
-    }
-    if (line.startsWith("*** End Patch")) {
-      break;
-    }
-    if (!line.startsWith("@@")) {
-      diffIndex += 1;
-      continue;
-    }
-    const header = parseHunkHeader(line);
-    const expectedIndex = header.oldStart - 1;
-    output.push(...originalLines.slice(originalIndex, expectedIndex));
-    originalIndex = expectedIndex;
-    diffIndex += 1;
-    while (diffIndex < diffLines.length) {
-      const hunkLine = diffLines[diffIndex];
-      if (hunkLine.startsWith("@@") || hunkLine.startsWith("*** End Patch")) {
-        break;
-      }
-      if (hunkLine.startsWith(" ")) {
-        output.push(hunkLine.slice(1));
-        originalIndex += 1;
-      } else if (hunkLine.startsWith("-")) {
-        const expected = hunkLine.slice(1);
-        const actual = originalLines[originalIndex];
-        if (actual !== expected) {
-          throw new Error(
-            `Patch removal mismatch: expected "${expected}" got "${actual}"`,
-          );
-        }
-        originalIndex += 1;
-      } else if (hunkLine.startsWith("+")) {
-        output.push(hunkLine.slice(1));
-      } else if (hunkLine.startsWith("\\ No newline")) {
-        // ignore
-      } else {
-        throw new Error(`Unsupported diff line: ${hunkLine}`);
-      }
-      diffIndex += 1;
-    }
-  }
-  output.push(...originalLines.slice(originalIndex));
-  return output.join("\n");
-}
-
-function applyDiff(original: string, diff: string): string {
-  if (diff.trim().length === 0) {
-    return original;
-  }
-  if (diff.includes("*** Begin Patch")) {
-    return applyV4Patch(original, diff);
-  }
-  if (diff.includes("@@")) {
-    const hasRangeHeader = diff
-      .split("\n")
-      .some(
-        (line) =>
-          line.startsWith("@@") && line.includes("-") && line.includes("+"),
-      );
-    if (!hasRangeHeader) {
-      return applyV4Patch(original, diff);
-    }
-    return applyUnifiedDiff(original, diff);
-  }
-
-  const lines = splitLines(diff);
-  const hasMarkers = lines.some(
-    (line) =>
-      line.startsWith("+") || line.startsWith("-") || line.startsWith(" "),
-  );
-  if (!hasMarkers) {
-    return diff;
-  }
-  const allPlus = lines.every((line) => line === "" || line.startsWith("+"));
-  if (allPlus) {
-    return lines
-      .map((line) => (line.startsWith("+") ? line.slice(1) : line))
-      .join("\n");
-  }
-  const allSpaceOrPlus = lines.every(
-    (line) => line === "" || line.startsWith("+") || line.startsWith(" "),
-  );
-  if (allSpaceOrPlus) {
-    return lines
-      .map((line) => {
-        if (line.startsWith("+")) {
-          return line.slice(1);
-        }
-        if (line.startsWith(" ")) {
-          return line.slice(1);
-        }
-        return line;
-      })
-      .join("\n");
-  }
-
-  return applyUnifiedDiff(original, diff);
 }
 
 async function updateAgentStatus(options: {
@@ -8034,7 +7770,16 @@ export async function runSparkAgentTask(
               });
         })();
 
-    progress.log(`exposed tools: ${Object.keys(tools).sort().join(", ")}`);
+    progress.log(
+      `exposed tools: ${Array.from(
+        new Set([
+          ...resolveSparkAgentFilesystemToolNames(),
+          ...Object.keys(tools),
+        ]),
+      )
+        .sort()
+        .join(", ")}`,
+    );
 
     await pollStopRequested();
     if (stopRequested) {
@@ -8150,6 +7895,10 @@ export async function runSparkAgentTask(
           model: modelId,
           input: initialInput ?? prompt,
           ...(initialInput ? {} : { instructions: agentSystemPrompt }),
+          filesystemTool: buildSparkAgentFilesystemToolConfig({
+            workspace: workspaceSync,
+            rootDir: workspaceRoot,
+          }),
           tools,
           ...(tutorSessionId
             ? {}

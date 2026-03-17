@@ -425,7 +425,7 @@ function buildLessonAgentPrompt(sessionId: string, workspaceId: string): string 
     "",
     "Step budget:",
     "- This smoke run is executed with a very small tool-step budget (15).",
-    "- Avoid unnecessary tool calls (especially list_files / reading prompt templates).",
+    "- Avoid unnecessary tool calls (especially list_dir/grep_files or rereading prompt templates).",
     "- Batch work: you can call generate_text / generate_json / validate_json multiple times in a single tool step.",
     "",
     "Instructions:",

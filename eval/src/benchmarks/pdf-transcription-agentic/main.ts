@@ -22,7 +22,10 @@ import {
   type LlmToolSet,
 } from "@ljoukov/llm";
 
-import { buildSparkAgentTools } from "@spark/llm/agent/sparkAgentRunner";
+import {
+  buildSparkAgentFilesystemToolConfig,
+  buildSparkAgentTools,
+} from "@spark/llm/agent/sparkAgentRunner";
 import {
   applyPdfTranscriptionSkillTools,
   PDF_TRANSCRIPTION_SKILL_TEXT,
@@ -67,14 +70,7 @@ const JUDGE_MODEL_IDS = [
 ] as const satisfies readonly [LlmTextModelId, LlmTextModelId];
 const MAX_STEPS = 200;
 const TARGET_PROBLEM_IDS = ["H1", "H2", "H3"] as const;
-const REQUIRED_TOOL_NAMES = [
-  "list_files",
-  "read_file",
-  "read_files",
-  "view_image",
-  "write_file",
-  "move_file",
-  "delete_file",
+const REQUIRED_CUSTOM_TOOL_NAMES = [
   "pdf_to_images",
   "crop_image",
   "done",
@@ -639,11 +635,11 @@ async function runAgenticBenchmark(options: {
       void inputPath;
     },
     deleteFile: async (): Promise<void> => {
-      // Filesystem deletion already happened inside buildSparkAgentTools.
+      // Native filesystem tools already updated the local workspace.
       // This benchmark workspace does not mirror state to an external store.
     },
     moveFile: async (): Promise<void> => {
-      // Filesystem move already happened inside buildSparkAgentTools.
+      // Native filesystem tools already updated the local workspace.
       // This benchmark workspace does not mirror state to an external store.
     },
   };
@@ -667,7 +663,7 @@ async function runAgenticBenchmark(options: {
     done: doneTool,
   };
   const selectedToolsBase: LlmToolSet = {};
-  for (const toolName of REQUIRED_TOOL_NAMES) {
+  for (const toolName of REQUIRED_CUSTOM_TOOL_NAMES) {
     const candidate = (allToolsWithDone as Record<string, unknown>)[toolName];
     if (!candidate) {
       throw new Error(`Required tool missing: ${toolName}`);
@@ -698,6 +694,10 @@ async function runAgenticBenchmark(options: {
     input: createAgentPrompt(),
     maxSteps: MAX_STEPS,
     ...(thinkingLevel ? { thinkingLevel } : {}),
+    filesystemTool: buildSparkAgentFilesystemToolConfig({
+      workspace,
+      rootDir: paths.workspaceDir,
+    }),
     tools: selectedTools,
     subagents: options.useSubagents ? { promptPattern: "codex" } : false,
     logging: {
