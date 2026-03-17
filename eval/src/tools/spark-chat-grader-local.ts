@@ -240,7 +240,6 @@ async function main(): Promise<void> {
       workspaceId: resolvedGraderHandle.workspaceId,
       workspacePath: resolvedGraderHandle.workspaceRoot,
       summaryPath: resolvedPlan.summaryPath,
-      problemsDir: resolvedPlan.problemsDir,
       agentLogPath: graderResult.agentLogPath,
       llmLogsDir: graderResult.llmLogsDir,
       doneSummary: graderResult.doneSummary,

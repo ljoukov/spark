@@ -1,8 +1,9 @@
 export function isNodeRuntime(): boolean {
   // Cloudflare Workers can enable `nodejs_compat`, which provides a `process`
-  // polyfill (including `process.versions.node`). The Firebase Admin SDK uses
-  // gRPC/protobuf codegen that is blocked in Workers (EvalError: codegen from
-  // strings disallowed), so we must treat Workers as *not* a Node runtime.
+  // polyfill (including `process.versions.node`). Spark still uses this guard
+  // for Node-only features, but Firestore itself now runs through
+  // @ljoukov/firebase-admin-cloudflare and no longer depends on the older
+  // Node-only gRPC Firebase SDK.
   const globalProps = globalThis as unknown as Record<string, unknown>;
   const navigatorValue = globalProps["navigator"];
   const userAgent =

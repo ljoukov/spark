@@ -11,7 +11,7 @@
 		"build": "node ./scripts/write-build-info.mjs && vite build",
 		"build:bun": "bun run build",
 		"build:cloudflare": "CF_PAGES=dummy bun run build && node ./scripts/write-cloudflare-assetsignore.mjs",
-		"build:vercel": "VERCEL=dummy bun run build",
+		"build:vercel": "mkdir -p ../data/tmp-vercel && TMPDIR=$PWD/../data/tmp-vercel VERCEL=dummy bun run build",
 		"build:gcp": "BUILD_TARGET=gcp bun run build:bun",
 		"preview": "vite preview",
 		"start:bun": "bun ./build/index.js",
@@ -29,6 +29,7 @@
 		"@connectrpc/connect-node": "^2.1.1",
 		"@connectrpc/connect-web": "^2.1.1",
 		"@bufbuild/protobuf": "^2.11.0",
+		"@ljoukov/firebase-admin-cloudflare": "^0.0.2",
 		"@ljoukov/llm": "5.0.4",
 		"@spark/llm": "workspace:*",
 		"@spark/proto": "workspace:*",
@@ -37,7 +38,12 @@
 		"highlight.js": "^11.11.1",
 		"katex": "^0.16.27",
 		"marked-katex-extension": "^5.1.6",
-		"monaco-editor": "^0.55.1"
+		"monaco-editor": "^0.55.1",
+		"sharp": "^0.34.5"
+	},
+	"optionalDependencies": {
+		"bufferutil": "^4.1.0",
+		"utf-8-validate": "^6.0.6"
 	},
 	"devDependencies": {
 		"@astral-sh/ruff-wasm-nodejs": "^0.14.13",

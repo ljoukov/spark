@@ -1,4 +1,12 @@
-import { listFirestoreDocuments } from '$lib/server/gcp/firestoreRest';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import {
+	collection,
+	getDocs,
+	getFirestore,
+	limit as limitQuery,
+	orderBy,
+	query
+} from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { SparkAgentStateSchema } from '@spark/schemas';
 import { env } from '$env/dynamic/private';
 import { z } from 'zod';
@@ -30,12 +38,16 @@ const AGENT_RUN_LIST_LIMIT = 50;
 export const load: PageServerLoad = async ({ params }) => {
 	const { userId } = paramsSchema.parse(params);
 
-	const docs = await listFirestoreDocuments({
-		serviceAccountJson: requireServiceAccountJson(),
-		collectionPath: `users/${userId}/agents`,
-		limit: AGENT_RUN_LIST_LIMIT,
-		orderBy: 'updatedAt desc'
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const docs = await getDocs(
+		query(
+			collection(firestore, `users/${userId}/agents`),
+			orderBy('updatedAt', 'desc'),
+			limitQuery(AGENT_RUN_LIST_LIMIT)
+		)
+	);
 
 	const agents: Array<{
 		id: string;
@@ -49,9 +61,9 @@ export const load: PageServerLoad = async ({ params }) => {
 		error: string | null;
 	}> = [];
 
-	for (const doc of docs) {
-		const id = docIdFromPath(doc.documentPath);
-		const parsed = SparkAgentStateSchema.safeParse({ id, ...(doc.data ?? {}) });
+	for (const agentDoc of docs.docs) {
+		const id = docIdFromPath(agentDoc.ref.path);
+		const parsed = SparkAgentStateSchema.safeParse({ id, ...(agentDoc.data() ?? {}) });
 		if (!parsed.success) {
 			continue;
 		}
@@ -71,4 +83,3 @@ export const load: PageServerLoad = async ({ params }) => {
 
 	return { agents };
 };
-

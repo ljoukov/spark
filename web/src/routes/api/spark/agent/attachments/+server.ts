@@ -1,6 +1,7 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
-import { getFirestoreDocument, patchFirestoreDocument } from '$lib/server/gcp/firestoreRest';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import { doc, getDoc, getFirestore, setDoc } from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken';
 import { downloadStorageObject, uploadStorageObject } from '$lib/server/gcp/storageRest';
 import { SparkAgentAttachmentSchema, type SparkAgentAttachment } from '@spark/schemas';
@@ -227,15 +228,14 @@ export const GET: RequestHandler = async ({ request, url }) => {
 
 	const { conversationId, fileId } = parsed;
 	const conversationDocPath = `${userId}/client/conversations/${conversationId}`;
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
 
 	let attachment: SparkAgentAttachment | null = null;
 	try {
-		const snapshot = await getFirestoreDocument({
-			serviceAccountJson,
-			documentPath: conversationDocPath
-		});
+		const snapshot = await getDoc(doc(firestore, conversationDocPath));
 		const now = new Date();
-		const attachments = normalizeAttachments(snapshot.data?.attachments, now);
+		const attachments = normalizeAttachments(snapshot.data()?.attachments, now);
 		attachment = attachments.find((entry) => entry.id === fileId) ?? null;
 	} catch (error) {
 		console.error('Failed to load attachment metadata', { error, userId, conversationId, fileId });
@@ -421,16 +421,15 @@ export const POST: RequestHandler = async ({ request }) => {
 	const filename = fileEntry.name ?? 'upload';
 
 	const conversationDocPath = `${userId}/client/conversations/${conversationId}`;
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
 
 	let uploadStatus: SparkAgentAttachment | null = null;
 
 	try {
-		const snapshot = await getFirestoreDocument({
-			serviceAccountJson,
-			documentPath: conversationDocPath
-		});
+		const snapshot = await getDoc(doc(firestore, conversationDocPath));
 		const now = new Date();
-		const attachments = normalizeAttachments(snapshot.data?.attachments, now);
+		const attachments = normalizeAttachments(snapshot.data()?.attachments, now);
 		const activeAttachments = attachments.filter((entry) => entry.status !== 'failed');
 		const existing = activeAttachments.find((entry) => entry.id === fileId);
 
@@ -475,11 +474,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			payload.messages = [];
 		}
 
-		await patchFirestoreDocument({
-			serviceAccountJson,
-			documentPath: conversationDocPath,
-			updates: payload
-		});
+		await setDoc(doc(firestore, conversationDocPath), payload, { merge: true });
 
 		uploadStatus = nextAttachment;
 	} catch (error) {
@@ -528,12 +523,9 @@ export const POST: RequestHandler = async ({ request }) => {
 			onlyIfMissing: true
 		});
 
-		const snapshot = await getFirestoreDocument({
-			serviceAccountJson,
-			documentPath: conversationDocPath
-		});
+		const snapshot = await getDoc(doc(firestore, conversationDocPath));
 		const now = new Date();
-		const attachments = normalizeAttachments(snapshot.data?.attachments, now);
+		const attachments = normalizeAttachments(snapshot.data()?.attachments, now);
 		const nextAttachment: SparkAgentAttachment = {
 			id: fileId,
 			storagePath,
@@ -545,24 +537,21 @@ export const POST: RequestHandler = async ({ request }) => {
 			updatedAt: now
 		};
 		const nextAttachments = upsertAttachment(attachments, nextAttachment);
-		await patchFirestoreDocument({
-			serviceAccountJson,
-			documentPath: conversationDocPath,
-			updates: {
+		await setDoc(
+			doc(firestore, conversationDocPath),
+			{
 				attachments: nextAttachments,
 				updatedAt: now
-			}
-		});
+			},
+			{ merge: true }
+		);
 		finalAttachment = nextAttachment;
 	} catch (error) {
 		console.error('Failed to upload attachment', { error, userId, conversationId });
 		try {
-			const snapshot = await getFirestoreDocument({
-				serviceAccountJson,
-				documentPath: conversationDocPath
-			});
+			const snapshot = await getDoc(doc(firestore, conversationDocPath));
 			const now = new Date();
-			const attachments = normalizeAttachments(snapshot.data?.attachments, now);
+			const attachments = normalizeAttachments(snapshot.data()?.attachments, now);
 			const nextAttachment: SparkAgentAttachment = {
 				id: fileId,
 				storagePath,
@@ -575,14 +564,14 @@ export const POST: RequestHandler = async ({ request }) => {
 				updatedAt: now
 			};
 			const nextAttachments = upsertAttachment(attachments, nextAttachment);
-			await patchFirestoreDocument({
-				serviceAccountJson,
-				documentPath: conversationDocPath,
-				updates: {
+			await setDoc(
+				doc(firestore, conversationDocPath),
+				{
 					attachments: nextAttachments,
 					updatedAt: now
-				}
-			});
+				},
+				{ merge: true }
+			);
 		} catch (innerError) {
 			console.error('Failed to mark attachment as failed', {
 				error: innerError instanceof Error ? innerError.message : String(innerError),
@@ -640,16 +629,15 @@ export const DELETE: RequestHandler = async ({ request }) => {
 
 	const { conversationId, fileId } = parsed;
 	const conversationDocPath = `${userId}/client/conversations/${conversationId}`;
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
 
 	let updated: SparkAgentAttachment | null = null;
 
 	try {
-		const snapshot = await getFirestoreDocument({
-			serviceAccountJson,
-			documentPath: conversationDocPath
-		});
+		const snapshot = await getDoc(doc(firestore, conversationDocPath));
 		const now = new Date();
-		const attachments = normalizeAttachments(snapshot.data?.attachments, now);
+		const attachments = normalizeAttachments(snapshot.data()?.attachments, now);
 		const existing = attachments.find((entry) => entry.id === fileId);
 		if (existing) {
 			const nextAttachment: SparkAgentAttachment = {
@@ -659,14 +647,14 @@ export const DELETE: RequestHandler = async ({ request }) => {
 				updatedAt: now
 			};
 			const nextAttachments = upsertAttachment(attachments, nextAttachment);
-			await patchFirestoreDocument({
-				serviceAccountJson,
-				documentPath: conversationDocPath,
-				updates: {
+			await setDoc(
+				doc(firestore, conversationDocPath),
+				{
 					attachments: nextAttachments,
 					updatedAt: now
-				}
-			});
+				},
+				{ merge: true }
+			);
 			updated = nextAttachment;
 		}
 	} catch (error) {

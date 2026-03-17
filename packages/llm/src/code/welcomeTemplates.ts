@@ -1,14 +1,17 @@
 import { createHash } from "node:crypto";
 
 import { type CodeProblem, type QuizDefinition } from "@spark/schemas";
+import { initializeApp } from "@ljoukov/firebase-admin-cloudflare/app";
+import {
+  doc,
+  getDoc,
+  getFirestore,
+  setDoc,
+  writeBatch,
+} from "@ljoukov/firebase-admin-cloudflare/firestore";
 import { z } from "zod";
 
-import {
-  commitFirestoreWrites,
-  getFirestoreDocument,
-  patchFirestoreDocument,
-  setFirestoreDocument,
-} from "../utils/gcp/firestoreRest";
+import { buildFirestoreMergeData } from "../utils/gcp/firestoreData";
 import { generateSession } from "./generateSession";
 import type { GenerateStoryResult } from "./generateStory";
 import {
@@ -75,11 +78,14 @@ async function copyStoryToTemplate(
   planItemId: string,
   storyResult: GenerateStoryResult,
 ): Promise<void> {
-  const snapshot = await getFirestoreDocument({
-    serviceAccountJson,
-    documentPath: storyResult.narration.documentPath,
-  });
-  if (!snapshot.exists || !snapshot.data) {
+  const firestore = getFirestore(
+    initializeApp({ serviceAccountJson }, serviceAccountJson),
+  );
+  firestore.settings({ ignoreUndefinedProperties: true });
+  const snapshot = await getDoc(
+    doc(firestore, storyResult.narration.documentPath),
+  );
+  if (!snapshot.exists) {
     console.warn(
       `[welcome/${sessionId}] narration document ${storyResult.narration.documentPath} missing; skipping copy`,
     );
@@ -87,11 +93,7 @@ async function copyStoryToTemplate(
   }
 
   const targetDocPath = `${getTemplateDocRef(sessionId)}/media/${planItemId}`;
-  await setFirestoreDocument({
-    serviceAccountJson,
-    documentPath: targetDocPath,
-    data: snapshot.data,
-  });
+  await setDoc(doc(firestore, targetDocPath), snapshot.data() ?? {});
   console.log(
     `[welcome/${sessionId}] published story media to ${targetDocPath}`,
   );
@@ -113,12 +115,17 @@ async function writeQuizzesToTemplate(
     };
   });
 
+  const firestore = getFirestore(
+    initializeApp({ serviceAccountJson }, serviceAccountJson),
+  );
+  firestore.settings({ ignoreUndefinedProperties: true });
   const MAX_WRITES_PER_BATCH = 450;
   for (let i = 0; i < writes.length; i += MAX_WRITES_PER_BATCH) {
-    await commitFirestoreWrites({
-      serviceAccountJson,
-      writes: writes.slice(i, i + MAX_WRITES_PER_BATCH),
-    });
+    const batch = writeBatch(firestore);
+    for (const write of writes.slice(i, i + MAX_WRITES_PER_BATCH)) {
+      batch.set(doc(firestore, write.documentPath), write.data);
+    }
+    await batch.commit();
   }
   console.log(
     `[welcome/${sessionId}] published ${quizzes.length} quizzes to template`,
@@ -141,12 +148,17 @@ async function writeProblemsToTemplate(
     };
   });
 
+  const firestore = getFirestore(
+    initializeApp({ serviceAccountJson }, serviceAccountJson),
+  );
+  firestore.settings({ ignoreUndefinedProperties: true });
   const MAX_WRITES_PER_BATCH = 450;
   for (let i = 0; i < writes.length; i += MAX_WRITES_PER_BATCH) {
-    await commitFirestoreWrites({
-      serviceAccountJson,
-      writes: writes.slice(i, i + MAX_WRITES_PER_BATCH),
-    });
+    const batch = writeBatch(firestore);
+    for (const write of writes.slice(i, i + MAX_WRITES_PER_BATCH)) {
+      batch.set(doc(firestore, write.documentPath), write.data);
+    }
+    await batch.commit();
   }
   console.log(
     `[welcome/${sessionId}] published ${problems.length} problems to template`,
@@ -192,12 +204,18 @@ async function writeTemplateDoc(
     "storyTitle",
   ];
 
-  await patchFirestoreDocument({
-    serviceAccountJson,
-    documentPath: templateDoc,
-    updates: payload,
-    deletes: draftFieldsToDelete,
-  });
+  const firestore = getFirestore(
+    initializeApp({ serviceAccountJson }, serviceAccountJson),
+  );
+  firestore.settings({ ignoreUndefinedProperties: true });
+  await setDoc(
+    doc(firestore, templateDoc),
+    buildFirestoreMergeData({
+      updates: payload,
+      deletes: draftFieldsToDelete,
+    }),
+    { merge: true },
+  );
 }
 
 export async function generateWelcomeSessionTemplate(

@@ -254,14 +254,14 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 
 ### 3.3 Cloud Services
 
-- **Firebase Auth**: Apple Sign-In, email/password fallback. Tokens verified server-side by validating Firebase ID tokens against Google's JWKS (via `jose`). No Firebase Admin SDK is required for token verification.
+- **Firebase Auth**: Apple Sign-In, email/password fallback. Tokens are verified server-side by validating Firebase ID tokens against Google's JWKS (via `jose`).
 
   Test user login: for local/preview testing, set `TEST_USER_EMAIL_ID_PASSWORD=email/userId/password`. This does **not** bypass Firebase Auth; it is only a reference for signing in via `/login-with-email`. Admin access is still controlled by `ADMIN_USER_IDS`, and Firestore rules have no test-user exceptions.
 
   Web SSR session: the web app issues a long-lived, encrypted, HTTP-only session cookie (`appSession`, max age 1 year) after successful Firebase sign-in (minted via `POST /api/login`). This cookie is used by `web/src/hooks.server.ts` to keep `/spark/*` SSR routes logged in even when the 1-hour Firebase ID token expires (for example after laptop sleep). The cookie is cleared via `POST /api/logout` (also called by `/logout`). Requires `COOKIE_SECRET_KEY` (32 bytes, base64) in the server environment.
 - **Cloud Monitoring**: Spark writes custom metrics under `custom.googleapis.com/spark/**` for LLM call latency, tool-loop timing phases, agent run duration, and task-runner process CPU/RSS summaries. With `@ljoukov/llm` 5.x Spark bridges the library's shared telemetry API into Cloud Monitoring, so direct `generate*` calls and agent loops can emit metrics through one process-wide sink while Spark still adds task-runner-specific step timing and process-resource metrics. `/admin/metrics` reads these series back through the same Google service-account JSON. The service account used in `GOOGLE_SERVICE_ACCOUNT_JSON` must have both `roles/monitoring.metricWriter` and `roles/monitoring.viewer`.
 
-- **Firestore**: Single source of truth for job metadata, quiz content, attempts, summaries, and client events. Server access uses the Firestore REST API with a service-account JWT flow (WebCrypto) using `GOOGLE_SERVICE_ACCOUNT_JSON`. Structured to minimize document sizes (<1 MB) and keep hot paths under 10 writes/sec per doc.
+- **Firestore**: Single source of truth for job metadata, quiz content, attempts, summaries, and client events. Server access uses `@ljoukov/firebase-admin-cloudflare` with `GOOGLE_SERVICE_ACCOUNT_JSON`, giving Spark one Cloudflare/Node/Bun-compatible Firestore admin path backed by REST/WebChannel. Structured to minimize document sizes (<1 MB) and keep hot paths under 10 writes/sec per doc.
 - **Firebase Storage**: Raw uploads stored short-term (7-day TTL) under `/spark/uploads/<uid>/<md5>` with security rules enforcing ownership. Server access uses the Storage JSON API (REST) with the same service-account JWT flow; objects are read/written by `storagePath` (no `downloadUrl` requirement). The server derives the storage bucket automatically as `<projectId>.firebasestorage.app` from the Google service account; do not override via environment variables.
 
 ### 3.4 Spark AI Agent Firestore (Phase 1)
@@ -367,9 +367,9 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
   3. Persist initial Firestore documents and enqueue background workflow by scheduling async functions with the runtime `waitUntil()` hook (Cloudflare Workers execution context).
   4. (Proto) Return minimal proto response (`AckResponse` with `job_id`, `received_at`, optimistic status).
 - Long-running operations (LLM generations, PDF parsing, summarization) run inside the runtime `waitUntil` hook. The handler writes updates back to Firestore as discrete steps (`started`, `ingesting`, `generating`, `ready`...). If rate limits require, delegate to Cloud Tasks or other queueing primitives in later iterations.
-- Firestore/Storage access uses a dual-path client:
-  - Cloudflare Workers runtime uses Firestore + GCS REST APIs with service-account JWTs minted via WebCrypto.
-  - Node runtimes can use Firebase Admin SDK (gRPC) when available (enables Firestore listeners); wrappers fall back to REST on Workers.
+- Firestore/Storage access uses a server-side service-account client:
+  - Firestore access goes through `@ljoukov/firebase-admin-cloudflare` in Cloudflare Workers, Node, and Bun.
+  - Firebase Storage access still uses the GCS JSON API with service-account JWTs minted via WebCrypto.
   - All writes are batched where possible to stay within Firestore limits.
 - API surface (proto-based, future/mobile-only):
   - `SparkApiRequest.request = GenerateFromUploadRequest`

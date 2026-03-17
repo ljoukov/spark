@@ -1,4 +1,5 @@
-import { getFirestoreDocument } from '$lib/server/gcp/firestoreRest';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import { doc, getDoc, getFirestore } from '@ljoukov/firebase-admin-cloudflare/firestore';
 import {
 	buildWorkspaceFileDocPath,
 	decodeWorkspaceFileId
@@ -33,12 +34,11 @@ export const load: PageServerLoad = async ({ params }) => {
 	const { userId, agentId, fileId } = paramsSchema.parse(params);
 
 	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
 
-	const agentSnap = await getFirestoreDocument({
-		serviceAccountJson,
-		documentPath: `users/${userId}/agents/${agentId}`
-	});
-	if (!agentSnap.exists || !agentSnap.data) {
+	const agentSnap = await getDoc(doc(firestore, `users/${userId}/agents/${agentId}`));
+	if (!agentSnap.exists) {
 		return {
 			agentId,
 			agentDocFound: false,
@@ -51,7 +51,7 @@ export const load: PageServerLoad = async ({ params }) => {
 		};
 	}
 
-	const agentParsed = SparkAgentStateSchema.safeParse({ id: agentId, ...(agentSnap.data ?? {}) });
+	const agentParsed = SparkAgentStateSchema.safeParse({ id: agentId, ...(agentSnap.data() ?? {}) });
 	if (!agentParsed.success) {
 		return {
 			agentId,
@@ -70,16 +70,18 @@ export const load: PageServerLoad = async ({ params }) => {
 
 	const workspaceId = agentParsed.data.workspaceId;
 	const filePath = decodeWorkspaceFileId(fileId);
-	const fileSnap = await getFirestoreDocument({
-		serviceAccountJson,
-		documentPath: buildWorkspaceFileDocPath({
-			userId,
-			workspaceId,
-			filePath
-		})
-	});
+	const fileSnap = await getDoc(
+		doc(
+			firestore,
+			buildWorkspaceFileDocPath({
+				userId,
+				workspaceId,
+				filePath
+			})
+		)
+	);
 
-	if (!fileSnap.exists || !fileSnap.data) {
+	if (!fileSnap.exists) {
 		return {
 			agentId,
 			agentDocFound: true,
@@ -92,11 +94,12 @@ export const load: PageServerLoad = async ({ params }) => {
 		};
 	}
 
+	const fileData = fileSnap.data() ?? {};
 	const fileParsed = SparkAgentWorkspaceFileSchema.safeParse({
-		...(fileSnap.data ?? {}),
+		...fileData,
 		path:
-			typeof fileSnap.data?.path === 'string' && fileSnap.data.path.trim().length > 0
-				? fileSnap.data.path.trim()
+			typeof fileData.path === 'string' && fileData.path.trim().length > 0
+				? fileData.path.trim()
 				: filePath
 	});
 	if (!fileParsed.success) {

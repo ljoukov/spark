@@ -6,15 +6,25 @@ import { describe, expect, it, vi } from "vitest";
 
 import { requireFunctionTool } from "./toolAssertions";
 
-vi.mock("../src/utils/gcp/firestoreRest", () => {
+vi.mock("@ljoukov/firebase-admin-cloudflare/app", () => {
   return {
-    getFirestoreDocument: vi.fn(() =>
-      Promise.resolve({ exists: false, data: null }),
+    initializeApp: vi.fn((options: unknown) => options),
+  };
+});
+
+vi.mock("@ljoukov/firebase-admin-cloudflare/firestore", () => {
+  return {
+    getFirestore: vi.fn(() => ({
+      settings: vi.fn(),
+    })),
+    doc: vi.fn((_firestore: unknown, documentPath: string) => ({ documentPath })),
+    getDoc: vi.fn(() =>
+      Promise.resolve({
+        exists: false,
+        data: () => undefined,
+      }),
     ),
-    setFirestoreDocument: vi.fn(() => Promise.resolve({})),
-    patchFirestoreDocument: vi.fn(() => Promise.resolve({})),
-    listFirestoreDocuments: vi.fn(() => Promise.resolve([])),
-    deleteFirestoreDocument: vi.fn(() => Promise.resolve({})),
+    setDoc: vi.fn(() => Promise.resolve()),
   };
 });
 

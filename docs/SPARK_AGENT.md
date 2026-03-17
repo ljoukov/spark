@@ -86,7 +86,7 @@ Notes:
 - Allow read-only access to `/{userId}/client/**` for the authenticated `userId`.
 - Deny all client writes under `/{userId}/client/**`.
 - Deny reads of any other userId subtree.
-- Server uses Admin SDK to write (rules do not apply).
+- Server writes use server-side Firestore credentials via `@ljoukov/firebase-admin-cloudflare` (rules do not apply).
 
 ## Family System & Messaging
 

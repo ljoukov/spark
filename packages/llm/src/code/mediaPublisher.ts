@@ -1,11 +1,14 @@
 import path from "node:path";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
-
+import { initializeApp } from "@ljoukov/firebase-admin-cloudflare/app";
 import {
-  getFirestoreDocument,
-  setFirestoreDocument,
-} from "../utils/gcp/firestoreRest";
+  doc,
+  getDoc,
+  getFirestore,
+  setDoc,
+} from "@ljoukov/firebase-admin-cloudflare/firestore";
+
 import { parseGoogleServiceAccountJson } from "../utils/gcp/googleAccessToken";
 import { uploadStorageObject } from "../utils/gcp/storageRest";
 import {
@@ -41,6 +44,30 @@ function buildStoragePath(
 function roundTime(value: number): number {
   const safe = Number.isFinite(value) && value >= 0 ? value : 0;
   return Math.round(safe * 1000) / 1000;
+}
+
+function resolveFirestoreDate(value: unknown): Date | undefined {
+  if (value instanceof Date) {
+    return value;
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+      return date;
+    }
+  }
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const toDate = (value as { toDate?: unknown }).toDate;
+  if (typeof toDate !== "function") {
+    return undefined;
+  }
+  const resolved = (toDate as (this: unknown) => unknown).call(value);
+  if (resolved instanceof Date) {
+    return resolved;
+  }
+  return undefined;
 }
 
 function normaliseImageStoragePath(imagePath: string): string {
@@ -152,23 +179,17 @@ export async function publishSessionMediaClip(
   const now = new Date();
 
   const documentPath = `spark/${userId}/sessions/${sessionId}/media/${planItemId}`;
-  const existing = await getFirestoreDocument({
-    serviceAccountJson,
-    documentPath,
-  });
+  const firestore = getFirestore(
+    initializeApp({ serviceAccountJson }, serviceAccountJson),
+  );
+  firestore.settings({ ignoreUndefinedProperties: true });
+  const existing = await getDoc(doc(firestore, documentPath));
   let createdAt = now;
   if (existing.exists) {
-    const rawCreatedAt = existing.data?.createdAt;
-    if (rawCreatedAt instanceof Date) {
-      createdAt = rawCreatedAt;
-    } else if (
-      typeof rawCreatedAt === "string" ||
-      typeof rawCreatedAt === "number"
-    ) {
-      const parsed = new Date(rawCreatedAt);
-      if (!Number.isNaN(parsed.getTime())) {
-        createdAt = parsed;
-      }
+    const rawCreatedAt = existing.data()?.createdAt;
+    const resolvedCreatedAt = resolveFirestoreDate(rawCreatedAt);
+    if (resolvedCreatedAt) {
+      createdAt = resolvedCreatedAt;
     }
   }
 
@@ -193,11 +214,10 @@ export async function publishSessionMediaClip(
   // Validate shape before writing.
   SessionMediaDocSchema.parse(docData satisfies SessionMediaDoc);
 
-  await setFirestoreDocument({
-    serviceAccountJson,
-    documentPath,
-    data: docData as unknown as Record<string, unknown>,
-  });
+  await setDoc(
+    doc(firestore, documentPath),
+    docData as unknown as Record<string, unknown>,
+  );
 
   return {
     storagePath: `/${storagePath}`,

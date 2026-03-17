@@ -1,4 +1,12 @@
-import { listFirestoreDocuments } from '$lib/server/gcp/firestoreRest';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import {
+	collection,
+	getDocs,
+	getFirestore,
+	limit as limitQuery,
+	orderBy,
+	query
+} from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { SparkAgentConversationSchema, type SparkAgentConversation } from '@spark/schemas';
 import { env } from '$env/dynamic/private';
 import { z } from 'zod';
@@ -43,12 +51,16 @@ const CONVERSATION_LIST_LIMIT = 50;
 export const load: PageServerLoad = async ({ params }) => {
 	const { userId } = paramsSchema.parse(params);
 
-	const docs = await listFirestoreDocuments({
-		serviceAccountJson: requireServiceAccountJson(),
-		collectionPath: `${userId}/client/conversations`,
-		limit: CONVERSATION_LIST_LIMIT,
-		orderBy: 'lastMessageAt desc'
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const docs = await getDocs(
+		query(
+			collection(firestore, `${userId}/client/conversations`),
+			orderBy('lastMessageAt', 'desc'),
+			limitQuery(CONVERSATION_LIST_LIMIT)
+		)
+	);
 
 	const conversations: Array<{
 		id: string;
@@ -60,9 +72,10 @@ export const load: PageServerLoad = async ({ params }) => {
 		preview: string;
 	}> = [];
 
-	for (const doc of docs) {
-		const id = docIdFromPath(doc.documentPath);
-		const parsed = SparkAgentConversationSchema.safeParse({ id, ...(doc.data ?? {}) });
+	for (const conversationDoc of docs.docs) {
+		const raw = conversationDoc.data();
+		const id = docIdFromPath(conversationDoc.ref.path);
+		const parsed = SparkAgentConversationSchema.safeParse({ id, ...(raw ?? {}) });
 		if (parsed.success) {
 			const preview = textPreview(parsed.data);
 			conversations.push({
@@ -77,12 +90,12 @@ export const load: PageServerLoad = async ({ params }) => {
 			continue;
 		}
 
-		const messages = Array.isArray(doc.data?.messages) ? doc.data?.messages : [];
+		const messages = Array.isArray(raw?.messages) ? raw.messages : [];
 		conversations.push({
 			id,
-			familyId: typeof doc.data?.familyId === 'string' ? doc.data.familyId : null,
-			participantIds: Array.isArray(doc.data?.participantIds)
-				? doc.data.participantIds.filter((value): value is string => typeof value === 'string')
+			familyId: typeof raw?.familyId === 'string' ? raw.familyId : null,
+			participantIds: Array.isArray(raw?.participantIds)
+				? raw.participantIds.filter((value): value is string => typeof value === 'string')
 				: [],
 			createdAt: null,
 			lastMessageAt: null,
@@ -95,4 +108,3 @@ export const load: PageServerLoad = async ({ params }) => {
 		conversations
 	};
 };
-

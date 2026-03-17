@@ -3,6 +3,7 @@
 	import { renderMarkdown } from '$lib/markdown';
 	import { PaperSheet } from '$lib/components/paper-sheet/index.js';
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
+	import type { Unsubscribe } from 'firebase/firestore';
 	import type {
 		PaperSheetFeedbackThread,
 		SparkAgentWorkspaceFile,
@@ -14,15 +15,6 @@
 		SparkGraderWorksheetReportSchema,
 		SparkTutorReviewStateSchema
 	} from '@spark/schemas';
-	import {
-		collection,
-		getFirestore,
-		limit,
-		onSnapshot,
-		orderBy,
-		query,
-		type Unsubscribe
-	} from 'firebase/firestore';
 	import { getAuth, onIdTokenChanged } from 'firebase/auth';
 	import { getContext, onMount, untrack } from 'svelte';
 	import { fromStore, type Readable } from 'svelte/store';
@@ -157,36 +149,57 @@
 		if (!browser || !authReady || !userId || !interactionWorkspaceId) {
 			return;
 		}
-		const db = getFirestore(getFirebaseApp());
-		const filesRef = collection(db, 'users', userId, 'workspace', interactionWorkspaceId, 'files');
-		const filesQuery = query(filesRef, orderBy('path', 'asc'), limit(400));
+		const resolvedUserId = userId;
+		const resolvedWorkspaceId = interactionWorkspaceId;
 		let stop: Unsubscribe | null = null;
-		stop = onSnapshot(
-			filesQuery,
-			(snapshot) => {
-				const files: SparkAgentWorkspaceFile[] = [];
-				for (const document of snapshot.docs) {
-					const raw = document.data();
-					const payload = {
-						...raw,
-						path:
-							typeof raw.path === 'string' && raw.path.trim().length > 0
-								? raw.path.trim()
-								: decodeFileId(document.id)
-					};
-					const parsed = SparkAgentWorkspaceFileSchema.safeParse(payload);
-					if (!parsed.success) {
-						continue;
-					}
-					files.push(parsed.data);
+		let cancelled = false;
+
+		void import('firebase/firestore')
+			.then(({ collection, getFirestore, limit, onSnapshot, orderBy, query }) => {
+				if (cancelled) {
+					return;
 				}
-				applyWorkspaceFiles(files);
-			},
-			(error) => {
-				console.warn('Sheet workspace subscription failed', error);
-			}
-		);
+				const db = getFirestore(getFirebaseApp());
+				const filesRef = collection(
+					db,
+					'users',
+					resolvedUserId,
+					'workspace',
+					resolvedWorkspaceId,
+					'files'
+				);
+				const filesQuery = query(filesRef, orderBy('path', 'asc'), limit(400));
+				stop = onSnapshot(
+					filesQuery,
+					(snapshot) => {
+						const files: SparkAgentWorkspaceFile[] = [];
+						for (const document of snapshot.docs) {
+							const raw = document.data();
+							const payload = {
+								...raw,
+								path:
+									typeof raw.path === 'string' && raw.path.trim().length > 0
+										? raw.path.trim()
+										: decodeFileId(document.id)
+							};
+							const parsed = SparkAgentWorkspaceFileSchema.safeParse(payload);
+							if (!parsed.success) {
+								continue;
+							}
+							files.push(parsed.data);
+						}
+						applyWorkspaceFiles(files);
+					},
+					(error) => {
+						console.warn('Sheet workspace subscription failed', error);
+					}
+				);
+			})
+			.catch((error: unknown) => {
+				console.warn('Failed to initialize sheet workspace subscription', error);
+			});
 		return () => {
+			cancelled = true;
 			stop?.();
 		};
 	});

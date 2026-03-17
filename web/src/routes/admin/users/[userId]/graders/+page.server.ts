@@ -1,6 +1,7 @@
-import { deleteFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 import { listGraderRuns, resolveGraderRunDocPath } from '$lib/server/grader/repo';
 import { env } from '$env/dynamic/private';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import { deleteDoc, doc, getFirestore } from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { fail } from '@sveltejs/kit';
 import { z } from 'zod';
 import type { Actions, PageServerLoad } from './$types';
@@ -109,10 +110,9 @@ export const actions: Actions = {
 		const serviceAccountJson = requireServiceAccountJson();
 
 		try {
-			await deleteFirestoreDocument({
-				serviceAccountJson,
-				documentPath: resolveGraderRunDocPath(userId, runId)
-			});
+			const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+			firestore.settings({ ignoreUndefinedProperties: true });
+			await deleteDoc(doc(firestore, resolveGraderRunDocPath(userId, runId)));
 
 			return { success: { message: `Deleted sheet run ${runId}.` } as const };
 		} catch (error) {

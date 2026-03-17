@@ -1,7 +1,8 @@
 import { UserDocSchema, DEFAULT_USER_STATS, type UserDoc, type UserStats } from '@spark/schemas';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import { doc, getDoc, getFirestore } from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { z } from 'zod';
 import { env } from '$env/dynamic/private';
-import { getFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 
 const userIdSchema = z.string().trim().min(1, 'userId is required');
 
@@ -19,14 +20,14 @@ function resolveUserDocPath(userId: string): string {
 }
 
 export async function getUserDoc(userId: string): Promise<UserDoc | null> {
-	const snapshot = await getFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath: resolveUserDocPath(userId)
-	});
-	if (!snapshot.exists || !snapshot.data) {
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const snapshot = await getDoc(doc(firestore, resolveUserDocPath(userId)));
+	if (!snapshot.exists) {
 		return null;
 	}
-	return UserDocSchema.parse(snapshot.data ?? {});
+	return UserDocSchema.parse(snapshot.data() ?? {});
 }
 
 export async function getUserStats(userId: string): Promise<UserStats> {

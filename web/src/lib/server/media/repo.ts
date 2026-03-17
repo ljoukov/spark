@@ -3,9 +3,10 @@ import {
 	type SessionMediaDoc,
 	type SessionMediaSupplementaryImage
 } from '@spark/schemas';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import { doc, getDoc, getFirestore } from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { z } from 'zod';
 import { env } from '$env/dynamic/private';
-import { getFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 
 const userIdSchema = z.string().trim().min(1, 'userId is required');
 const sessionIdSchema = z.string().trim().min(1, 'sessionId is required');
@@ -61,11 +62,11 @@ export async function getSessionMedia(
 	const uid = userIdSchema.parse(userId);
 	const sid = sessionIdSchema.parse(sessionId);
 	const pid = planItemIdSchema.parse(planItemId);
-	const snapshot = await getFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath: `spark/${uid}/sessions/${sid}/media/${pid}`
-	});
-	if (!snapshot.exists || !snapshot.data) {
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const snapshot = await getDoc(doc(firestore, `spark/${uid}/sessions/${sid}/media/${pid}`));
+	if (!snapshot.exists) {
 		return null;
 	}
 
@@ -73,7 +74,7 @@ export async function getSessionMedia(
 	try {
 		parsed = SessionMediaDocSchema.parse({
 			id: pid,
-			...snapshot.data
+			...snapshot.data()
 		});
 	} catch (error) {
 		console.error('Failed to parse session media document', pid, error);
