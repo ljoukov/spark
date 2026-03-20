@@ -34,6 +34,9 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		workspaceId: string;
 		status: string;
 		reviewState: ReturnType<typeof buildInitialTutorReviewState>;
+		activeTurnAgentId: string | null;
+		activeTurnQuestionId: string | null;
+		error: string | null;
 	};
 
 	if (session) {
@@ -56,7 +59,10 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			id: currentSession.id,
 			workspaceId: currentSession.workspaceId,
 			status: currentSession.status,
-			reviewState: currentReviewState
+			reviewState: currentReviewState,
+			activeTurnAgentId: currentSession.activeTurnAgentId ?? null,
+			activeTurnQuestionId: currentSession.activeTurnQuestionId ?? null,
+			error: currentSession.error ?? null
 		};
 	}
 

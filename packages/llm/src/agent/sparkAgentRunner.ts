@@ -49,6 +49,7 @@ import {
   SparkTutorComposerStateSchema,
   SparkTutorHistoryEntrySchema,
   SparkTutorReviewStateSchema,
+  SparkTutorReviewThreadSchema,
   SparkTutorScreenStateSchema,
   SparkAgentWorkspaceFileSchema,
   type CodeProblem,
@@ -1811,11 +1812,15 @@ async function writeTutorWorkspaceTextFile(options: {
   workspaceSync: WorkspaceSync | undefined;
   filePath: string;
   content: string;
+  flushNow?: boolean;
 }): Promise<void> {
   const absolutePath = resolveWorkspacePath(options.rootDir, options.filePath);
   await mkdir(path.dirname(absolutePath), { recursive: true });
   await writeFile(absolutePath, options.content, { encoding: "utf8" });
   options.workspaceSync?.scheduleUpdate(options.filePath);
+  if (options.flushNow) {
+    await options.workspaceSync?.flushNow(options.filePath);
+  }
 }
 
 async function appendTutorHistoryEntryFile(options: {
@@ -2808,6 +2813,22 @@ class WorkspaceSync {
     }, delay);
   }
 
+  async flushNow(filePath: string): Promise<void> {
+    const meta = this.ensureMeta(filePath);
+    if (meta.disposed) {
+      return;
+    }
+    meta.pending = true;
+    if (meta.timer) {
+      clearTimeout(meta.timer);
+      meta.timer = undefined;
+    }
+    if (meta.inFlight) {
+      await meta.inFlight.catch(() => undefined);
+    }
+    await this.startFlush(filePath, { force: true });
+  }
+
   async deleteFile(filePath: string): Promise<void> {
     const meta = this.fileMeta.get(filePath);
     if (meta) {
@@ -3259,6 +3280,7 @@ function createToolLoopStatsEventBridge(options: {
   tracker: AgentRunStatsTracker;
   modelId: string;
   flush: () => void;
+  mirrorEvent?: (event: LlmStreamEvent) => void;
 }): {
   onEvent(event: LlmStreamEvent): void;
   finish(): void;
@@ -3286,6 +3308,7 @@ function createToolLoopStatsEventBridge(options: {
 
   return {
     onEvent(event) {
+      options.mirrorEvent?.(event);
       switch (event.type) {
         case "delta": {
           const handle = ensureActiveHandle();
@@ -3364,6 +3387,12 @@ class AgentLogSync {
   private lastWriteAt = 0;
   private pendingLines = new Map<string, string>();
   private pendingStats: AgentRunStatsSnapshot | null = null;
+  private pendingStream:
+    | {
+        assistant: string;
+        thoughts: string;
+      }
+    | null = null;
   private timer: NodeJS.Timeout | undefined;
   private inFlight: Promise<void> | undefined;
   private disposed = false;
@@ -3408,6 +3437,17 @@ class AgentLogSync {
     this.scheduleUpdate();
   }
 
+  setStream(stream: { assistant?: string; thoughts?: string }): void {
+    if (this.disposed) {
+      return;
+    }
+    this.pendingStream = {
+      assistant: stream.assistant ?? "",
+      thoughts: stream.thoughts ?? "",
+    };
+    this.scheduleUpdate();
+  }
+
   async flushAll(): Promise<void> {
     if (this.timer) {
       clearTimeout(this.timer);
@@ -3416,7 +3456,7 @@ class AgentLogSync {
     if (this.inFlight) {
       await this.inFlight.catch(() => undefined);
     }
-    if (this.pendingLines.size === 0 && !this.pendingStats) {
+    if (this.pendingLines.size === 0 && !this.pendingStats && !this.pendingStream) {
       return;
     }
     const now = Date.now();
@@ -3482,7 +3522,7 @@ class AgentLogSync {
     if (this.disposed) {
       return;
     }
-    if (!force && this.pendingLines.size === 0 && !this.pendingStats) {
+    if (!force && this.pendingLines.size === 0 && !this.pendingStats && !this.pendingStream) {
       return;
     }
     if (this.timer) {
@@ -3503,7 +3543,7 @@ class AgentLogSync {
         this.inFlight = undefined;
         if (
           !this.disposed &&
-          (this.pendingLines.size > 0 || this.pendingStats)
+          (this.pendingLines.size > 0 || this.pendingStats || this.pendingStream)
         ) {
           this.scheduleUpdate();
         }
@@ -3518,10 +3558,12 @@ class AgentLogSync {
     }
     const linesEntries = Array.from(this.pendingLines.entries());
     const stats = this.pendingStats;
+    const stream = this.pendingStream;
     this.pendingLines.clear();
     this.pendingStats = null;
+    this.pendingStream = null;
 
-    if (linesEntries.length === 0 && !stats) {
+    if (linesEntries.length === 0 && !stats && !stream) {
       return;
     }
 
@@ -3545,6 +3587,11 @@ class AgentLogSync {
     if (stats) {
       payload.stats = stats;
     }
+    if (stream) {
+      payload["stream.updatedAt"] = now;
+      payload["stream.assistant"] = stream.assistant;
+      payload["stream.thoughts"] = stream.thoughts;
+    }
 
     try {
       await patchFirestoreDocument({
@@ -3561,6 +3608,9 @@ class AgentLogSync {
       }
       if (!this.pendingStats && stats) {
         this.pendingStats = stats;
+      }
+      if (!this.pendingStream && stream) {
+        this.pendingStream = stream;
       }
       throw error;
     }
@@ -7436,7 +7486,6 @@ export async function runSparkAgentTask(
   let tutorHintLevel: string | null = null;
   let tutorSessionTitle = "Tutor session";
   let tutorSourceLabel = "graded problem";
-  let tutorDraftRevision = 0;
   let tutorFocusLabel: string | null = null;
   let tutorSnapshot: TutorWorkspaceSnapshot | null = null;
   let publishedGraderSheet: PublishedGraderSheetArtifacts | null = null;
@@ -7451,6 +7500,15 @@ export async function runSparkAgentTask(
   let stopPollInFlight: Promise<void> | undefined;
 
   let doneCalled = false;
+  let streamedAssistantText = "";
+  let streamedThoughtsText = "";
+  let recoverTutorQuestionAfterFailure:
+    | ((input: {
+        assistantReplyMarkdown: string;
+        composerPlaceholder: string;
+        sessionError?: string;
+      }) => Promise<void>)
+    | null = null;
 
   const stopStopPolling = async (): Promise<void> => {
     if (stopPollTimer) {
@@ -7626,8 +7684,10 @@ export async function runSparkAgentTask(
         updates: {
           status: "responding",
           activeTurnAgentId: options.agentId,
+          ...(tutorQuestionId ? { activeTurnQuestionId: tutorQuestionId } : {}),
           updatedAt: new Date(),
         },
+        deletes: ["error"],
       }).catch(() => undefined);
     }
 
@@ -7685,9 +7745,6 @@ export async function runSparkAgentTask(
         tutorSessionData.focusLabel.trim().length > 0
       ) {
         tutorFocusLabel = tutorSessionData.focusLabel.trim();
-      }
-      if (typeof tutorSessionData.latestDraftRevision === "number") {
-        tutorDraftRevision = Math.max(0, tutorSessionData.latestDraftRevision);
       }
       const source =
         tutorSessionData.source &&
@@ -8040,6 +8097,11 @@ export async function runSparkAgentTask(
         author: "assistant",
         now,
       });
+      streamedAssistantText = input.assistantReplyMarkdown;
+      logSync?.setStream({
+        assistant: streamedAssistantText,
+        thoughts: streamedThoughtsText,
+      });
       await Promise.all([
         writeTutorWorkspaceTextFile({
           rootDir: workspaceRoot,
@@ -8051,24 +8113,28 @@ export async function runSparkAgentTask(
             createdAt: nowIso,
             resolved: input.resolved,
           }),
+          flushNow: true,
         }),
         writeTutorWorkspaceTextFile({
           rootDir: workspaceRoot,
           workspaceSync,
           filePath: TUTOR_STATE_REVIEW_PATH,
           content: stringifyJsonFile(nextReviewState),
+          flushNow: true,
         }),
         writeTutorWorkspaceTextFile({
           rootDir: workspaceRoot,
           workspaceSync,
           filePath: TUTOR_STATE_SESSION_PATH,
           content: stringifyJsonFile(screenState),
+          flushNow: true,
         }),
         writeTutorWorkspaceTextFile({
           rootDir: workspaceRoot,
           workspaceSync,
           filePath: TUTOR_STATE_COMPOSER_PATH,
           content: stringifyJsonFile(composerState),
+          flushNow: true,
         }),
         patchFirestoreDocument({
           serviceAccountJson,
@@ -8080,10 +8146,10 @@ export async function runSparkAgentTask(
             status: sessionStatus,
             preview,
             updatedAt: now,
-            activeTurnAgentId: options.agentId,
             ...(focusLabel ? { focusLabel } : {}),
             ...(summary.allResolved ? { completedAt: now } : {}),
           },
+          deletes: ["error"],
         }),
       ]);
       tutorFocusLabel = focusLabel ?? null;
@@ -8091,6 +8157,135 @@ export async function runSparkAgentTask(
         sessionStatus,
         preview,
       };
+    };
+
+    recoverTutorQuestionAfterFailure = async (input: {
+      assistantReplyMarkdown: string;
+      composerPlaceholder: string;
+      sessionError?: string;
+    }): Promise<void> => {
+      if (!tutorSessionId || !workspaceRoot || !tutorQuestionId) {
+        return;
+      }
+      const { reviewState, report, questionIds } =
+        await loadTutorQuestionReviewContext();
+      const currentThread = reviewState.threads[tutorQuestionId];
+      if (!currentThread || currentThread.status !== "responding") {
+        await patchFirestoreDocument({
+          serviceAccountJson,
+          documentPath: resolveTutorSessionDocPath(
+            options.userId,
+            tutorSessionId,
+          ),
+          updates: {
+            status: "awaiting_student",
+            updatedAt: new Date(),
+            ...(input.sessionError ? { error: input.sessionError } : {}),
+          },
+          deletes: ["activeTurnAgentId", "activeTurnQuestionId"],
+        }).catch(() => undefined);
+        return;
+      }
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const nextThread = SparkTutorReviewThreadSchema.parse({
+        ...currentThread,
+        status: "open",
+        messages: [
+          ...currentThread.messages,
+          {
+            id: randomUUID(),
+            author: "assistant",
+            markdown: input.assistantReplyMarkdown,
+            createdAt: nowIso,
+          },
+        ],
+        resolvedAt: undefined,
+      });
+      const nextReviewState = SparkTutorReviewStateSchema.parse({
+        ...reviewState,
+        threads: {
+          ...reviewState.threads,
+          [tutorQuestionId]: nextThread,
+        },
+        updatedAt: nowIso,
+      });
+      const summary = summarizeTutorReviewThreads(nextReviewState, questionIds);
+      const focusLabel = summary.allResolved
+        ? "Resolved"
+        : buildTutorFocusLabelForQuestion({
+            report,
+            questionId: summary.nextQuestionId,
+          });
+      const preview = buildTutorPreviewFromSummary(summary);
+      const screenState = SparkTutorScreenStateSchema.parse({
+        status: "awaiting_student",
+        title: tutorSessionTitle,
+        ...(focusLabel ? { focusLabel } : {}),
+        updatedAt: nowIso,
+      });
+      const composerState = buildTutorComposerState({
+        placeholder: input.composerPlaceholder,
+        disabled: false,
+        allowConfidence: false,
+        hintButtons: [],
+      });
+      const turnFilePath = buildTutorQuestionTurnFilePath({
+        questionId: tutorQuestionId,
+        author: "assistant",
+        now,
+      });
+      await Promise.all([
+        writeTutorWorkspaceTextFile({
+          rootDir: workspaceRoot,
+          workspaceSync,
+          filePath: turnFilePath,
+          content: stringifyJsonFile({
+            author: "assistant",
+            markdown: input.assistantReplyMarkdown,
+            createdAt: nowIso,
+            resolved: false,
+          }),
+          flushNow: true,
+        }),
+        writeTutorWorkspaceTextFile({
+          rootDir: workspaceRoot,
+          workspaceSync,
+          filePath: TUTOR_STATE_REVIEW_PATH,
+          content: stringifyJsonFile(nextReviewState),
+          flushNow: true,
+        }),
+        writeTutorWorkspaceTextFile({
+          rootDir: workspaceRoot,
+          workspaceSync,
+          filePath: TUTOR_STATE_SESSION_PATH,
+          content: stringifyJsonFile(screenState),
+          flushNow: true,
+        }),
+        writeTutorWorkspaceTextFile({
+          rootDir: workspaceRoot,
+          workspaceSync,
+          filePath: TUTOR_STATE_COMPOSER_PATH,
+          content: stringifyJsonFile(composerState),
+          flushNow: true,
+        }),
+        patchFirestoreDocument({
+          serviceAccountJson,
+          documentPath: resolveTutorSessionDocPath(
+            options.userId,
+            tutorSessionId,
+          ),
+          updates: {
+            status: "awaiting_student",
+            preview,
+            updatedAt: now,
+            ...(focusLabel ? { focusLabel } : {}),
+            ...(input.sessionError ? { error: input.sessionError } : {}),
+          },
+          deletes: ["activeTurnAgentId", "activeTurnQuestionId"],
+        }),
+      ]);
+      tutorFocusLabel = focusLabel ?? null;
     };
 
     const wait_for_student_input = tool({
@@ -8334,6 +8529,20 @@ export async function runSparkAgentTask(
       flush: () => {
         logSync?.setStats(statsTracker.snapshot());
       },
+      mirrorEvent: (event) => {
+        if (event.type !== "delta") {
+          return;
+        }
+        if (event.channel === "response") {
+          streamedAssistantText += event.text;
+        } else {
+          streamedThoughtsText += event.text;
+        }
+        logSync?.setStream({
+          assistant: streamedAssistantText,
+          thoughts: streamedThoughtsText,
+        });
+      },
     });
     const graderRequestPayload =
       graderRunId && workspaceRoot
@@ -8348,10 +8557,14 @@ export async function runSparkAgentTask(
           model: modelId,
           input: initialInput ?? prompt,
           ...(initialInput ? {} : { instructions: agentSystemPrompt }),
-          filesystemTool: buildSparkAgentFilesystemToolConfig({
-            workspace: workspaceSync,
-            rootDir: workspaceRoot,
-          }),
+          ...(tutorSessionId
+            ? {}
+            : {
+                filesystemTool: buildSparkAgentFilesystemToolConfig({
+                  workspace: workspaceSync,
+                  rootDir: workspaceRoot,
+                }),
+              }),
           tools,
           ...(tutorSessionId
             ? {}
@@ -8503,6 +8716,23 @@ export async function runSparkAgentTask(
 
     await workspaceSync?.flushAll().catch(() => undefined);
     await logSync?.flushAll().catch(() => undefined);
+    if (tutorSessionId) {
+      await patchFirestoreDocument({
+        serviceAccountJson,
+        documentPath: resolveTutorSessionDocPath(
+          options.userId,
+          tutorSessionId,
+        ),
+        updates: {
+          updatedAt: new Date(),
+        },
+        deletes: ["activeTurnAgentId", "activeTurnQuestionId"],
+      }).catch((error) => {
+        logSync?.append(
+          `warn: failed to clear active tutor turn: ${errorAsString(error)}`,
+        );
+      });
+    }
     agentMetricStatus = "ok";
   } catch (error) {
     if (error instanceof StopRequestedError) {
@@ -8530,46 +8760,16 @@ export async function runSparkAgentTask(
         }).catch(() => undefined);
       }
       if (tutorSessionId && workspaceRoot) {
-        const now = new Date();
-        await Promise.all([
-          writeTutorWorkspaceTextFile({
-            rootDir: workspaceRoot,
-            workspaceSync,
-            filePath: TUTOR_STATE_SESSION_PATH,
-            content: stringifyJsonFile(
-              SparkTutorScreenStateSchema.parse({
-                status: "failed",
-                title: tutorSessionTitle,
-                ...(tutorFocusLabel ? { focusLabel: tutorFocusLabel } : {}),
-                draftRevision: tutorDraftRevision,
-                updatedAt: now.toISOString(),
-              }),
-            ),
-          }).catch(() => undefined),
-          writeTutorWorkspaceTextFile({
-            rootDir: workspaceRoot,
-            workspaceSync,
-            filePath: TUTOR_STATE_COMPOSER_PATH,
-            content: stringifyJsonFile(
-              buildTutorComposerState({
-                placeholder: "This tutor turn was stopped. You can try again.",
-                disabled: false,
-              }),
-            ),
-          }).catch(() => undefined),
-          patchFirestoreDocument({
-            serviceAccountJson,
-            documentPath: resolveTutorSessionDocPath(
-              options.userId,
-              tutorSessionId,
-            ),
-            updates: {
-              status: "failed",
-              error: "Stopped by user.",
-              updatedAt: now,
-            },
-          }).catch(() => undefined),
-        ]);
+        await recoverTutorQuestionAfterFailure?.({
+          assistantReplyMarkdown:
+            "This review turn stopped before I could finish. Send your reply again and I will pick it up from there.",
+          composerPlaceholder: "This tutor turn was stopped. You can try again.",
+          sessionError: "Stopped by user.",
+        }).catch((recoverError: unknown) => {
+          logSync?.append(
+            `warn: failed to recover stopped tutor turn: ${errorAsString(recoverError)}`,
+          );
+        });
       }
       return;
     }
@@ -8609,46 +8809,16 @@ export async function runSparkAgentTask(
       }).catch(() => undefined);
     }
     if (tutorSessionId && workspaceRoot) {
-      const now = new Date();
-      await Promise.all([
-        writeTutorWorkspaceTextFile({
-          rootDir: workspaceRoot,
-          workspaceSync,
-          filePath: TUTOR_STATE_SESSION_PATH,
-          content: stringifyJsonFile(
-            SparkTutorScreenStateSchema.parse({
-              status: "failed",
-              title: tutorSessionTitle,
-              ...(tutorFocusLabel ? { focusLabel: tutorFocusLabel } : {}),
-              draftRevision: tutorDraftRevision,
-              updatedAt: now.toISOString(),
-            }),
-          ),
-        }).catch(() => undefined),
-        writeTutorWorkspaceTextFile({
-          rootDir: workspaceRoot,
-          workspaceSync,
-          filePath: TUTOR_STATE_COMPOSER_PATH,
-          content: stringifyJsonFile(
-            buildTutorComposerState({
-              placeholder: "That tutor turn failed. You can try sending again.",
-              disabled: false,
-            }),
-          ),
-        }).catch(() => undefined),
-        patchFirestoreDocument({
-          serviceAccountJson,
-          documentPath: resolveTutorSessionDocPath(
-            options.userId,
-            tutorSessionId,
-          ),
-          updates: {
-            status: "failed",
-            error: message,
-            updatedAt: now,
-          },
-        }).catch(() => undefined),
-      ]);
+      await recoverTutorQuestionAfterFailure?.({
+        assistantReplyMarkdown:
+          "I lost that review turn before I could finish. Send the same reply again and I will continue from this question.",
+        composerPlaceholder: "That tutor turn failed. You can try sending again.",
+        sessionError: message,
+      }).catch((recoverError: unknown) => {
+        logSync?.append(
+          `warn: failed to recover errored tutor turn: ${errorAsString(recoverError)}`,
+        );
+      });
     }
     return;
   } finally {

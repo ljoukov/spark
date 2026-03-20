@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import CopyIcon from '@lucide/svelte/icons/copy';
+	import XIcon from '@lucide/svelte/icons/x';
 	import { onMount, setContext } from 'svelte';
 	import type { Snippet } from 'svelte';
 	import { fromStore, writable } from 'svelte/store';
@@ -21,6 +22,10 @@
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
 
 	type ExperienceKey = 'lesson' | 'spark' | null;
+
+	function isSheetDetailRoute(routeId: string | null | undefined): boolean {
+		return Boolean(routeId?.includes('/spark/sheets/[sheetId]'));
+	}
 
 	function resolveExperience(routeId: string | null | undefined): ExperienceKey {
 		if (!routeId) {
@@ -64,6 +69,7 @@
 		userStore.set(data.user ?? null);
 	});
 	const sessionId = $derived($page.params.sessionId ?? null);
+	const showSheetDetailLayout = $derived(isSheetDetailRoute($page.route.id));
 	const experience = $derived(resolveExperience($page.route.id));
 	const sessionHomeHref = $derived(resolveSessionHomeHref(experience, sessionId));
 	const brandCopy = $derived(resolveBrandCopy(experience));
@@ -341,149 +347,163 @@
 </script>
 
 <div class="app-page">
-	<div class="app-shell">
-		<header class="app-header" data-experience={experience ?? ''}>
-			<a class="app-brand" href={sessionHomeHref}>
-				<img src="/favicon.png" alt="Spark logo" class="app-brand__logo" />
-				<div class="app-brand__text">
-					<span class="app-brand__title">{brandCopy.title}</span>
-					{#if brandCopy.tagline}
-						<span class="app-brand__separator" aria-hidden="true">•</span>
-						<span class="app-brand__tagline">{brandCopy.tagline}</span>
-					{/if}
-				</div>
+	<div class={`app-shell ${showSheetDetailLayout ? 'app-shell--sheet-detail' : ''}`}>
+		{#if showSheetDetailLayout}
+			<a
+				class="sheet-close-button"
+				href="/spark/sheets"
+				aria-label="Back to all sheets"
+				title="Back to all sheets"
+			>
+				<XIcon class="sheet-close-button__icon" />
 			</a>
-			<div class="app-header__actions">
-				<DropdownMenu.Root>
-					<DropdownMenu.Trigger class="app-user-trigger" aria-label="Open user menu">
-						<Avatar.Root class="app-avatar">
-							{#if user?.photoUrl}
-								<Avatar.Image src={user.photoUrl} alt={getDisplayName()} />
+			<main class="app-main app-main--sheet-detail">
+				{@render children?.()}
+			</main>
+		{:else}
+			<header class="app-header" data-experience={experience ?? ''}>
+				<a class="app-brand" href={sessionHomeHref}>
+					<img src="/favicon.png" alt="Spark logo" class="app-brand__logo" />
+					<div class="app-brand__text">
+						<span class="app-brand__title">{brandCopy.title}</span>
+						{#if brandCopy.tagline}
+							<span class="app-brand__separator" aria-hidden="true">•</span>
+							<span class="app-brand__tagline">{brandCopy.tagline}</span>
+						{/if}
+					</div>
+				</a>
+				<div class="app-header__actions">
+					<DropdownMenu.Root>
+						<DropdownMenu.Trigger class="app-user-trigger" aria-label="Open user menu">
+							<Avatar.Root class="app-avatar">
+								{#if user?.photoUrl}
+									<Avatar.Image src={user.photoUrl} alt={getDisplayName()} />
+								{/if}
+								<Avatar.Fallback aria-hidden="true">{getAvatarInitials()}</Avatar.Fallback>
+							</Avatar.Root>
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Content class="app-user-menu" align="end" sideOffset={12}>
+							<DropdownMenu.Label class="app-user-menu__label">Signed in</DropdownMenu.Label>
+							<div class="app-user-menu__identity">
+								<div class="app-user-menu__row">
+									<span class="app-user-menu__name">{getDisplayName()}</span>
+									{#if canCopyIdentity && !hasEmailIdentity}
+										<button
+											type="button"
+											class="app-user-menu__copy"
+											aria-label="Copy user info"
+											title="Copy user info"
+											onclick={(event) => {
+												event.preventDefault();
+												event.stopPropagation();
+												void copyIdentityToClipboard();
+											}}
+										>
+											{#if copiedIdentity}
+												<CheckIcon class="app-user-menu__copy-icon" />
+											{:else}
+												<CopyIcon class="app-user-menu__copy-icon" />
+											{/if}
+										</button>
+									{/if}
+								</div>
+								<div class="app-user-menu__row app-user-menu__row--secondary">
+									<span class="app-user-menu__email">{getEmailLabel()}</span>
+									{#if canCopyIdentity && hasEmailIdentity}
+										<button
+											type="button"
+											class="app-user-menu__copy"
+											aria-label="Copy user info"
+											title="Copy user info"
+											onclick={(event) => {
+												event.preventDefault();
+												event.stopPropagation();
+												void copyIdentityToClipboard();
+											}}
+										>
+											{#if copiedIdentity}
+												<CheckIcon class="app-user-menu__copy-icon" />
+											{:else}
+												<CopyIcon class="app-user-menu__copy-icon" />
+											{/if}
+										</button>
+									{/if}
+								</div>
+							</div>
+							<DropdownMenu.Separator />
+							{#if canAccessAdmin}
+								<DropdownMenu.Item
+									class="app-user-menu__link"
+									onSelect={() => {
+										void goto('/admin');
+									}}
+								>
+									Admin
+								</DropdownMenu.Item>
+								<DropdownMenu.Separator />
 							{/if}
-							<Avatar.Fallback aria-hidden="true">{getAvatarInitials()}</Avatar.Fallback>
-						</Avatar.Root>
-					</DropdownMenu.Trigger>
-					<DropdownMenu.Content class="app-user-menu" align="end" sideOffset={12}>
-						<DropdownMenu.Label class="app-user-menu__label">Signed in</DropdownMenu.Label>
-						<div class="app-user-menu__identity">
-							<div class="app-user-menu__row">
-								<span class="app-user-menu__name">{getDisplayName()}</span>
-								{#if canCopyIdentity && !hasEmailIdentity}
-									<button
-										type="button"
-										class="app-user-menu__copy"
-										aria-label="Copy user info"
-										title="Copy user info"
-										onclick={(event) => {
-											event.preventDefault();
-											event.stopPropagation();
-											void copyIdentityToClipboard();
-										}}
-									>
-										{#if copiedIdentity}
-											<CheckIcon class="app-user-menu__copy-icon" />
-										{:else}
-											<CopyIcon class="app-user-menu__copy-icon" />
-										{/if}
-									</button>
-								{/if}
-							</div>
-							<div class="app-user-menu__row app-user-menu__row--secondary">
-								<span class="app-user-menu__email">{getEmailLabel()}</span>
-								{#if canCopyIdentity && hasEmailIdentity}
-									<button
-										type="button"
-										class="app-user-menu__copy"
-										aria-label="Copy user info"
-										title="Copy user info"
-										onclick={(event) => {
-											event.preventDefault();
-											event.stopPropagation();
-											void copyIdentityToClipboard();
-										}}
-									>
-										{#if copiedIdentity}
-											<CheckIcon class="app-user-menu__copy-icon" />
-										{:else}
-											<CopyIcon class="app-user-menu__copy-icon" />
-										{/if}
-									</button>
-								{/if}
-							</div>
-						</div>
-						<DropdownMenu.Separator />
-						{#if canAccessAdmin}
 							<DropdownMenu.Item
 								class="app-user-menu__link"
 								onSelect={() => {
-									void goto('/admin');
+									void goto('/spark/chats');
 								}}
 							>
-								Admin
+								Chats
+							</DropdownMenu.Item>
+							<DropdownMenu.Item
+								class="app-user-menu__link"
+								onSelect={() => {
+									void goto('/spark/lessons');
+								}}
+							>
+								Lessons
+							</DropdownMenu.Item>
+							<DropdownMenu.Item
+								class="app-user-menu__link"
+								onSelect={() => {
+									void goto('/spark/sheets');
+								}}
+							>
+								Sheets
 							</DropdownMenu.Item>
 							<DropdownMenu.Separator />
-						{/if}
-						<DropdownMenu.Item
-							class="app-user-menu__link"
-							onSelect={() => {
-								void goto('/spark/chats');
-							}}
-						>
-							Chats
-						</DropdownMenu.Item>
-						<DropdownMenu.Item
-							class="app-user-menu__link"
-							onSelect={() => {
-								void goto('/spark/lessons');
-							}}
-						>
-							Lessons
-						</DropdownMenu.Item>
-						<DropdownMenu.Item
-							class="app-user-menu__link"
-							onSelect={() => {
-								void goto('/spark/sheets');
-							}}
-						>
-							Sheets
-						</DropdownMenu.Item>
-						<DropdownMenu.Separator />
-						<DropdownMenu.Sub>
-							<DropdownMenu.SubTrigger class="app-user-menu__subtrigger">
-								Appearance
-							</DropdownMenu.SubTrigger>
-							<DropdownMenu.SubContent class="app-appearance-menu" alignOffset={-8} sideOffset={8}>
-								<DropdownMenu.RadioGroup
-									value={theme}
-									onValueChange={(value) => handleThemeSelect(value as ThemePreference)}
-								>
-									{#each themeOptions as option}
-										<DropdownMenu.RadioItem value={option.value} class="app-appearance-menu__item">
-											<CheckIcon class="theme-check" />
-											<span>{option.label}</span>
-										</DropdownMenu.RadioItem>
-									{/each}
-								</DropdownMenu.RadioGroup>
-							</DropdownMenu.SubContent>
-						</DropdownMenu.Sub>
-						<DropdownMenu.Separator />
-						<DropdownMenu.Item
-							class="app-user-menu__logout"
-							onSelect={handleLogout}
-							variant="destructive"
-						>
-							{logoutLabel}
-						</DropdownMenu.Item>
-					</DropdownMenu.Content>
-				</DropdownMenu.Root>
-			</div>
-		</header>
+							<DropdownMenu.Sub>
+								<DropdownMenu.SubTrigger class="app-user-menu__subtrigger">
+									Appearance
+								</DropdownMenu.SubTrigger>
+								<DropdownMenu.SubContent class="app-appearance-menu" alignOffset={-8} sideOffset={8}>
+									<DropdownMenu.RadioGroup
+										value={theme}
+										onValueChange={(value) => handleThemeSelect(value as ThemePreference)}
+									>
+										{#each themeOptions as option}
+											<DropdownMenu.RadioItem value={option.value} class="app-appearance-menu__item">
+												<CheckIcon class="theme-check" />
+												<span>{option.label}</span>
+											</DropdownMenu.RadioItem>
+										{/each}
+									</DropdownMenu.RadioGroup>
+								</DropdownMenu.SubContent>
+							</DropdownMenu.Sub>
+							<DropdownMenu.Separator />
+							<DropdownMenu.Item
+								class="app-user-menu__logout"
+								onSelect={handleLogout}
+								variant="destructive"
+							>
+								{logoutLabel}
+							</DropdownMenu.Item>
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
+				</div>
+			</header>
 
-		<main class="app-main">
-			<section class="app-content">
-				{@render children?.()}
-			</section>
-		</main>
+			<main class="app-main">
+				<section class="app-content">
+					{@render children?.()}
+				</section>
+			</main>
+		{/if}
 	</div>
 </div>
 
@@ -558,6 +578,10 @@
 		min-height: 0;
 		overflow: hidden;
 		z-index: 1;
+	}
+
+	.app-shell--sheet-detail {
+		overflow: visible;
 	}
 
 	.app-header {
@@ -779,6 +803,10 @@
 		scrollbar-gutter: stable both-edges;
 	}
 
+	.app-main--sheet-detail {
+		overflow: auto;
+	}
+
 	/* CSS-only lock: when page content contains a `.workspace` (code editor).
 	   Marked global so Svelte doesn't treat it as unused in this component scope. */
 	:global(.app-main:has(.workspace)) {
@@ -792,5 +820,42 @@
 		flex-direction: column;
 		gap: clamp(1.6rem, 3vw, 2.6rem);
 		min-height: 0;
+	}
+
+	.sheet-close-button {
+		position: fixed;
+		top: calc(env(safe-area-inset-top, 0px) + 0.9rem);
+		right: calc(env(safe-area-inset-right, 0px) + 1rem);
+		z-index: 30;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2rem;
+		height: 2rem;
+		border-radius: 9999px;
+		border: 2px solid rgba(255, 255, 255, 0.65);
+		background: color-mix(in srgb, var(--app-content-bg) 68%, transparent);
+		box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18);
+		color: var(--foreground);
+		backdrop-filter: blur(18px);
+	}
+
+	:global([data-theme='dark'] .sheet-close-button),
+	:global(:root:not([data-theme='light']) .sheet-close-button) {
+		background: color-mix(in srgb, rgba(6, 11, 25, 0.72) 100%, transparent);
+	}
+
+	.sheet-close-button:hover {
+		background: color-mix(in srgb, var(--app-content-bg) 82%, transparent);
+	}
+
+	.sheet-close-button:focus-visible {
+		outline: 2px solid var(--ring);
+		outline-offset: 3px;
+	}
+
+	:global(.sheet-close-button__icon) {
+		width: 1rem;
+		height: 1rem;
 	}
 </style>

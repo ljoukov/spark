@@ -135,6 +135,11 @@
 		return next;
 	}
 
+	function removeQuestionKey<T extends Record<string, boolean | number | string>>(value: T, questionKey: string): T {
+		const { [questionKey]: _removed, ...rest } = value;
+		return rest as T;
+	}
+
 	function shouldRenderLinesAnswerAsMarkdown(question: PaperSheetLinesQuestion): boolean {
 		return question.renderMode === 'markdown' || areInputsLocked();
 	}
@@ -476,6 +481,9 @@
 		review: initialReview = null,
 		feedbackThreads: initialFeedbackThreads = {},
 		feedbackSending: initialFeedbackSending = {},
+		feedbackRuntimeStatuses: initialFeedbackRuntimeStatuses = {},
+		feedbackThinking: initialFeedbackThinking = {},
+		feedbackAssistantDrafts: initialFeedbackAssistantDrafts = {},
 		editable = true,
 		allowFeedbackReplies = false,
 		showFooter = true,
@@ -487,6 +495,9 @@
 		review?: PaperSheetReview | null;
 		feedbackThreads?: Record<string, PaperSheetFeedbackThread>;
 		feedbackSending?: Record<string, boolean>;
+		feedbackRuntimeStatuses?: Record<string, 'connecting' | 'thinking' | 'responding'>;
+		feedbackThinking?: Record<string, string>;
+		feedbackAssistantDrafts?: Record<string, string>;
 		editable?: boolean;
 		allowFeedbackReplies?: boolean;
 		showFooter?: boolean;
@@ -501,8 +512,11 @@
 	let mockFeedbackSending = $state<Record<string, boolean>>({});
 	let feedbackRequestTokens = $state<Record<string, number>>({});
 	let openFeedbackCards = $state<Record<string, boolean>>({});
+	let followUpComposerQuestions = $state<Record<string, boolean>>({});
 	let openSections = $state<Record<string, boolean>>({});
 	let activeMatchTerms = $state<Record<string, string | null>>({});
+	let previousFeedbackThreadStatuses: Record<string, PaperSheetFeedbackThread['status'] | undefined> =
+		{};
 	let previousSheetSignature = $state<string | null>(null);
 
 	function getSeedAnswers(): PaperSheetAnswers {
@@ -525,8 +539,10 @@
 		mockFeedbackSending = {};
 		feedbackRequestTokens = {};
 		openFeedbackCards = {};
+		followUpComposerQuestions = {};
 		openSections = createOpenSections(sheet);
 		activeMatchTerms = {};
+		previousFeedbackThreadStatuses = {};
 		previousSheetSignature = nextSheetSignature;
 	});
 
@@ -562,6 +578,15 @@
 	const currentFeedbackSending = $derived.by(() =>
 		reviewMode === 'mock' ? mockFeedbackSending : initialFeedbackSending
 	);
+	const currentFeedbackRuntimeStatuses = $derived.by(() =>
+		reviewMode === 'mock' ? {} : initialFeedbackRuntimeStatuses
+	);
+	const currentFeedbackThinking = $derived.by(() =>
+		reviewMode === 'mock' ? {} : initialFeedbackThinking
+	);
+	const currentFeedbackAssistantDrafts = $derived.by(() =>
+		reviewMode === 'mock' ? {} : initialFeedbackAssistantDrafts
+	);
 	const scoreTone = $derived(currentReview ? createScoreTone(currentReview.score) : null);
 	const feedbackRepliesEnabled = $derived(allowFeedbackReplies || reviewMode === 'mock');
 
@@ -579,6 +604,7 @@
 		mockFeedbackSending = {};
 		feedbackRequestTokens = {};
 		openFeedbackCards = {};
+		followUpComposerQuestions = {};
 		checked = true;
 	}
 
@@ -592,18 +618,27 @@
 		mockFeedbackSending = {};
 		feedbackRequestTokens = {};
 		openFeedbackCards = {};
+		followUpComposerQuestions = {};
 		openSections = createOpenSections(sheet);
 	}
 
 	function isFeedbackCardOpen(questionKey: string): boolean {
-		return openFeedbackCards[questionKey] ?? true;
+		const explicit = openFeedbackCards[questionKey];
+		if (explicit !== undefined) {
+			return explicit;
+		}
+		return getFeedbackThread(questionKey)?.status !== 'resolved';
 	}
 
 	function toggleFeedbackCard(questionKey: string): void {
+		const nextOpen = !isFeedbackCardOpen(questionKey);
 		openFeedbackCards = {
 			...openFeedbackCards,
-			[questionKey]: !isFeedbackCardOpen(questionKey)
+			[questionKey]: nextOpen
 		};
+		if (!nextOpen && followUpComposerQuestions[questionKey]) {
+			followUpComposerQuestions = removeQuestionKey(followUpComposerQuestions, questionKey);
+		}
 	}
 
 	function updateFeedbackDraft(questionKey: string, value: string): void {
@@ -625,6 +660,39 @@
 		return currentFeedbackSending[questionKey] ?? false;
 	}
 
+	function getFeedbackThinking(questionKey: string): string | null {
+		return currentFeedbackThinking[questionKey] ?? null;
+	}
+
+	function getFeedbackRuntimeStatus(
+		questionKey: string
+	): 'connecting' | 'thinking' | 'responding' | null {
+		return currentFeedbackRuntimeStatuses[questionKey] ?? null;
+	}
+
+	function getFeedbackAssistantDraft(questionKey: string): string | null {
+		return currentFeedbackAssistantDrafts[questionKey] ?? null;
+	}
+
+	function isResolvedFeedbackThread(questionKey: string): boolean {
+		return getFeedbackThread(questionKey)?.status === 'resolved';
+	}
+
+	function isFollowUpComposerOpen(questionKey: string): boolean {
+		return followUpComposerQuestions[questionKey] ?? false;
+	}
+
+	function requestResolvedFollowUp(questionKey: string): void {
+		openFeedbackCards = {
+			...openFeedbackCards,
+			[questionKey]: true
+		};
+		followUpComposerQuestions = {
+			...followUpComposerQuestions,
+			[questionKey]: true
+		};
+	}
+
 	function replyToTutor(
 		questionKey: string,
 		questionReview: PaperSheetQuestionReview,
@@ -636,6 +704,13 @@
 		}
 
 		if (reviewMode !== 'mock') {
+			feedbackDrafts = {
+				...feedbackDrafts,
+				[questionKey]: ''
+			};
+			if (followUpComposerQuestions[questionKey]) {
+				followUpComposerQuestions = removeQuestionKey(followUpComposerQuestions, questionKey);
+			}
 			onReplyToTutor?.(questionKey, draft);
 			return;
 		}
@@ -801,6 +876,51 @@
 	function buildSheetSignature(value: PaperSheetData): string {
 		return JSON.stringify(value);
 	}
+
+	$effect(() => {
+		const nextStatuses: Record<string, PaperSheetFeedbackThread['status'] | undefined> = {};
+		let nextOpenFeedbackCards = openFeedbackCards;
+		let nextFollowUpComposerQuestions = followUpComposerQuestions;
+		let openCardsChanged = false;
+		let followUpsChanged = false;
+
+		for (const [questionKey, thread] of Object.entries(currentFeedbackThreads)) {
+			nextStatuses[questionKey] = thread.status;
+			const previousStatus = previousFeedbackThreadStatuses[questionKey];
+			if (thread.status === 'resolved' && previousStatus !== 'resolved') {
+				if (openFeedbackCards[questionKey] !== false) {
+					if (!openCardsChanged) {
+						nextOpenFeedbackCards = { ...openFeedbackCards };
+						openCardsChanged = true;
+					}
+					nextOpenFeedbackCards[questionKey] = false;
+				}
+				if (followUpComposerQuestions[questionKey]) {
+					if (!followUpsChanged) {
+						nextFollowUpComposerQuestions = { ...followUpComposerQuestions };
+						followUpsChanged = true;
+					}
+					delete nextFollowUpComposerQuestions[questionKey];
+				}
+				continue;
+			}
+			if (thread.status !== 'resolved' && followUpComposerQuestions[questionKey]) {
+				if (!followUpsChanged) {
+					nextFollowUpComposerQuestions = { ...followUpComposerQuestions };
+					followUpsChanged = true;
+				}
+				delete nextFollowUpComposerQuestions[questionKey];
+			}
+		}
+
+		if (openCardsChanged) {
+			openFeedbackCards = nextOpenFeedbackCards;
+		}
+		if (followUpsChanged) {
+			followUpComposerQuestions = nextFollowUpComposerQuestions;
+		}
+		previousFeedbackThreadStatuses = nextStatuses;
+	});
 </script>
 
 <div class="paper-sheet" style={paperStyle}>
@@ -872,12 +992,16 @@
 						{@const questionKey = buildQuestionKey(section.id, question.id)}
 						{@const questionReview = getQuestionReview(questionKey)}
 						{@const reviewStatus = currentReview ? (questionReview?.status ?? null) : null}
+						{@const feedbackThread = getFeedbackThread(questionKey)}
+						{@const showQuestionFeedback = questionReview && shouldShowQuestionFeedback(questionReview)}
+						{@const resolvedFeedback = feedbackThread?.status === 'resolved'}
 
-						{@const showQuestionFeedback =
-							questionReview && shouldShowQuestionFeedback(questionReview)}
-
-						<div class={`paper-sheet__question ${showQuestionFeedback ? 'has-feedback' : ''}`}>
-							<div class="paper-sheet__question-number">{questionNumbers[questionKey]}</div>
+						<div
+							class={`paper-sheet__question ${showQuestionFeedback ? 'has-feedback' : ''} ${resolvedFeedback ? 'is-resolved' : ''}`}
+						>
+							<div class={`paper-sheet__question-number ${resolvedFeedback ? 'is-resolved' : ''}`}>
+								{questionNumbers[questionKey]}
+							</div>
 
 							<div class="paper-sheet__question-body">
 								{#if question.type === 'fill'}
@@ -1097,7 +1221,9 @@
 								{/if}
 							</div>
 
-							<div class="paper-sheet__question-marks">[{question.marks}m]</div>
+							<div class={`paper-sheet__question-marks ${resolvedFeedback ? 'is-resolved' : ''}`}>
+								[{question.marks}m]
+							</div>
 
 							{#if showQuestionFeedback}
 								<div class="paper-sheet__question-feedback">
@@ -1106,11 +1232,27 @@
 										questionLabel={`question ${questionNumbers[questionKey]}`}
 										open={isFeedbackCardOpen(questionKey)}
 										draft={getFeedbackDraft(questionKey)}
-										thread={getFeedbackThread(questionKey)}
+										thread={feedbackThread}
 										processing={isFeedbackSending(questionKey)}
-										showComposer={feedbackRepliesEnabled}
+										runtimeStatus={getFeedbackRuntimeStatus(questionKey)}
+										thinkingText={getFeedbackThinking(questionKey)}
+										assistantDraftText={getFeedbackAssistantDraft(questionKey)}
+										showComposer={
+											feedbackRepliesEnabled &&
+											(!resolvedFeedback || isFollowUpComposerOpen(questionKey))
+										}
+										showFollowUpButton={
+											feedbackRepliesEnabled &&
+											resolvedFeedback &&
+											!isFollowUpComposerOpen(questionKey)
+										}
+										showComposerTools={reviewMode === 'mock'}
+										resolvedFollowUpMode={isFollowUpComposerOpen(questionKey)}
 										onToggle={() => {
 											toggleFeedbackCard(questionKey);
+										}}
+										onRequestFollowUp={() => {
+											requestResolvedFollowUp(questionKey);
 										}}
 										onDraftChange={(value) => {
 											updateFeedbackDraft(questionKey, value);
@@ -1545,6 +1687,10 @@
 		border-bottom: 1px dashed var(--paper-divider);
 	}
 
+	.paper-sheet__question.is-resolved {
+		border-bottom-color: color-mix(in srgb, #22a66e 35%, #e0e0e0);
+	}
+
 	.paper-sheet__question:last-child {
 		border-bottom: 0;
 	}
@@ -1566,6 +1712,10 @@
 		font-weight: 800;
 	}
 
+	.paper-sheet__question-number.is-resolved {
+		background: #22a66e;
+	}
+
 	.paper-sheet__question-body {
 		grid-column: 2;
 		grid-row: 1;
@@ -1585,6 +1735,10 @@
 		font-weight: 700;
 		white-space: nowrap;
 		color: var(--paper-accent-text);
+	}
+
+	.paper-sheet__question-marks.is-resolved {
+		color: #1a8c5b;
 	}
 
 	.paper-sheet__question-feedback {

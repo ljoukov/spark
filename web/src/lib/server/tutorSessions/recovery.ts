@@ -5,6 +5,7 @@ import type {
 	SparkTutorSession
 } from '@spark/schemas';
 
+import { getFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 import { patchTutorSession } from '$lib/server/tutorSessions/repo';
 import {
 	TUTOR_STATE_COMPOSER_PATH,
@@ -33,6 +34,68 @@ function stringifyJson(value: unknown): string {
 function parseInstantMs(value: string): number | null {
 	const timestamp = Date.parse(value);
 	return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+function parseFirestoreInstantMs(value: unknown): number | null {
+	if (value instanceof Date) {
+		return value.getTime();
+	}
+	if (
+		value &&
+		typeof value === 'object' &&
+		'seconds' in (value as Record<string, unknown>) &&
+		'nanoseconds' in (value as Record<string, unknown>)
+	) {
+		const record = value as {
+			seconds: unknown;
+			nanoseconds: unknown;
+		};
+		if (typeof record.seconds === 'number' && typeof record.nanoseconds === 'number') {
+			return record.seconds * 1000 + Math.floor(record.nanoseconds / 1_000_000);
+		}
+	}
+	if (typeof value === 'string' || typeof value === 'number') {
+		const timestamp = Date.parse(String(value));
+		return Number.isNaN(timestamp) ? null : timestamp;
+	}
+	return null;
+}
+
+async function isTutorAgentLikelyStillActive(options: {
+	serviceAccountJson: string;
+	userId: string;
+	agentId: string;
+	staleAfterMs: number;
+	nowMs: number;
+}): Promise<boolean> {
+	const agentDocPath = `users/${options.userId}/agents/${options.agentId}`;
+	const [agentSnap, logSnap] = await Promise.all([
+		getFirestoreDocument({
+			serviceAccountJson: options.serviceAccountJson,
+			documentPath: agentDocPath
+		}),
+		getFirestoreDocument({
+			serviceAccountJson: options.serviceAccountJson,
+			documentPath: `${agentDocPath}/logs/log`
+		})
+	]);
+
+	if (!agentSnap.exists || !agentSnap.data) {
+		return false;
+	}
+	const rawStatus = agentSnap.data.status;
+	if (rawStatus !== 'created' && rawStatus !== 'executing') {
+		return false;
+	}
+
+	const latestActivityMs = Math.max(
+		parseFirestoreInstantMs(agentSnap.data.updatedAt) ?? 0,
+		parseFirestoreInstantMs(logSnap.data?.updatedAt) ?? 0
+	);
+	if (latestActivityMs === 0) {
+		return false;
+	}
+	return options.nowMs - latestActivityMs < options.staleAfterMs;
 }
 
 function buildRecoveryComposerState(options: {
@@ -132,10 +195,26 @@ export async function recoverTutorSessionIfStale(options: {
 	recoveredThreadIds: string[];
 }> {
 	const now = new Date();
-	const recovered = recoverStaleTutorReviewState({
-		reviewState: options.reviewState,
-		now
-	});
+	const nowMs = now.getTime();
+	const keepActiveAgent =
+		typeof options.session.activeTurnAgentId === 'string' &&
+		options.session.activeTurnAgentId.length > 0 &&
+		(await isTutorAgentLikelyStillActive({
+			serviceAccountJson: options.serviceAccountJson,
+			userId: options.userId,
+			agentId: options.session.activeTurnAgentId,
+			staleAfterMs: TUTOR_STALE_REVIEW_RESPONSE_MS,
+			nowMs
+		}).catch(() => false));
+	const recovered = keepActiveAgent
+		? {
+				reviewState: options.reviewState,
+				recoveredThreadIds: []
+			}
+		: recoverStaleTutorReviewState({
+				reviewState: options.reviewState,
+				now
+			});
 	const summary = summarizeTutorReviewState(recovered.reviewState);
 	const allResolved = summary.totalThreads === 0 || summary.allResolved;
 	const nextStatus: SparkTutorSession['status'] =
@@ -194,13 +273,18 @@ export async function recoverTutorSessionIfStale(options: {
 			content: stringifyJson(composerState),
 			now
 		}),
-		patchTutorSession(options.userId, options.session.id, {
-			status: nextStatus,
-			updatedAt: now,
-			preview: nextSession.preview,
-			focusLabel: nextSession.focusLabel ?? null,
-			...(allResolved ? { completedAt: now } : {})
-		})
+		patchTutorSession(
+			options.userId,
+			options.session.id,
+			{
+				status: nextStatus,
+				updatedAt: now,
+				preview: nextSession.preview,
+				focusLabel: nextSession.focusLabel ?? null,
+				...(allResolved ? { completedAt: now } : {})
+			},
+			nextStatus === 'responding' ? undefined : ['activeTurnAgentId', 'activeTurnQuestionId']
+		)
 	]);
 
 	return {

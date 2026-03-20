@@ -306,9 +306,6 @@ export const POST: RequestHandler = async ({ request, params }) => {
 	if (!currentThread) {
 		return json({ error: 'question_not_found' }, { status: 404 });
 	}
-	if (currentThread.status === 'resolved') {
-		return json({ error: 'question_resolved' }, { status: 409 });
-	}
 
 	const createdAt = now.toISOString();
 	const studentTurnFilePath = buildTutorQuestionTurnPath({
@@ -387,9 +384,26 @@ export const POST: RequestHandler = async ({ request, params }) => {
 			turnFilePath: studentTurnFilePath,
 			studentText: parsedBody.text
 		});
+		await patchTutorSession(
+			userId,
+			session.id,
+			{
+				activeTurnAgentId: agentId,
+				activeTurnQuestionId: parsedBody.questionId,
+				updatedAt: new Date()
+			},
+			['error']
+		).catch((error) => {
+			console.warn('Unable to persist active tutor turn metadata', {
+				error,
+				userId,
+				sessionId: session.id,
+				agentId
+			});
+		});
 	} catch (error) {
 		const recoveredThread = appendTutorReviewMessage({
-			thread: currentThread,
+			thread: respondingThread,
 			author: 'assistant',
 			markdown: TUTOR_FALLBACK_REVIEW_REPLY_MARKDOWN,
 			createdAt: new Date().toISOString(),
@@ -418,7 +432,7 @@ export const POST: RequestHandler = async ({ request, params }) => {
 					error instanceof Error && error.message.trim().length > 0
 						? error.message.trim()
 						: 'Unable to start worksheet feedback.'
-			})
+			}, ['activeTurnAgentId', 'activeTurnQuestionId'])
 		]);
 		return json({ error: 'reply_launch_failed' }, { status: 500 });
 	}

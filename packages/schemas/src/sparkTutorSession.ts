@@ -56,6 +56,7 @@ export const SparkTutorSessionSchema = z.object({
   preview: trimmedString.optional(),
   focusLabel: trimmedString.optional(),
   activeTurnAgentId: trimmedString.optional(),
+  activeTurnQuestionId: trimmedString.optional(),
   createdAt: FirestoreTimestampSchema,
   updatedAt: FirestoreTimestampSchema,
   completedAt: FirestoreTimestampSchema.optional(),

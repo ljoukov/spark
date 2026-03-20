@@ -17,16 +17,33 @@
 	function getStatusState(
 		review: PaperSheetQuestionReview,
 		processing: boolean,
+		runtimeStatus: 'connecting' | 'thinking' | 'responding' | null,
 		thread: PaperSheetFeedbackThread | null,
+		thinkingText: string | null,
+		assistantDraftText: string | null,
 		fallbackLabel: string
 	): {
 		kind: 'pending' | 'processing' | 'open' | 'optional' | 'done';
 		label: string;
 	} {
-		if (processing || thread?.status === 'responding') {
+		if (processing) {
 			return {
 				kind: 'processing',
-				label: 'processing'
+				label: 'connecting'
+			};
+		}
+
+		if (runtimeStatus) {
+			return {
+				kind: 'processing',
+				label: runtimeStatus
+			};
+		}
+
+		if (thread?.status === 'responding') {
+			return {
+				kind: 'processing',
+				label: assistantDraftText ? 'responding' : thinkingText ? 'thinking' : 'connecting'
 			};
 		}
 
@@ -75,9 +92,16 @@
 		draft,
 		thread,
 		processing = false,
+		runtimeStatus = null,
+		thinkingText = null,
+		assistantDraftText = null,
 		showComposer = true,
+		showFollowUpButton = false,
+		showComposerTools = true,
+		resolvedFollowUpMode = false,
 		questionLabel,
 		onToggle,
+		onRequestFollowUp = undefined,
 		onDraftChange,
 		onReply
 	}: {
@@ -86,9 +110,16 @@
 		draft: string;
 		thread: PaperSheetFeedbackThread | null;
 		processing?: boolean;
+		runtimeStatus?: 'connecting' | 'thinking' | 'responding' | null;
+		thinkingText?: string | null;
+		assistantDraftText?: string | null;
 		showComposer?: boolean;
+		showFollowUpButton?: boolean;
+		showComposerTools?: boolean;
+		resolvedFollowUpMode?: boolean;
 		questionLabel: string;
 		onToggle: () => void;
+		onRequestFollowUp?: () => void;
 		onDraftChange: (value: string) => void;
 		onReply: (value?: string) => void;
 	} = $props();
@@ -106,7 +137,17 @@
 		}
 		return 'response needed';
 	});
-	const statusState = $derived.by(() => getStatusState(review, processing, thread, statusLabel));
+	const statusState = $derived.by(() =>
+		getStatusState(
+			review,
+			processing,
+			runtimeStatus,
+			thread,
+			thinkingText,
+			assistantDraftText,
+			statusLabel
+		)
+	);
 	const displayThread = $derived.by(() => [
 		{
 			id: `${noteLabel}-initial`,
@@ -115,8 +156,18 @@
 		},
 		...(thread?.turns ?? [])
 	]);
+	const showAssistantDraft = $derived.by(() => {
+		if (!assistantDraftText) {
+			return false;
+		}
+		const lastTurn = displayThread.at(-1);
+		return lastTurn?.speaker !== 'tutor' || lastTurn.text !== assistantDraftText;
+	});
 	const composerDisabled = $derived(
-		!showComposer || processing || thread?.status === 'responding' || thread?.status === 'resolved'
+		!showComposer ||
+			processing ||
+			thread?.status === 'responding' ||
+			(thread?.status === 'resolved' && !resolvedFollowUpMode)
 	);
 </script>
 
@@ -128,12 +179,12 @@
 			<span class={`paper-sheet-note__status is-${statusState.kind}`}>
 				{#if statusState.kind === 'pending'}
 					<span class="paper-sheet-note__status-dot" aria-hidden="true"></span>
+				{:else if statusState.kind === 'processing'}
+					<span class="paper-sheet-note__status-spinner" aria-hidden="true"></span>
 				{:else if statusState.kind === 'open'}
 					<span class="paper-sheet-note__status-dot is-static" aria-hidden="true"></span>
 				{:else}
-					<span class="paper-sheet-note__status-icon" aria-hidden="true">
-						{statusState.kind === 'processing' ? '…' : '✓'}
-					</span>
+					<span class="paper-sheet-note__status-icon" aria-hidden="true">✓</span>
 				{/if}
 				{statusState.label}
 			</span>
@@ -154,35 +205,82 @@
 				</div>
 
 				{#if processing}
-					<div class="paper-sheet-note__processing" role="status" aria-live="polite">sending…</div>
+					<div class="paper-sheet-note__processing" role="status" aria-live="polite">
+						connecting…
+					</div>
+				{/if}
+
+				{#if thinkingText}
+					<div class="paper-sheet-note__runtime" role="status" aria-live="polite">
+						<p class="paper-sheet-note__runtime-label">Thinking stream</p>
+						<div class="paper-sheet-note__runtime-body">
+							<MarkdownContent markdown={thinkingText} class="paper-sheet-note__bubble-markdown" />
+						</div>
+					</div>
+				{/if}
+
+				{#if showAssistantDraft}
+					<div class="paper-sheet-note__turn is-tutor">
+						<div class="paper-sheet-note__bubble is-tutor is-live-draft">
+							<p class="paper-sheet-note__runtime-label">Response stream</p>
+							<MarkdownContent markdown={assistantDraftText ?? ''} class="paper-sheet-note__bubble-markdown" />
+						</div>
+					</div>
+				{/if}
+
+				{#if showFollowUpButton}
+					<div class="paper-sheet-note__followup">
+						<button
+							type="button"
+							class="paper-sheet-note__followup-button"
+							onclick={() => {
+								onRequestFollowUp?.();
+							}}
+						>
+							ask followup
+						</button>
+					</div>
 				{/if}
 
 				{#if showComposer}
 					<div class="paper-sheet-note__composer">
 						<ChatComposer
 							value={draft}
-							placeholder={review.replyPlaceholder ?? 'Write your reply here...'}
+							placeholder={
+								resolvedFollowUpMode
+									? 'Ask a followup about this feedback...'
+									: review.replyPlaceholder ?? 'Write your reply here...'
+							}
 							ariaLabel={`Reply for ${questionLabel}`}
 							sendAriaLabel={`Send reply for ${questionLabel}`}
 							micAriaLabel={`Add spoken-style reply prompt for ${questionLabel}`}
 							attachAriaLabel={`Open attachment options for ${questionLabel}`}
 							submitMode="enter"
 							maxLines={5}
-							showAttach={true}
-							showMic={true}
-							showTakePhoto={true}
+							showAttach={showComposerTools}
+							showMic={showComposerTools}
+							showTakePhoto={showComposerTools}
 							inputClass="paper-sheet-note__input"
 							disabled={composerDisabled}
 							onInput={({ value }) => {
 								onDraftChange(value);
 							}}
 							onAttachSelect={() => {
+								if (!showComposerTools) {
+									return;
+								}
 								appendDraft('[Mock attachment] I want to show my working for this answer.');
 							}}
 							onTakePhotoSelect={() => {
+								if (!showComposerTools) {
+									return;
+								}
 								appendDraft('[Mock photo] Here is a photo of the part I want checked.');
 							}}
 							onMicClick={() => {
+								if (!showComposerTools) {
+									return;
+								}
 								appendDraft('I think I should make one point more clearly here.');
 							}}
 							onSubmit={({ value }) => {
@@ -273,6 +371,31 @@
 		background: var(--note-bg);
 	}
 
+	.paper-sheet-note__runtime {
+		margin-top: 0.85rem;
+		padding: 0.85rem 1rem;
+		border-radius: 16px;
+		border: 1px solid color-mix(in srgb, var(--note-left) 20%, transparent);
+		background: color-mix(in srgb, var(--note-bg) 82%, white);
+	}
+
+	.paper-sheet-note__runtime-label {
+		margin: 0 0 0.45rem;
+		font-size: 0.78rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--note-text-muted);
+	}
+
+	.paper-sheet-note__runtime-body {
+		color: var(--note-text);
+	}
+
+	.paper-sheet-note__bubble.is-live-draft {
+		border-style: dashed;
+	}
+
 	.paper-sheet-note.is-review {
 		--note-bg: var(--paper-review-teacher-bg, #fff7ed);
 		--note-left: var(--paper-review-teacher-border, #d6a11e);
@@ -352,6 +475,15 @@
 		border-radius: 999px;
 		background: var(--note-dot);
 		animation: paper-sheet-note-pulse 1.8s ease-in-out infinite;
+	}
+
+	.paper-sheet-note__status-spinner {
+		height: 12px;
+		width: 12px;
+		border-radius: 999px;
+		border: 2px solid color-mix(in srgb, var(--note-status-processing) 20%, transparent);
+		border-top-color: var(--note-status-processing);
+		animation: paper-sheet-note-spin 0.8s linear infinite;
 	}
 
 	.paper-sheet-note__status-dot.is-static {
@@ -467,6 +599,29 @@
 		--chat-composer-send-shadow: none;
 	}
 
+	.paper-sheet-note__followup {
+		padding-top: 0.35rem;
+		display: flex;
+		justify-content: flex-end;
+	}
+
+	.paper-sheet-note__followup-button {
+		border: 1px solid color-mix(in srgb, var(--note-left) 26%, transparent);
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--note-bg) 72%, white);
+		padding: 0.45rem 0.8rem;
+		font: inherit;
+		font-size: 0.88rem;
+		font-weight: 700;
+		text-transform: lowercase;
+		color: var(--note-left);
+		cursor: pointer;
+	}
+
+	.paper-sheet-note__followup-button:hover {
+		background: color-mix(in srgb, var(--note-bg) 62%, white);
+	}
+
 	:global(.paper-sheet-note__input::placeholder) {
 		color: var(--paper-placeholder, rgba(148, 163, 184, 0.96));
 	}
@@ -511,6 +666,12 @@
 		50% {
 			opacity: 0.4;
 			transform: scale(0.75);
+		}
+	}
+
+	@keyframes paper-sheet-note-spin {
+		to {
+			transform: rotate(360deg);
 		}
 	}
 </style>

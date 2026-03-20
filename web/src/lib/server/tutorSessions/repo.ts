@@ -45,12 +45,14 @@ export async function createTutorSession(
 export async function patchTutorSession(
 	userId: string,
 	sessionId: string,
-	updates: Record<string, unknown>
+	updates: Record<string, unknown>,
+	deletes?: string[]
 ): Promise<void> {
 	await patchFirestoreDocument({
 		serviceAccountJson: requireServiceAccountJson(),
 		documentPath: resolveTutorSessionDocPath(userId, sessionId),
-		updates
+		updates,
+		...(deletes && deletes.length > 0 ? { deletes } : {})
 	});
 }
 
