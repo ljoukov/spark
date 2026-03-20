@@ -241,6 +241,9 @@
 	}
 
 	.sheet-card {
+		width: min(100%, 680px);
+		max-width: 680px;
+		justify-self: center;
 		text-decoration: none;
 		color: inherit;
 	}
