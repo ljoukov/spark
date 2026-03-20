@@ -204,28 +204,54 @@
 		width: 100%;
 		min-width: 0;
 		font-family: inherit;
-		--note-bg: #fffbea;
-		--note-left: #d97706;
-		--note-dashed: #fbbf24;
-		--note-badge-bg: #fef9c3;
-		--note-badge-border: #fde047;
-		--note-badge-text: #a16207;
-		--note-dot: #f59e0b;
-		--note-status-pending: #d97706;
-		--note-status-processing: #a16207;
-		--note-status-done: #16a34a;
-		--note-user-bg: #fffde7;
-		--note-user-border: #f9d700;
-		--note-input-border: #f2cd2f;
-		--note-text: #241d19;
-		--note-text-muted: rgba(87, 71, 58, 0.72);
+		--note-bg: var(--paper-review-incorrect-bg, #fbefe3);
+		--note-left: var(--paper-review-incorrect-border, #c66317);
+		--note-dashed: color-mix(in srgb, var(--note-left) 48%, var(--paper-surface, #ffffff));
+		--note-badge-bg: color-mix(
+			in srgb,
+			var(--note-left) 14%,
+			var(--paper-surface-elevated, #ffffff)
+		);
+		--note-badge-border: color-mix(in srgb, var(--note-left) 34%, var(--paper-surface, #ffffff));
+		--note-badge-text: var(--paper-review-incorrect-text, #c66317);
+		--note-dot: var(--note-left);
+		--note-status-pending: var(--paper-review-incorrect-text, #c66317);
+		--note-status-processing: var(--paper-review-incorrect-text, #c66317);
+		--note-status-done: var(--paper-review-correct-text, #1a8c5b);
+		--note-user-bg: color-mix(
+			in srgb,
+			var(--paper-accent-text, #2563eb) 10%,
+			var(--paper-surface-elevated, #ffffff)
+		);
+		--note-user-border: color-mix(
+			in srgb,
+			var(--paper-accent-text, #2563eb) 42%,
+			var(--paper-surface, #ffffff)
+		);
+		--note-input-border: color-mix(in srgb, var(--note-left) 58%, var(--paper-surface, #ffffff));
+		--note-text: var(--paper-text, #241d19);
+		--note-text-muted: var(--paper-text-soft, rgba(87, 71, 58, 0.72));
+		--note-composer-surface: color-mix(
+			in srgb,
+			var(--paper-surface-elevated, #ffffff) 92%,
+			transparent
+		);
+		--note-composer-hover: color-mix(
+			in srgb,
+			var(--paper-text-soft, #555555) 10%,
+			var(--paper-surface-elevated, #ffffff)
+		);
 		--markdown-text: var(--note-text);
 		--markdown-heading: var(--note-text);
 		--markdown-strong: var(--note-text);
 		--markdown-link: var(--note-left);
 		--markdown-quote-border: var(--note-dashed);
 		--markdown-quote-text: var(--note-text-muted);
-		--markdown-inline-code-bg: color-mix(in srgb, var(--note-left) 12%, #ffffff);
+		--markdown-inline-code-bg: color-mix(
+			in srgb,
+			var(--note-left) 12%,
+			var(--paper-surface, #ffffff)
+		);
 		--markdown-inline-code-text: var(--note-text);
 		--markdown-code-bg: #162033;
 		--markdown-code-header-bg: #1f2c44;
@@ -248,33 +274,21 @@
 	}
 
 	.paper-sheet-note.is-review {
-		--note-bg: #fff7ed;
-		--note-left: #c2410c;
-		--note-dashed: #fb923c;
-		--note-badge-bg: #ffedd5;
-		--note-badge-border: #fdba74;
-		--note-badge-text: #9a3412;
-		--note-dot: #ef4444;
-		--note-status-pending: #c2410c;
-		--note-status-processing: #9a3412;
-		--note-input-border: #fdba74;
-		--note-user-bg: #fff0e0;
-		--note-user-border: #f4a05a;
+		--note-bg: var(--paper-review-teacher-bg, #fff7ed);
+		--note-left: var(--paper-review-teacher-border, #d6a11e);
+		--note-badge-text: var(--paper-review-teacher-text, #b07a00);
+		--note-dot: var(--paper-review-teacher-border, #d6a11e);
+		--note-status-pending: var(--paper-review-teacher-text, #b07a00);
+		--note-status-processing: var(--paper-review-teacher-text, #b07a00);
 	}
 
 	.paper-sheet-note.is-correct {
-		--note-bg: #f0fdf4;
-		--note-left: #16a34a;
-		--note-dashed: #86efac;
-		--note-badge-bg: #dcfce7;
-		--note-badge-border: #86efac;
-		--note-badge-text: #166534;
-		--note-dot: #16a34a;
-		--note-status-pending: #15803d;
-		--note-status-processing: #166534;
-		--note-input-border: #86efac;
-		--note-user-bg: #f0fdf4;
-		--note-user-border: #86efac;
+		--note-bg: var(--paper-review-correct-bg, #f0fdf4);
+		--note-left: var(--paper-review-correct-border, #22a66e);
+		--note-badge-text: var(--paper-review-correct-text, #1a8c5b);
+		--note-dot: var(--paper-review-correct-border, #22a66e);
+		--note-status-pending: var(--paper-review-correct-text, #1a8c5b);
+		--note-status-processing: var(--paper-review-correct-text, #1a8c5b);
 	}
 
 	.paper-sheet-note__header {
@@ -288,6 +302,7 @@
 		font-family: inherit;
 		text-align: left;
 		cursor: pointer;
+		color: var(--note-text);
 	}
 
 	.paper-sheet-note__pill,
@@ -396,7 +411,7 @@
 		border: 1px solid var(--note-user-border);
 		border-radius: 8px 8px 0 8px;
 		background: var(--note-user-bg);
-		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+		box-shadow: var(--paper-card-shadow, 0 1px 4px rgba(0, 0, 0, 0.08));
 	}
 
 	.paper-sheet-note__bubble.is-tutor {
@@ -416,13 +431,13 @@
 
 	.paper-sheet-note__composer {
 		padding: 16px 16px 0;
-		--chat-composer-surface: rgba(255, 255, 255, 0.92);
+		--chat-composer-surface: var(--note-composer-surface);
 		--chat-composer-border: var(--note-input-border);
 		--chat-composer-stack-gap: 0.4rem;
 		--chat-composer-focus-border: color-mix(
 			in srgb,
 			var(--note-input-border) 78%,
-			rgba(36, 29, 25, 0.18)
+			var(--paper-surface, #ffffff)
 		);
 		--chat-composer-ring: color-mix(in srgb, var(--note-input-border) 36%, transparent);
 		--chat-composer-shadow: none;
@@ -431,25 +446,29 @@
 		--chat-composer-gap: 0.55rem;
 		--chat-composer-card-gap: 0.4rem;
 		--chat-composer-text: var(--note-text);
-		--chat-composer-placeholder: rgba(148, 163, 184, 0.96);
+		--chat-composer-placeholder: var(--paper-placeholder, rgba(148, 163, 184, 0.96));
 		--chat-composer-font-size: 13px;
 		--chat-composer-line-height: 1.45;
 		--chat-composer-textarea-padding: 0 0.1rem 0.05rem;
 		--chat-composer-button-size: 2rem;
-		--chat-composer-button-fg: rgba(87, 71, 58, 0.72);
-		--chat-composer-button-hover-bg: rgba(226, 211, 184, 0.34);
+		--chat-composer-button-fg: var(--paper-text-soft, rgba(87, 71, 58, 0.72));
+		--chat-composer-button-hover-bg: var(--note-composer-hover);
 		--chat-composer-button-hover-fg: var(--note-text);
 		--chat-composer-trailing-gap: 0.25rem;
 		--chat-composer-send-bg: var(--sheet-color);
 		--chat-composer-send-fg: #ffffff;
 		--chat-composer-send-hover-bg: color-mix(in srgb, var(--sheet-color) 90%, #000000);
-		--chat-composer-send-disabled-bg: color-mix(in srgb, var(--sheet-color) 18%, #ffffff);
-		--chat-composer-send-disabled-fg: rgba(87, 71, 58, 0.42);
+		--chat-composer-send-disabled-bg: color-mix(
+			in srgb,
+			var(--sheet-color) 18%,
+			var(--paper-surface, #ffffff)
+		);
+		--chat-composer-send-disabled-fg: var(--paper-text-subtle, rgba(87, 71, 58, 0.42));
 		--chat-composer-send-shadow: none;
 	}
 
 	:global(.paper-sheet-note__input::placeholder) {
-		color: rgba(148, 163, 184, 0.96);
+		color: var(--paper-placeholder, rgba(148, 163, 184, 0.96));
 	}
 
 	@media (max-width: 720px) {
