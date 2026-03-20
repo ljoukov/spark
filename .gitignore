@@ -1,5 +1,6 @@
 .DS_Store
 .codex/
+.playwright-cli/
 /data
 /spark-data
 .env*
