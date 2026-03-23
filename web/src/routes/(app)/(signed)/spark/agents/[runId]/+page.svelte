@@ -25,6 +25,7 @@
 	import { formatRelativeAge } from '$lib/utils/relativeAge';
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
 	import {
+		type SparkAgentAvailableTool,
 		SparkAgentRunLogSchema,
 		SparkAgentStateSchema,
 		SparkAgentWorkspaceFileSchema,
@@ -44,6 +45,15 @@
 	type WorkspaceStorageLink = {
 		storagePath: string;
 		contentType: string;
+	};
+	type AgentAvailableToolView = SparkAgentAvailableTool & {
+		callKindLabel: string | null;
+		descriptionHtml: string;
+		inputContractJson: string | null;
+		outputContractJson: string | null;
+		inputFormatLabel: string | null;
+		inputFormatDefinition: string | null;
+		usedCount: number | null;
 	};
 	const cloudLogEntrySchema = z.object({
 		insertId: z.string().nullable(),
@@ -155,6 +165,36 @@
 	});
 	const runStats = $derived<SparkAgentRunStats | null>(runLog?.stats ?? null);
 	const displayedUpdatedAt = $derived.by(() => resolveSparkAgentRunUpdatedAt(agent, runLog));
+	const availableToolViews = $derived.by((): AgentAvailableToolView[] => {
+		if (!agent?.availableTools) {
+			return [];
+		}
+		return agent.availableTools.map((entry) => ({
+			...entry,
+			callKindLabel: entry.callKind ?? null,
+			descriptionHtml: renderMarkdown(entry.description),
+			inputContractJson:
+				entry.inputContract?.kind === 'json_schema'
+					? formatToolContractSchema(entry.inputContract.schema)
+					: null,
+			outputContractJson:
+				entry.outputContract?.kind === 'json_schema'
+					? formatToolContractSchema(entry.outputContract.schema)
+					: null,
+			inputFormatLabel:
+				entry.inputContract?.kind === 'custom_format'
+					? entry.inputContract.format.type === 'grammar'
+						? `${entry.inputContract.format.syntax} grammar`
+						: 'text'
+					: null,
+			inputFormatDefinition:
+				entry.inputContract?.kind === 'custom_format' &&
+				entry.inputContract.format.type === 'grammar'
+					? entry.inputContract.format.definition
+					: null,
+			usedCount: runStats ? (runStats.toolCallsByName[entry.name] ?? 0) : null
+		}));
+	});
 	const runDurationLabel = $derived.by(() => {
 		if (!agent) {
 			return null;
@@ -190,6 +230,43 @@
 	const cloudLogsNewestFirst = $derived.by(() =>
 		[...cloudLogs].sort((left, right) => right.timestamp.localeCompare(left.timestamp))
 	);
+
+	function sanitizeJsonLikeValue(value: unknown): unknown {
+		if (value === null) {
+			return null;
+		}
+		if (typeof value === 'string' || typeof value === 'boolean') {
+			return value;
+		}
+		if (typeof value === 'number') {
+			return Number.isFinite(value) ? value : undefined;
+		}
+		if (Array.isArray(value)) {
+			return value
+				.map((entry) => sanitizeJsonLikeValue(entry))
+				.filter((entry) => entry !== undefined);
+		}
+		if (typeof value === 'object') {
+			const next: Record<string, unknown> = {};
+			for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+				if (key.startsWith('~')) {
+					continue;
+				}
+				const sanitized = sanitizeJsonLikeValue(entry);
+				if (sanitized === undefined) {
+					continue;
+				}
+				next[key] = sanitized;
+			}
+			return next;
+		}
+		return undefined;
+	}
+
+	function formatToolContractSchema(schema: Record<string, unknown>): string {
+		const sanitized = sanitizeJsonLikeValue(schema);
+		return JSON.stringify(sanitized ?? {}, null, 2);
+	}
 
 	function formatUsd(value: number | undefined): string {
 		if (typeof value !== 'number' || Number.isNaN(value)) {
@@ -1024,6 +1101,67 @@
 					</div>
 				</div>
 
+				<div class="agents-detail__tools">
+					<p class="agents-detail__eyebrow">Available tools</p>
+					{#if availableToolViews.length > 0}
+						<ul class="agents-detail__tool-list">
+							{#each availableToolViews as tool}
+								<li>
+									<details class="agents-detail__tool-item">
+										<summary class="agents-detail__tool-summary">
+											<span class="agents-detail__tool-name">{tool.name}</span>
+											<span class="agents-detail__tool-meta">
+												<span class="agents-detail__tool-kind">{tool.kind}</span>
+												{#if tool.callKindLabel}
+													<span>{tool.callKindLabel}</span>
+												{/if}
+												{#if tool.usedCount !== null}
+													<span>{tool.usedCount} call{tool.usedCount === 1 ? '' : 's'}</span>
+												{/if}
+											</span>
+										</summary>
+										<div class="agents-detail__tool-body">
+											<p class="agents-detail__tool-label">Tool prompt</p>
+											<div class="agents-detail__tool-markdown markdown">
+												{@html tool.descriptionHtml}
+											</div>
+											<p class="agents-detail__tool-label">Input contract</p>
+											{#if tool.inputContract?.kind === 'json_schema' && tool.inputContractJson}
+												<pre class="agents-detail__tool-code"><code>{tool.inputContractJson}</code></pre>
+											{:else if tool.inputContract?.kind === 'custom_format'}
+												<p class="agents-detail__tool-note">
+													Input format: {tool.inputFormatLabel ?? tool.inputContract.format.type}
+												</p>
+												{#if tool.inputFormatDefinition}
+													<pre class="agents-detail__tool-code"><code>{tool.inputFormatDefinition}</code></pre>
+												{/if}
+											{:else}
+												<p class="agents-detail__tool-note">
+													This tool does not have a persisted input contract.
+												</p>
+											{/if}
+											<p class="agents-detail__tool-label">Output contract</p>
+											{#if tool.outputContract?.kind === 'json_schema' && tool.outputContractJson}
+												<pre class="agents-detail__tool-code"><code>{tool.outputContractJson}</code></pre>
+											{:else}
+												<p class="agents-detail__tool-note">
+													This tool does not declare an output schema at runtime.
+												</p>
+											{/if}
+										</div>
+									</details>
+								</li>
+							{/each}
+						</ul>
+					{:else}
+						<p class="agents-empty">
+							{agent.status === 'created'
+								? 'Tool catalog will appear once the runner starts.'
+								: 'This run does not have a persisted tool catalog.'}
+						</p>
+					{/if}
+				</div>
+
 				{#if agent.resultSummary}
 					<div class="agents-detail__summary">
 						<p class="agents-detail__eyebrow">Summary</p>
@@ -1513,7 +1651,8 @@
 
 	.agents-detail__summary,
 	.agents-detail__error,
-	.agents-detail__timeline {
+	.agents-detail__timeline,
+	.agents-detail__tools {
 		padding: 0.75rem;
 		border-radius: 0.9rem;
 		background: rgba(148, 163, 184, 0.08);
@@ -1528,36 +1667,137 @@
 		margin-top: 0.45rem;
 	}
 
+	.agents-detail__tool-list {
+		list-style: none;
+		padding: 0;
+		margin: 0.6rem 0 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.55rem;
+	}
+
+	.agents-detail__tool-item {
+		border-radius: 0.75rem;
+		border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+		background: color-mix(in srgb, var(--card) 88%, transparent);
+	}
+
+	.agents-detail__tool-summary {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		padding: 0.7rem 0.8rem;
+		cursor: pointer;
+		font-size: 0.85rem;
+		font-weight: 600;
+	}
+
+	.agents-detail__tool-name {
+		overflow-wrap: anywhere;
+	}
+
+	.agents-detail__tool-meta {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		font-size: 0.72rem;
+		font-weight: 500;
+		color: rgba(100, 116, 139, 0.82);
+	}
+
+	.agents-detail__tool-kind {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.12rem 0.42rem;
+		border-radius: 999px;
+		background: rgba(59, 130, 246, 0.12);
+		color: rgba(29, 78, 216, 0.92);
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+	}
+
+	.agents-detail__tool-body {
+		padding: 0 0.8rem 0.8rem;
+		border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+	}
+
+	.agents-detail__tool-label {
+		margin: 0.75rem 0 0.45rem;
+		font-size: 0.72rem;
+		font-weight: 600;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: rgba(100, 116, 139, 0.72);
+	}
+
+	.agents-detail__tool-markdown {
+		font-size: 0.92rem;
+		line-height: 1.5;
+	}
+
+	.agents-detail__tool-note {
+		margin: 0;
+		font-size: 0.88rem;
+		line-height: 1.5;
+		color: rgba(100, 116, 139, 0.88);
+	}
+
+	.agents-detail__tool-code {
+		margin: 0;
+		padding: 0.75rem 0.85rem;
+		border-radius: 0.8rem;
+		background: rgba(15, 23, 42, 0.92);
+		color: rgba(226, 232, 240, 0.96);
+		overflow-x: auto;
+		font-size: 0.85rem;
+		line-height: 1.5;
+	}
+
+	.agents-detail__tool-code code {
+		padding: 0;
+		background: transparent;
+	}
+
 	.agents-detail__prompt :global(:first-child),
-	.agents-detail__summary-body :global(:first-child) {
+	.agents-detail__summary-body :global(:first-child),
+	.agents-detail__tool-markdown :global(:first-child) {
 		margin-top: 0;
 	}
 
 	.agents-detail__prompt :global(:last-child),
-	.agents-detail__summary-body :global(:last-child) {
+	.agents-detail__summary-body :global(:last-child),
+	.agents-detail__tool-markdown :global(:last-child) {
 		margin-bottom: 0;
 	}
 
 	.agents-detail__prompt :global(p),
-	.agents-detail__summary-body :global(p) {
+	.agents-detail__summary-body :global(p),
+	.agents-detail__tool-markdown :global(p) {
 		margin: 0 0 0.55rem;
 	}
 
 	.agents-detail__prompt :global(ul),
 	.agents-detail__prompt :global(ol),
 	.agents-detail__summary-body :global(ul),
-	.agents-detail__summary-body :global(ol) {
+	.agents-detail__summary-body :global(ol),
+	.agents-detail__tool-markdown :global(ul),
+	.agents-detail__tool-markdown :global(ol) {
 		margin: 0.45rem 0 0.75rem 1.25rem;
 		padding: 0;
 	}
 
 	.agents-detail__prompt :global(li + li),
-	.agents-detail__summary-body :global(li + li) {
+	.agents-detail__summary-body :global(li + li),
+	.agents-detail__tool-markdown :global(li + li) {
 		margin-top: 0.3rem;
 	}
 
 	.agents-detail__prompt :global(:not(pre) > code),
-	.agents-detail__summary-body :global(:not(pre) > code) {
+	.agents-detail__summary-body :global(:not(pre) > code),
+	.agents-detail__tool-markdown :global(:not(pre) > code) {
 		padding: 0.08rem 0.3rem;
 		border-radius: 0.35rem;
 		background: rgba(148, 163, 184, 0.18);
@@ -1565,7 +1805,8 @@
 	}
 
 	.agents-detail__prompt :global(pre),
-	.agents-detail__summary-body :global(pre) {
+	.agents-detail__summary-body :global(pre),
+	.agents-detail__tool-markdown :global(pre) {
 		margin: 0.55rem 0 0.75rem;
 		padding: 0.75rem 0.85rem;
 		border-radius: 0.8rem;
@@ -1575,7 +1816,8 @@
 	}
 
 	.agents-detail__prompt :global(pre code),
-	.agents-detail__summary-body :global(pre code) {
+	.agents-detail__summary-body :global(pre code),
+	.agents-detail__tool-markdown :global(pre code) {
 		padding: 0;
 		background: transparent;
 	}

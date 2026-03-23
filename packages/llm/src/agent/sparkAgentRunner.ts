@@ -14,21 +14,29 @@ import {
 } from "node:fs/promises";
 
 import type { PyodideInterface } from "pyodide";
+import { zodToJsonSchema } from "@alcyone-labs/zod-to-json-schema";
 import { z } from "zod";
 import {
   type AgentFilesystem,
   type AgentFilesystemToolAccessContext,
   type AgentFilesystemToolConfig,
   type AgentSubagentToolSelection,
+  createCodexFilesystemToolSet,
   createNodeAgentFilesystem,
   estimateCallCostUsd,
   generateText,
   getCurrentToolCallContext,
+  isChatGptModelId,
+  isFireworksModelId,
+  isGeminiModelId,
   isLlmTextModelId,
+  isOpenAiModelId,
   parseJsonFromLlmText,
   runAgentLoop,
+  toGeminiJsonSchema,
   tool,
   type LlmContentPart,
+  type LlmExecutableTool,
   type LlmInputMessage,
   type LlmStreamEvent,
   type LlmTextModelId,
@@ -40,6 +48,7 @@ import {
   type LlmUsageTokens,
 } from "@ljoukov/llm";
 import {
+  SparkAgentAvailableToolSchema,
   CodeProblemSchema,
   QuizDefinitionSchema,
   SessionSchema,
@@ -57,6 +66,7 @@ import {
   type QuizDefinition,
   type Session,
   type SessionMediaDoc,
+  type SparkAgentAvailableTool,
   type SparkAgentStateTimeline,
   type SparkGraderWorksheetReport,
   type SparkTutorComposerState,
@@ -118,13 +128,6 @@ import type {
 
 const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4";
 const SPARK_AGENT_FILESYSTEM_TOOL_PROFILE = "codex" as const;
-const SPARK_AGENT_FILESYSTEM_TOOL_NAMES = [
-  "apply_patch",
-  "read_file",
-  "list_dir",
-  "grep_files",
-  "view_image",
-] as const;
 
 type LlmDebugOptions = {
   readonly rootDir: string;
@@ -233,6 +236,255 @@ function serializeTraceValue(value: unknown): string {
   } catch (error) {
     return `<<unserializable trace payload: ${errorAsString(error)}>>`;
   }
+}
+
+function sanitizeJsonLikeValue(value: unknown): unknown {
+  if (value === null) {
+    return null;
+  }
+  if (typeof value === "string" || typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => sanitizeJsonLikeValue(entry))
+      .filter((entry) => entry !== undefined);
+  }
+  if (typeof value === "object") {
+    const next: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (key.startsWith("~")) {
+        continue;
+      }
+      const sanitized = sanitizeJsonLikeValue(entry);
+      if (sanitized === undefined) {
+        continue;
+      }
+      next[key] = sanitized;
+    }
+    return next;
+  }
+  return undefined;
+}
+
+function sanitizeJsonSchemaForPersistence(
+  schema: Record<string, unknown>,
+): Record<string, unknown> {
+  const sanitized = sanitizeJsonLikeValue(schema);
+  if (
+    typeof sanitized !== "object" ||
+    sanitized === null ||
+    Array.isArray(sanitized)
+  ) {
+    return {};
+  }
+  return sanitized as Record<string, unknown>;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function orderedJsonSchemaKeys(
+  properties: Record<string, unknown>,
+  ordering: readonly string[] | undefined,
+): string[] {
+  const keys = Object.keys(properties);
+  if (!ordering || ordering.length === 0) {
+    return keys;
+  }
+  const ordered: string[] = [];
+  const seen = new Set<string>();
+  for (const key of ordering) {
+    if (Object.hasOwn(properties, key)) {
+      ordered.push(key);
+      seen.add(key);
+    }
+  }
+  for (const key of keys) {
+    if (!seen.has(key)) {
+      ordered.push(key);
+    }
+  }
+  return ordered;
+}
+
+function normalizeOpenAiSchema(
+  schema: Record<string, unknown>,
+): Record<string, unknown> {
+  if (typeof schema.$ref === "string") {
+    return { $ref: schema.$ref };
+  }
+  const output: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (
+      key === "properties" ||
+      key === "required" ||
+      key === "additionalProperties" ||
+      key === "propertyOrdering"
+    ) {
+      continue;
+    }
+    if (key === "items") {
+      if (isPlainRecord(value)) {
+        output.items = normalizeOpenAiSchema(value);
+      }
+      continue;
+    }
+    if (key === "anyOf" || key === "oneOf") {
+      if (Array.isArray(value)) {
+        output.anyOf = value.map((entry) =>
+          isPlainRecord(entry) ? normalizeOpenAiSchema(entry) : entry,
+        );
+      }
+      continue;
+    }
+    if (key === "$defs" && isPlainRecord(value)) {
+      const defs: Record<string, unknown> = {};
+      for (const [defKey, defValue] of Object.entries(value)) {
+        if (isPlainRecord(defValue)) {
+          defs[defKey] = normalizeOpenAiSchema(defValue);
+        }
+      }
+      output.$defs = defs;
+      continue;
+    }
+    output[key] = value;
+  }
+
+  const propertiesRaw = schema.properties;
+  if (isPlainRecord(propertiesRaw)) {
+    const ordering = Array.isArray(schema.propertyOrdering)
+      ? schema.propertyOrdering.filter(
+          (entry): entry is string => typeof entry === "string",
+        )
+      : undefined;
+    const orderedKeys = orderedJsonSchemaKeys(propertiesRaw, ordering);
+    const properties: Record<string, unknown> = {};
+    for (const key of orderedKeys) {
+      const value = propertiesRaw[key];
+      properties[key] = isPlainRecord(value)
+        ? normalizeOpenAiSchema(value)
+        : value;
+    }
+    output.properties = properties;
+    output.required = orderedKeys;
+    output.additionalProperties = false;
+  }
+
+  const schemaType = output.type;
+  if (
+    output.additionalProperties === undefined &&
+    (schemaType === "object" ||
+      (Array.isArray(schemaType) && schemaType.includes("object")))
+  ) {
+    output.additionalProperties = false;
+    if (!Array.isArray(output.required)) {
+      output.required = [];
+    }
+  }
+
+  const normalizeExclusiveBound = (options: {
+    exclusiveKey: "exclusiveMinimum" | "exclusiveMaximum";
+    inclusiveKey: "minimum" | "maximum";
+  }): void => {
+    const exclusiveValue = output[options.exclusiveKey];
+    if (exclusiveValue === false) {
+      delete output[options.exclusiveKey];
+      return;
+    }
+    const inclusiveValue = output[options.inclusiveKey];
+    if (exclusiveValue === true) {
+      if (typeof inclusiveValue === "number" && Number.isFinite(inclusiveValue)) {
+        output[options.exclusiveKey] = inclusiveValue;
+        delete output[options.inclusiveKey];
+      } else {
+        delete output[options.exclusiveKey];
+      }
+      return;
+    }
+    if (typeof exclusiveValue === "number" && Number.isFinite(exclusiveValue)) {
+      delete output[options.inclusiveKey];
+    }
+  };
+
+  normalizeExclusiveBound({
+    exclusiveKey: "exclusiveMinimum",
+    inclusiveKey: "minimum",
+  });
+  normalizeExclusiveBound({
+    exclusiveKey: "exclusiveMaximum",
+    inclusiveKey: "maximum",
+  });
+
+  return output;
+}
+
+function resolveOpenAiSchemaRoot(
+  schema: Record<string, unknown>,
+): Record<string, unknown> {
+  if (typeof schema.$ref !== "string") {
+    return schema;
+  }
+  const refMatch = /^#\/(definitions|[$]defs)\/(.+)$/u.exec(schema.$ref);
+  if (!refMatch) {
+    return schema;
+  }
+  const section = refMatch[1];
+  const key = refMatch[2];
+  if (!section || !key) {
+    return schema;
+  }
+  const defsSource =
+    section === "definitions" ? schema.definitions : schema.$defs;
+  if (!isPlainRecord(defsSource)) {
+    return schema;
+  }
+  const resolved = defsSource[key];
+  if (!isPlainRecord(resolved)) {
+    return schema;
+  }
+  return { ...resolved };
+}
+
+function buildProviderToolJsonSchema(options: {
+  schema: z.ZodType;
+  name: string;
+  modelId: string;
+}): Record<string, unknown> {
+  if (isGeminiModelId(options.modelId)) {
+    return sanitizeJsonSchemaForPersistence(
+      toGeminiJsonSchema(options.schema, { name: options.name }) as Record<
+        string,
+        unknown
+      >,
+    );
+  }
+  if (
+    isOpenAiModelId(options.modelId) ||
+    isChatGptModelId(options.modelId) ||
+    isFireworksModelId(options.modelId)
+  ) {
+    return sanitizeJsonSchemaForPersistence(
+      normalizeOpenAiSchema(
+        resolveOpenAiSchemaRoot(
+          zodToJsonSchema(options.schema, {
+            name: options.name,
+            target: "openAi",
+          }) as Record<string, unknown>,
+        ),
+      ),
+    );
+  }
+  return sanitizeJsonSchemaForPersistence(
+    zodToJsonSchema(options.schema, {
+      name: options.name,
+      target: "jsonSchema7",
+    }) as Record<string, unknown>,
+  );
 }
 
 function redactDataUrlPayload(value: string): string {
@@ -917,7 +1169,9 @@ export function resolveSparkAgentSubagentSelection(): AgentSubagentToolSelection
 
 type SparkAgentMetricType = "chat" | "lesson" | "grader" | "tutor";
 
-function resolveSparkAgentMetricType(agentData: Record<string, unknown>): SparkAgentMetricType {
+function resolveSparkAgentMetricType(
+  agentData: Record<string, unknown>,
+): SparkAgentMetricType {
   if (
     typeof agentData.graderRunId === "string" &&
     agentData.graderRunId.trim().length > 0
@@ -1039,7 +1293,10 @@ function resolveWorkspaceRelativePath(
   workspaceDir: string,
   absolutePath: string,
 ): string {
-  const relative = path.relative(path.resolve(workspaceDir), path.resolve(absolutePath));
+  const relative = path.relative(
+    path.resolve(workspaceDir),
+    path.resolve(absolutePath),
+  );
   if (relative.length === 0) {
     throw new Error(`Path "${absolutePath}" resolves to the workspace root.`);
   }
@@ -1393,9 +1650,7 @@ function summariseGraderTotals(summary: GraderRunSummary): {
       ? summary.totals.awardedMarks
       : 0;
   const maxMarks =
-    typeof summary.totals?.maxMarks === "number"
-      ? summary.totals.maxMarks
-      : 0;
+    typeof summary.totals?.maxMarks === "number" ? summary.totals.maxMarks : 0;
   const percentage = maxMarks > 0 ? (awardedMarks / maxMarks) * 100 : 0;
   return {
     awardedMarks,
@@ -2488,7 +2743,7 @@ type SparkAgentPendingFilesystemMove = {
 };
 
 export function resolveSparkAgentFilesystemToolNames(): readonly string[] {
-  return SPARK_AGENT_FILESYSTEM_TOOL_NAMES;
+  return Object.keys(createCodexFilesystemToolSet());
 }
 
 export function buildSparkAgentFilesystemToolConfig(options: {
@@ -2497,7 +2752,10 @@ export function buildSparkAgentFilesystemToolConfig(options: {
 }): AgentFilesystemToolConfig {
   const rootDir = path.resolve(options.rootDir);
   const baseFilesystem = createNodeAgentFilesystem();
-  const pendingMovesBySource = new Map<string, SparkAgentPendingFilesystemMove>();
+  const pendingMovesBySource = new Map<
+    string,
+    SparkAgentPendingFilesystemMove
+  >();
   const pendingMovesByDestination = new Map<
     string,
     SparkAgentPendingFilesystemMove
@@ -2571,7 +2829,10 @@ export function buildSparkAgentFilesystemToolConfig(options: {
       }
       if (pendingMove?.destinationWritten) {
         clearPendingMove(pendingMove);
-        await options.workspace.moveFile(pendingMove.fromPath, pendingMove.toPath);
+        await options.workspace.moveFile(
+          pendingMove.fromPath,
+          pendingMove.toPath,
+        );
         return;
       }
       if (pendingMove) {
@@ -3168,7 +3429,9 @@ class AgentRunStatsTracker {
     for (const step of details.toolLoopResult.steps) {
       this.modelsUsed.add(step.modelVersion);
     }
-    const expectedModelCostUsd = Number.isFinite(details.toolLoopResult.totalCostUsd)
+    const expectedModelCostUsd = Number.isFinite(
+      details.toolLoopResult.totalCostUsd,
+    )
       ? Math.max(0, details.toolLoopResult.totalCostUsd)
       : 0;
     const costDeltaUsd = Math.max(0, expectedModelCostUsd - this.modelCostUsd);
@@ -3387,12 +3650,10 @@ class AgentLogSync {
   private lastWriteAt = 0;
   private pendingLines = new Map<string, string>();
   private pendingStats: AgentRunStatsSnapshot | null = null;
-  private pendingStream:
-    | {
-        assistant: string;
-        thoughts: string;
-      }
-    | null = null;
+  private pendingStream: {
+    assistant: string;
+    thoughts: string;
+  } | null = null;
   private timer: NodeJS.Timeout | undefined;
   private inFlight: Promise<void> | undefined;
   private disposed = false;
@@ -3460,7 +3721,11 @@ class AgentLogSync {
     if (this.inFlight) {
       await this.inFlight.catch(() => undefined);
     }
-    if (this.pendingLines.size === 0 && !this.pendingStats && !this.pendingStream) {
+    if (
+      this.pendingLines.size === 0 &&
+      !this.pendingStats &&
+      !this.pendingStream
+    ) {
       return;
     }
     const now = Date.now();
@@ -3526,7 +3791,12 @@ class AgentLogSync {
     if (this.disposed) {
       return;
     }
-    if (!force && this.pendingLines.size === 0 && !this.pendingStats && !this.pendingStream) {
+    if (
+      !force &&
+      this.pendingLines.size === 0 &&
+      !this.pendingStats &&
+      !this.pendingStream
+    ) {
       return;
     }
     if (this.timer) {
@@ -3547,7 +3817,9 @@ class AgentLogSync {
         this.inFlight = undefined;
         if (
           !this.disposed &&
-          (this.pendingLines.size > 0 || this.pendingStats || this.pendingStream)
+          (this.pendingLines.size > 0 ||
+            this.pendingStats ||
+            this.pendingStream)
         ) {
           this.scheduleUpdate();
         }
@@ -3635,6 +3907,109 @@ function stripDeprecatedPdfReadTools(tools: LlmToolSet): LlmToolSet {
   delete (nextTools as Record<string, unknown>).read_pdf;
   delete (nextTools as Record<string, unknown>).extract_pdf_text;
   return nextTools;
+}
+
+function safeToJsonSchema(
+  schema: z.ZodType,
+  name: string,
+  modelId: string,
+): Record<string, unknown> {
+  return buildProviderToolJsonSchema({ schema, name, modelId });
+}
+
+function buildSparkAgentToolSchemaName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_]+/g, "_");
+}
+
+function buildSparkAgentAvailableTool(options: {
+  name: string;
+  kind: SparkAgentAvailableTool["kind"];
+  modelId: string;
+  toolConfig: LlmExecutableTool<z.ZodType, unknown>;
+}): SparkAgentAvailableTool | null {
+  const description =
+    typeof options.toolConfig.description === "string"
+      ? options.toolConfig.description.trim()
+      : "";
+  if (description.length === 0) {
+    return null;
+  }
+
+  if (options.toolConfig.type === "custom") {
+    return SparkAgentAvailableToolSchema.parse({
+      name: options.name,
+      kind: options.kind,
+      callKind: "custom",
+      description,
+      ...(options.toolConfig.format
+        ? {
+            inputContract: {
+              kind: "custom_format",
+              format: options.toolConfig.format,
+            },
+          }
+        : {}),
+      outputContract: {
+        kind: "undeclared",
+      },
+    });
+  }
+
+  return SparkAgentAvailableToolSchema.parse({
+    name: options.name,
+    kind: options.kind,
+    callKind: "function",
+    description,
+    inputContract: {
+      kind: "json_schema",
+      schema: safeToJsonSchema(
+        options.toolConfig.inputSchema,
+        `${buildSparkAgentToolSchemaName(options.name)}_input`,
+        options.modelId,
+      ),
+    },
+    outputContract: {
+      kind: "undeclared",
+    },
+  });
+}
+
+function buildSparkAgentAvailableTools(
+  tools: LlmToolSet,
+  modelId: string,
+): SparkAgentAvailableTool[] {
+  const availableTools: SparkAgentAvailableTool[] = [];
+
+  for (const [name, toolConfig] of Object.entries(
+    createCodexFilesystemToolSet(),
+  )) {
+    const availableTool = buildSparkAgentAvailableTool({
+      name,
+      kind: "filesystem",
+      modelId,
+      toolConfig,
+    });
+    if (availableTool) {
+      availableTools.push(availableTool);
+    }
+  }
+
+  const sortedFunctionTools = Object.entries(tools).sort(
+    ([leftName], [rightName]) => leftName.localeCompare(rightName),
+  );
+  for (const [name, toolConfig] of sortedFunctionTools) {
+    const availableTool = buildSparkAgentAvailableTool({
+      name,
+      kind: "function",
+      modelId,
+      toolConfig,
+    });
+    if (availableTool) {
+      availableTools.push(availableTool);
+    }
+  }
+
+  return availableTools;
 }
 
 export function buildSparkAgentSystemPrompt(options?: {
@@ -8071,7 +8446,9 @@ export async function runSparkAgentTask(
             createdAt: nowIso,
           },
         ],
-        ...(input.resolved ? { resolvedAt: nowIso } : { resolvedAt: undefined }),
+        ...(input.resolved
+          ? { resolvedAt: nowIso }
+          : { resolvedAt: undefined }),
       };
       const nextReviewState = SparkTutorReviewStateSchema.parse({
         ...reviewState,
@@ -8421,6 +8798,18 @@ export async function runSparkAgentTask(
               });
         })();
 
+    await patchFirestoreDocument({
+      serviceAccountJson,
+      documentPath: agentDocPath,
+      updates: {
+        availableTools: buildSparkAgentAvailableTools(tools, toolLoopModelId),
+      },
+    }).catch((error) => {
+      logSync?.append(
+        `warn: failed to persist available tool catalog: ${errorAsString(error)}`,
+      );
+    });
+
     progress.log(
       `exposed tools: ${Array.from(
         new Set([
@@ -8624,12 +9013,11 @@ export async function runSparkAgentTask(
         toolLoopEventBridge.finish();
       }
     })();
-    const reconciledAgentCostUsd = statsTracker.reconcileModelCostFromToolLoopResult(
-      {
+    const reconciledAgentCostUsd =
+      statsTracker.reconcileModelCostFromToolLoopResult({
         modelId: toolLoopModelId,
         toolLoopResult,
-      },
-    );
+      });
     statsTracker.recordToolCallsFromResult(toolLoopResult);
     logSync?.setStats(statsTracker.snapshot());
     await Promise.all(
@@ -8782,7 +9170,8 @@ export async function runSparkAgentTask(
         await recoverTutorQuestionAfterFailure?.({
           assistantReplyMarkdown:
             "This review turn stopped before I could finish. Send your reply again and I will pick it up from there.",
-          composerPlaceholder: "This tutor turn was stopped. You can try again.",
+          composerPlaceholder:
+            "This tutor turn was stopped. You can try again.",
           sessionError: "Stopped by user.",
         }).catch((recoverError: unknown) => {
           logSync?.append(
@@ -8831,7 +9220,8 @@ export async function runSparkAgentTask(
       await recoverTutorQuestionAfterFailure?.({
         assistantReplyMarkdown:
           "I lost that review turn before I could finish. Send the same reply again and I will continue from this question.",
-        composerPlaceholder: "That tutor turn failed. You can try sending again.",
+        composerPlaceholder:
+          "That tutor turn failed. You can try sending again.",
         sessionError: message,
       }).catch((recoverError: unknown) => {
         logSync?.append(

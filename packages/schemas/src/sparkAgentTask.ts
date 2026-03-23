@@ -23,11 +23,68 @@ export type SparkAgentStateTimeline = z.infer<
   typeof SparkAgentStateTimelineSchema
 >;
 
+const jsonObjectSchema = z.record(z.string(), z.unknown());
+
+export const SparkAgentAvailableToolFormatSchema = z.discriminatedUnion(
+  "type",
+  [
+    z.object({
+      type: z.literal("text"),
+    }),
+    z.object({
+      type: z.literal("grammar"),
+      syntax: z.enum(["lark", "regex"]),
+      definition: trimmedString,
+    }),
+  ],
+);
+
+export const SparkAgentAvailableToolInputContractSchema = z.discriminatedUnion(
+  "kind",
+  [
+    z.object({
+      kind: z.literal("json_schema"),
+      schema: jsonObjectSchema,
+    }),
+    z.object({
+      kind: z.literal("custom_format"),
+      format: SparkAgentAvailableToolFormatSchema,
+    }),
+  ],
+);
+
+export const SparkAgentAvailableToolOutputContractSchema = z.discriminatedUnion(
+  "kind",
+  [
+    z.object({
+      kind: z.literal("undeclared"),
+    }),
+    z.object({
+      kind: z.literal("json_schema"),
+      schema: jsonObjectSchema,
+    }),
+  ],
+);
+
+export const SparkAgentAvailableToolSchema = z.object({
+  name: trimmedString,
+  kind: z.enum(["filesystem", "function"]),
+  callKind: z.enum(["function", "custom"]).optional(),
+  description: trimmedString,
+  inputContract: SparkAgentAvailableToolInputContractSchema.optional(),
+  outputContract: SparkAgentAvailableToolOutputContractSchema.optional(),
+});
+
+export type SparkAgentAvailableTool = z.infer<
+  typeof SparkAgentAvailableToolSchema
+>;
+
 export const SparkAgentStateSchema = z.object({
   id: trimmedString,
   prompt: trimmedString,
   status: SparkAgentStatusSchema,
   workspaceId: trimmedString,
+  availableTools: z.array(SparkAgentAvailableToolSchema).optional(),
   stop_requested: z.boolean().optional(),
   createdAt: FirestoreTimestampSchema,
   updatedAt: FirestoreTimestampSchema,

@@ -30,6 +30,7 @@ const NON_RETRYABLE_AGENT_FIELDS = new Set([
 	'prompt',
 	'status',
 	'workspaceId',
+	'availableTools',
 	'createdAt',
 	'updatedAt',
 	'statesTimeline',
