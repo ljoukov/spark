@@ -489,7 +489,7 @@
 					assistantDraftText={responseText || null}
 					showComposer={phaseIndex <= 4 || phaseIndex === 6}
 					showFollowUpButton={phaseIndex === 5}
-					showComposerTools={true}
+					showComposerTools={false}
 					resolvedFollowUpMode={phaseIndex === 6}
 					questionLabel="question 1"
 					onToggle={() => {
@@ -535,7 +535,7 @@
 							assistantDraftText={card.assistantDraftText ?? null}
 							showComposer={(card.showComposer ?? true) || (galleryFollowUpModes[card.id] ?? false)}
 							showFollowUpButton={Boolean(card.showFollowUpButton && !(galleryFollowUpModes[card.id] ?? false))}
-							showComposerTools={card.showComposerTools ?? true}
+							showComposerTools={card.showComposerTools ?? false}
 							resolvedFollowUpMode={Boolean(card.resolvedFollowUpMode || (galleryFollowUpModes[card.id] ?? false))}
 							questionLabel={card.id}
 							onToggle={() => {

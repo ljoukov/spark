@@ -1256,7 +1256,7 @@
 											resolvedFeedback &&
 											!isFollowUpComposerOpen(questionKey)
 										}
-										showComposerTools={reviewMode === 'mock'}
+										showComposerTools={false}
 										resolvedFollowUpMode={isFollowUpComposerOpen(questionKey)}
 										onToggle={() => {
 											toggleFeedbackCard(questionKey);
