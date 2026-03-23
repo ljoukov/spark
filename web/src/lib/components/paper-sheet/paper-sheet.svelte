@@ -190,30 +190,26 @@
 		background: string;
 		border: string;
 		text: string;
-		message: string;
 	} {
 		const ratio = score.total > 0 ? score.got / score.total : 0;
 		if (ratio >= 0.7) {
 			return {
 				background: 'var(--paper-review-correct-bg)',
 				border: 'var(--paper-review-correct-border)',
-				text: 'var(--paper-review-correct-text)',
-				message: 'Mock success state for the preview.'
+				text: 'var(--paper-review-correct-text)'
 			};
 		}
 		if (ratio >= 0.5) {
 			return {
 				background: 'var(--paper-review-teacher-bg)',
 				border: 'var(--paper-review-teacher-border)',
-				text: 'var(--paper-review-teacher-text)',
-				message: 'Mock mixed-result state for the preview.'
+				text: 'var(--paper-review-teacher-text)'
 			};
 		}
 		return {
 			background: 'var(--paper-review-incorrect-bg)',
 			border: 'var(--paper-review-incorrect-border)',
-			text: 'var(--paper-review-incorrect-text)',
-			message: 'Mock revision-needed state for the preview.'
+			text: 'var(--paper-review-incorrect-text)'
 		};
 	}
 
@@ -1425,11 +1421,19 @@
 							</div>
 
 							{#if showLinesMarkdown}
+								{@const answerMarkdown = getTextAnswer(questionKey)}
+								{@const hasAnswerMarkdown = answerMarkdown.trim().length > 0}
 								<div class="paper-sheet__lines-markdown">
-									<MarkdownContent
-										markdown={getTextAnswer(questionKey)}
-										class="paper-sheet__answer-markdown"
-									/>
+									{#if hasAnswerMarkdown}
+										<MarkdownContent
+											markdown={answerMarkdown}
+											class="paper-sheet__answer-markdown"
+										/>
+									{:else}
+										<p class="paper-sheet__answer-placeholder">
+											No answer found in the submission.
+										</p>
+									{/if}
 								</div>
 							{/if}
 
@@ -1495,8 +1499,7 @@
 				<p class="paper-sheet__score-value" style={`color:${scoreTone.text};`}>
 					{currentReview.score.got} / {currentReview.score.total}
 				</p>
-				<p class="paper-sheet__score-message">{scoreTone.message}</p>
-				<p class="paper-sheet__score-note">{currentReview.message}</p>
+				<p class="paper-sheet__score-message">{currentReview.message}</p>
 				<p class="paper-sheet__score-note">{currentReview.note}</p>
 				{#if currentReview.objectiveQuestionCount !== undefined || currentReview.teacherReviewQuestionCount !== undefined}
 					<p class="paper-sheet__score-note">
@@ -1563,6 +1566,8 @@
 		--paper-text-subtle: #888888;
 		--paper-text-faint: #bbbbbb;
 		--paper-placeholder: #999999;
+		--paper-reading-size: 16px;
+		--paper-reading-line-height: 1.8;
 		--paper-hook-text: #444444;
 		--paper-theory-text: #222222;
 		--paper-info-text: #333333;
@@ -1734,7 +1739,7 @@
 
 	.paper-sheet__eyebrow {
 		margin: 0 0 6px;
-		font-size: 11px;
+		font-size: var(--paper-reading-size);
 		letter-spacing: 0.15em;
 		text-transform: uppercase;
 		color: var(--paper-header-eyebrow);
@@ -1751,7 +1756,7 @@
 
 	.paper-sheet__subtitle {
 		margin: 6px 0 0;
-		font-size: 12.5px;
+		font-size: var(--paper-reading-size);
 		color: var(--paper-header-subtitle);
 	}
 
@@ -1762,7 +1767,7 @@
 
 	.paper-sheet__total-label {
 		margin: 0 0 4px;
-		font-size: 11px;
+		font-size: var(--paper-reading-size);
 		color: var(--paper-header-eyebrow);
 	}
 
@@ -1782,8 +1787,8 @@
 		margin-bottom: 24px;
 		padding-left: 16px;
 		border-left: 4px solid var(--sheet-accent);
-		font-size: 14px;
-		line-height: 1.8;
+		font-size: var(--paper-reading-size);
+		line-height: var(--paper-reading-line-height);
 		font-style: italic;
 		color: var(--paper-hook-text);
 	}
@@ -1825,20 +1830,20 @@
 		border-radius: 6px;
 		background: var(--sheet-color);
 		color: #ffffff;
-		font-size: 14px;
+		font-size: var(--paper-reading-size);
 		font-weight: 900;
 	}
 
 	.paper-sheet__section-label {
 		flex: 1;
-		font-size: 14px;
+		font-size: var(--paper-reading-size);
 		font-weight: 700;
 		letter-spacing: 0.01em;
 		color: var(--paper-text);
 	}
 
 	.paper-sheet__section-marks {
-		font-size: 12px;
+		font-size: var(--paper-reading-size);
 		color: var(--paper-text-muted);
 	}
 
@@ -1858,8 +1863,8 @@
 		border-radius: 0 6px 6px 0;
 		background: var(--paper-theory-bg);
 		padding: 12px 16px;
-		font-size: 13.5px;
-		line-height: 1.7;
+		font-size: var(--paper-reading-size);
+		line-height: var(--paper-reading-line-height);
 		color: var(--paper-theory-text);
 	}
 
@@ -1881,7 +1886,7 @@
 
 	.paper-sheet__info-title {
 		margin: 0 0 3px;
-		font-size: 12px;
+		font-size: var(--paper-reading-size);
 		font-weight: 700;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
@@ -1889,8 +1894,8 @@
 	}
 
 	.paper-sheet__info-text {
-		font-size: 13px;
-		line-height: 1.6;
+		font-size: var(--paper-reading-size);
+		line-height: var(--paper-reading-line-height);
 		color: var(--paper-info-text);
 	}
 
@@ -1925,7 +1930,7 @@
 		border-radius: 999px;
 		background: var(--sheet-color);
 		color: #ffffff;
-		font-size: 12px;
+		font-size: var(--paper-reading-size);
 		font-weight: 800;
 	}
 
@@ -1947,7 +1952,7 @@
 		align-self: flex-start;
 		padding-left: 8px;
 		margin-top: 2px;
-		font-size: 11px;
+		font-size: var(--paper-reading-size);
 		line-height: 1;
 		font-weight: 700;
 		white-space: nowrap;
@@ -1970,8 +1975,8 @@
 
 	.paper-sheet__prompt {
 		margin-bottom: 10px;
-		font-size: 13.5px;
-		line-height: 1.6;
+		font-size: var(--paper-reading-size);
+		line-height: var(--paper-reading-line-height);
 	}
 
 	.paper-sheet__prompt--with-note {
@@ -1982,7 +1987,7 @@
 	}
 
 	.paper-sheet__prompt-note {
-		font-size: 12px;
+		font-size: var(--paper-reading-size);
 		font-style: italic;
 		color: var(--paper-text-subtle);
 	}
@@ -2001,8 +2006,8 @@
 		flex-wrap: wrap;
 		gap: 6px;
 		align-items: center;
-		font-size: 13.5px;
-		line-height: 2.2;
+		font-size: var(--paper-reading-size);
+		line-height: var(--paper-reading-line-height);
 	}
 
 	.paper-sheet__inline-input {
@@ -2014,7 +2019,7 @@
 		padding: 2px 6px;
 		outline: none;
 		font-family: inherit;
-		font-size: 13.5px;
+		font-size: var(--paper-reading-size);
 		color: var(--paper-text-strong);
 		transition: border-color 0.2s;
 	}
@@ -2052,7 +2057,7 @@
 		background: var(--paper-choice-surface);
 		padding: 8px 12px;
 		font-family: inherit;
-		font-size: 13px;
+		font-size: var(--paper-reading-size);
 		text-align: left;
 		color: var(--paper-text);
 	}
@@ -2106,7 +2111,7 @@
 		border-radius: 4px;
 		background: var(--paper-accent-softest-bg);
 		padding: 4px 10px;
-		font-size: 12px;
+		font-size: var(--paper-reading-size);
 		font-style: italic;
 		color: var(--paper-accent-text);
 	}
@@ -2126,8 +2131,8 @@
 		);
 		padding: 8px 10px;
 		font-family: inherit;
-		font-size: 13.5px;
-		line-height: 1.8;
+		font-size: var(--paper-reading-size);
+		line-height: var(--paper-reading-line-height);
 		color: var(--paper-text);
 		outline: none;
 	}
@@ -2155,9 +2160,19 @@
 
 	.paper-sheet__answer-markdown {
 		min-height: calc(1.8em * 3);
-		font-size: 13.5px;
-		line-height: 1.8;
+		font-size: var(--paper-reading-size);
+		line-height: var(--paper-reading-line-height);
 		--markdown-strong: var(--sheet-color);
+	}
+
+	.paper-sheet__answer-placeholder {
+		display: flex;
+		align-items: center;
+		margin: 0;
+		font-size: var(--paper-reading-size);
+		line-height: var(--paper-reading-line-height);
+		font-style: italic;
+		color: var(--paper-text-subtle);
 	}
 
 	.paper-sheet__match-column {
@@ -2190,13 +2205,13 @@
 	.paper-sheet__spelling-wrong {
 		display: inline-block;
 		width: 120px;
-		font-size: 13px;
+		font-size: var(--paper-reading-size);
 		color: var(--paper-text-subtle);
 		text-decoration: line-through;
 	}
 
 	.paper-sheet__spelling-arrow {
-		font-size: 13px;
+		font-size: var(--paper-reading-size);
 	}
 
 	.paper-sheet__score-card {
@@ -2209,7 +2224,7 @@
 
 	.paper-sheet__score-label {
 		margin: 0 0 4px;
-		font-size: 13px;
+		font-size: var(--paper-reading-size);
 		color: var(--paper-text-muted);
 	}
 
@@ -2222,13 +2237,13 @@
 
 	.paper-sheet__score-message {
 		margin: 6px 0 0;
-		font-size: 13.5px;
+		font-size: var(--paper-reading-size);
 		color: var(--paper-text-soft);
 	}
 
 	.paper-sheet__score-note {
 		margin: 4px 0 0;
-		font-size: 12px;
+		font-size: var(--paper-reading-size);
 		color: var(--paper-text-subtle);
 	}
 
@@ -2242,7 +2257,7 @@
 		border-radius: 8px;
 		padding: 10px 24px;
 		font-family: inherit;
-		font-size: 13.5px;
+		font-size: var(--paper-reading-size);
 		font-weight: 700;
 		cursor: pointer;
 	}
@@ -2267,7 +2282,7 @@
 		margin-top: 32px;
 		padding-top: 16px;
 		border-top: 1px solid var(--paper-divider);
-		font-size: 11px;
+		font-size: var(--paper-reading-size);
 		letter-spacing: 0.04em;
 		color: var(--paper-text-faint);
 	}
