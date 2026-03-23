@@ -1,7 +1,7 @@
 import type { PaperSheetAnswers, PaperSheetData, PaperSheetMockReview } from './types';
 
 const hamiltonSampleAnswers: PaperSheetAnswers = {
-	'H1:response': `Since the remainder is $43$, $n > 44$ and
+	'H1-response': `Since the remainder is $43$, $n > 44$ and
 
 $$
 2023 - 43 = 1980
@@ -20,7 +20,7 @@ $$
 $$
 
 So there are $14$ possible $n$'s.`,
-	'H2:response': `$\\%$ is equivalent to multiplying by $\\frac{1}{100}$.
+	'H2-response': `$\\%$ is equivalent to multiplying by $\\frac{1}{100}$.
 
 $$
 a\\%\\text{ of }b\\%\\text{ of }a
@@ -99,7 +99,7 @@ So
 $$
 (a, b) = (6, 5), (5, 3), (5, 2), (6, 1).
 $$`,
-	'H3:response': `Thus for this to be true:
+	'H3-response': `Thus for this to be true:
 
 $$
 1 \\le \\frac{1}{\\sqrt{n}} < 2
@@ -128,7 +128,7 @@ $$
 and [unclear continuation].
 
 [No final count is visible on the photographed page.]`,
-	'H4:response': `Now since $ABCD$ is a parallelogram,
+	'H4-response': `Now since $ABCD$ is a parallelogram,
 
 $$
 AD \\parallel CB,\\qquad CD \\parallel AB.
@@ -183,7 +183,7 @@ so
 $$
 \\left(\\frac{PD}{PB}\\right)^2 = \\frac{PQ}{PR}.
 $$`,
-	'H5:response': `Now subtracting $2$ integers from each other and replacing by the difference doesn't change parity.
+	'H5-response': `Now subtracting $2$ integers from each other and replacing by the difference doesn't change parity.
 
 For final sum to be $0$, sum must be even.
 
@@ -194,7 +194,7 @@ If $n$ is a multiple of $4$, all larger numbers will have been replaced by [pair
 If $n$ is $1$ more than a multiple of $4$, [unclear continuation].
 
 If $n$ is $3$ more than a multiple of $4$, [unclear continuation; the photographed argument appears to continue but is not fully legible].`,
-	'H6:response': `Rearrange this equation, we get
+	'H6-response': `Rearrange this equation, we get
 
 $$
 p^n = (m + 60)(m - 60).
@@ -309,7 +309,7 @@ const hamiltonSampleReview: PaperSheetMockReview = {
 	message: 'Hamilton 2023 combined grading file transcribed into the sheet preview.',
 	note: 'Use Show Mock Review to reveal problem-level notes seeded from the original review comments.',
 	questions: {
-		'H1:response': {
+		'H1-response': {
 			status: 'incorrect',
 			label: '5 / 10',
 			statusLabel: 'graded',
@@ -317,7 +317,7 @@ const hamiltonSampleReview: PaperSheetMockReview = {
 			followUp:
 				'Recount the factors of $1980$ that are greater than $43$. Check $44$, $45$, $396$, $660$, and $1980$ before you settle on the total.'
 		},
-		'H2:response': {
+		'H2-response': {
 			status: 'correct',
 			label: '9 / 10',
 			statusLabel: 'graded',
@@ -325,7 +325,7 @@ const hamiltonSampleReview: PaperSheetMockReview = {
 			followUp:
 				'If you polish this for full marks, state briefly why the second quadratic root is rejected in each case.'
 		},
-		'H3:response': {
+		'H3-response': {
 			status: 'incorrect',
 			label: '4 / 10',
 			statusLabel: 'graded',
@@ -333,7 +333,7 @@ const hamiltonSampleReview: PaperSheetMockReview = {
 			followUp:
 				'Push the inequalities through to ranges of $n$, then count the integers in each range before you add the totals.'
 		},
-		'H4:response': {
+		'H4-response': {
 			status: 'correct',
 			label: '10 / 10',
 			statusLabel: 'graded',
@@ -341,7 +341,7 @@ const hamiltonSampleReview: PaperSheetMockReview = {
 			followUp:
 				'This is already full-credit level. If you wanted to tighten it further, you could name the matching angles a little more explicitly.'
 		},
-		'H5:response': {
+		'H5-response': {
 			status: 'incorrect',
 			label: '6 / 10',
 			statusLabel: 'graded',
@@ -349,7 +349,7 @@ const hamiltonSampleReview: PaperSheetMockReview = {
 			followUp:
 				'Keep the parity argument, then separate the cases by $n \\bmod 4$ and finish the odd-case threshold carefully.'
 		},
-		'H6:response': {
+		'H6-response': {
 			status: 'incorrect',
 			label: '8 / 10',
 			statusLabel: 'graded',
@@ -385,7 +385,7 @@ export const samplePaperSheets = [
 					'Susie thinks of a positive integer $n$. She notices that, when she divides $2023$ by $n$, she is left with a remainder of $43$. Find how many possible values of $n$ there are.',
 				questions: [
 					{
-						id: 'response',
+						id: 'H1-response',
 						type: 'lines',
 						marks: 10,
 						prompt: '**Student solution transcript**',
@@ -401,7 +401,7 @@ export const samplePaperSheets = [
 					'The two positive integers $a, b$ with $a > b$ are such that $a\\%$ of $b\\%$ of $a$ and $b\\%$ of $a\\%$ of $b$ differ by $0.003$. Find all possible pairs $(a, b)$.',
 				questions: [
 					{
-						id: 'response',
+						id: 'H2-response',
 						type: 'lines',
 						marks: 10,
 						prompt: '**Student solution transcript**',
@@ -417,7 +417,7 @@ export const samplePaperSheets = [
 					'The $n$th term of a sequence is the first non-zero digit of the decimal expansion of $\\frac{1}{\\sqrt{n}}$. How many of the first one million terms of the sequence are equal to $1$?',
 				questions: [
 					{
-						id: 'response',
+						id: 'H3-response',
 						type: 'lines',
 						marks: 10,
 						prompt: '**Student solution transcript**',
@@ -433,7 +433,7 @@ export const samplePaperSheets = [
 					'In the parallelogram $ABCD$, a line through $A$ meets $BD$ at $P$, $CD$ at $Q$ and $BC$ extended at $R$. Prove that $\\frac{PQ}{PR} = \\left(\\frac{PD}{PB}\\right)^2$.',
 				questions: [
 					{
-						id: 'response',
+						id: 'H4-response',
 						type: 'lines',
 						marks: 10,
 						prompt: '**Student solution transcript**',
@@ -449,7 +449,7 @@ export const samplePaperSheets = [
 					'Mickey writes down on a board $n$ consecutive whole numbers, the smallest of which is $2023$. He repeatedly replaces the largest two numbers with their difference until only one number remains. For which values of $n$ is the last remaining number $0$?',
 				questions: [
 					{
-						id: 'response',
+						id: 'H5-response',
 						type: 'lines',
 						marks: 10,
 						prompt: '**Student solution transcript**',
@@ -465,7 +465,7 @@ export const samplePaperSheets = [
 					'Find all triples $(m, n, p)$ which satisfy $p^n + 3600 = m^2$, where $p$ is prime and $m, n$ are positive integers.',
 				questions: [
 					{
-						id: 'response',
+						id: 'H6-response',
 						type: 'lines',
 						marks: 10,
 						prompt: '**Student solution transcript**',
