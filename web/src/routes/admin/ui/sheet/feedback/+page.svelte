@@ -13,6 +13,24 @@
 
 	type RuntimeStatus = 'connecting' | 'thinking' | 'responding' | null;
 
+	type FeedbackComposerPreset = {
+		initialDraft?: string;
+		initialAttachments?: PaperSheetComposerAttachmentDraft[];
+		show?: boolean;
+		allowAttachments?: boolean;
+		allowTakePhoto?: boolean;
+		resolvedFollowUpMode?: boolean;
+	};
+
+	type FeedbackComposerState = {
+		draft: string;
+		attachments: PaperSheetComposerAttachmentDraft[];
+		show: boolean;
+		allowAttachments: boolean;
+		allowTakePhoto: boolean;
+		resolvedFollowUpMode: boolean;
+	};
+
 	type FeedbackDemoCard = {
 		id: string;
 		title: string;
@@ -23,11 +41,8 @@
 		runtimeStatus?: RuntimeStatus;
 		thinkingText?: string | null;
 		assistantDraftText?: string | null;
-		showComposer?: boolean;
 		showFollowUpButton?: boolean;
-		allowAttachments?: boolean;
-		resolvedFollowUpMode?: boolean;
-		draft?: string;
+		composer?: FeedbackComposerPreset;
 		open?: boolean;
 	};
 
@@ -36,6 +51,14 @@
 		title: string;
 		description: string;
 		thread: PaperSheetFeedbackThread;
+	};
+
+	type ProgressionPreviewState = {
+		thread: PaperSheetFeedbackThread | null;
+		processing: boolean;
+		runtimeStatus: RuntimeStatus;
+		showFollowUpButton: boolean;
+		composer: FeedbackComposerState;
 	};
 
 	const SAMPLE_IMAGE_PREVIEW_URL = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
@@ -72,30 +95,6 @@
 			contentType: 'text/plain',
 			sizeBytes: 1_280,
 			url: SAMPLE_TEXT_FILE_URL
-		};
-	}
-
-	function createDraftAttachment(kind: 'image' | 'text-file'): PaperSheetComposerAttachmentDraft {
-		if (kind === 'image') {
-			return {
-				localId: `draft-image-${Date.now().toString()}`,
-				file: new File(['preview image placeholder'], 'divisor-working.png', {
-					type: 'image/png'
-				}),
-				filename: 'divisor-working.png',
-				contentType: 'image/png',
-				sizeBytes: 248_000,
-				previewUrl: SAMPLE_IMAGE_PREVIEW_URL
-			};
-		}
-		return {
-			localId: `draft-text-${Date.now().toString()}`,
-			file: new File(['Divisors above 43: 44, 45, 55, ...'], 'divisor-list.txt', {
-				type: 'text/plain'
-			}),
-			filename: 'divisor-list.txt',
-			contentType: 'text/plain',
-			sizeBytes: 1_280
 		};
 	}
 
@@ -204,8 +203,9 @@
 			description: 'Fresh teacher-review card before any student reply arrives.',
 			review: reviewNeedsRevision,
 			thread: null,
-			showComposer: true,
-			draft: ''
+			composer: {
+				show: true
+			}
 		},
 		{
 			id: 'open',
@@ -227,8 +227,9 @@
 					}
 				]
 			},
-			showComposer: true,
-			draft: 'I want to try the recount again.'
+			composer: {
+				show: true
+			}
 		},
 		{
 			id: 'connecting',
@@ -246,7 +247,9 @@
 				]
 			},
 			processing: true,
-			showComposer: true
+			composer: {
+				show: true
+			}
 		},
 		{
 			id: 'thinking',
@@ -265,7 +268,9 @@
 			},
 			runtimeStatus: 'thinking',
 			thinkingText: sampleThoughtLines.join('\n'),
-			showComposer: true
+			composer: {
+				show: true
+			}
 		},
 		{
 			id: 'responding',
@@ -285,7 +290,9 @@
 			runtimeStatus: 'responding',
 			thinkingText: sampleThoughtLines.join('\n'),
 			assistantDraftText: sampleResponse,
-			showComposer: true
+			composer: {
+				show: true
+			}
 		},
 		{
 			id: 'optional',
@@ -293,8 +300,9 @@
 			description: 'Correct solution with no thread yet.',
 			review: reviewCorrect,
 			thread: null,
-			showComposer: true,
-			draft: ''
+			composer: {
+				show: true
+			}
 		},
 		{
 			id: 'shared',
@@ -316,7 +324,9 @@
 					}
 				]
 			},
-			showComposer: true
+			composer: {
+				show: true
+			}
 		},
 		{
 			id: 'resolved-collapsed',
@@ -338,7 +348,9 @@
 					}
 				]
 			},
-			showComposer: false,
+			composer: {
+				show: false
+			},
 			showFollowUpButton: true,
 			open: false
 		}
@@ -358,25 +370,62 @@
 
 	const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-	let galleryDrafts = $state<Record<string, string>>(
-		Object.fromEntries(galleryCards.map((card) => [card.id, card.draft ?? '']))
+	function hasPersistedThread(thread: PaperSheetFeedbackThread | null): boolean {
+		return (thread?.turns.length ?? 0) > 0;
+	}
+
+	function getInitialComposerDraft(
+		thread: PaperSheetFeedbackThread | null,
+		composer: FeedbackComposerPreset | undefined
+	): string {
+		if (hasPersistedThread(thread) && !(composer?.resolvedFollowUpMode ?? false)) {
+			return '';
+		}
+		return composer?.initialDraft ?? '';
+	}
+
+	function getInitialComposerAttachments(
+		thread: PaperSheetFeedbackThread | null,
+		composer: FeedbackComposerPreset | undefined
+	): PaperSheetComposerAttachmentDraft[] {
+		if (hasPersistedThread(thread) && !(composer?.resolvedFollowUpMode ?? false)) {
+			return [];
+		}
+		return composer?.initialAttachments ?? [];
+	}
+
+	let galleryComposerDrafts = $state<Record<string, string>>(
+		Object.fromEntries(
+			galleryCards.map((card) => [
+				card.id,
+				getInitialComposerDraft(card.thread, card.composer)
+			])
+		)
 	);
 	let galleryOpenStates = $state<Record<string, boolean>>(
 		Object.fromEntries(galleryCards.map((card) => [card.id, card.open ?? true]))
 	);
 	let galleryFollowUpModes = $state<Record<string, boolean>>({});
-	let galleryAttachments = $state<Record<string, PaperSheetComposerAttachmentDraft[]>>({});
+	let galleryComposerAttachments = $state<Record<string, PaperSheetComposerAttachmentDraft[]>>(
+		Object.fromEntries(
+			galleryCards.map((card) => [
+				card.id,
+				getInitialComposerAttachments(card.thread, card.composer)
+			])
+		)
+	);
 
 	let phaseIndex = $state<PhaseIndex>(0);
 	let playing = $state(false);
 	let playAbort = $state<AbortController | null>(null);
 	let thoughtText = $state('');
 	let responseText = $state('');
-	let progressionDraft = $state('');
+	let progressionComposerDraft = $state('');
 	let progressionOpen = $state(true);
-	let progressionAttachments = $state<PaperSheetComposerAttachmentDraft[]>([]);
+	let progressionComposerAttachments = $state<PaperSheetComposerAttachmentDraft[]>([]);
 	let progressionIncludeImage = $state(false);
 	let progressionIncludeTextFile = $state(false);
+	const progressionFollowUpDraft = 'Can you check my new final sentence once more?';
 
 	function createDraftAttachments(files: File[]): PaperSheetComposerAttachmentDraft[] {
 		return files.map((file, index) => ({
@@ -390,17 +439,6 @@
 			sizeBytes: file.size,
 			...(file.type.startsWith('image/') ? { previewUrl: URL.createObjectURL(file) } : {})
 		}));
-	}
-
-	function buildPresetDraftAttachments(): PaperSheetComposerAttachmentDraft[] {
-		const attachments: PaperSheetComposerAttachmentDraft[] = [];
-		if (progressionIncludeImage) {
-			attachments.push(createDraftAttachment('image'));
-		}
-		if (progressionIncludeTextFile) {
-			attachments.push(createDraftAttachment('text-file'));
-		}
-		return attachments;
 	}
 
 	function buildPresetThreadAttachments(): PaperSheetFeedbackAttachment[] {
@@ -436,8 +474,34 @@
 		return 6;
 	}
 
-	function applyPhase(next: PhaseIndex): void {
+	function resetProgressionComposer(next: PhaseIndex): void {
+		progressionComposerDraft = next === 6 ? progressionFollowUpDraft : '';
+		progressionComposerAttachments = [];
+	}
+
+	function setProgressionPhase(next: PhaseIndex): void {
 		phaseIndex = next;
+		resetProgressionComposer(next);
+	}
+
+	function buildGalleryComposerState(card: FeedbackDemoCard): FeedbackComposerState {
+		const followUpMode = galleryFollowUpModes[card.id] ?? false;
+		return {
+			draft:
+				galleryComposerDrafts[card.id] ??
+				getInitialComposerDraft(card.thread, card.composer),
+			attachments:
+				galleryComposerAttachments[card.id] ??
+				getInitialComposerAttachments(card.thread, card.composer),
+			show: followUpMode || (card.composer?.show ?? true),
+			allowAttachments: card.composer?.allowAttachments ?? true,
+			allowTakePhoto: card.composer?.allowTakePhoto ?? false,
+			resolvedFollowUpMode: followUpMode || (card.composer?.resolvedFollowUpMode ?? false)
+		};
+	}
+
+	function applyPhase(next: PhaseIndex): void {
+		setProgressionPhase(next);
 		if (playing) {
 			return;
 		}
@@ -450,12 +514,6 @@
 		} else {
 			thoughtText = sampleThoughtLines.join('\n');
 			responseText = sampleResponse;
-		}
-		if (next <= 4) {
-			progressionDraft = next <= 1 ? 'I think the count should be larger than 14.' : '';
-		}
-		if (next === 6) {
-			progressionDraft = 'Can you check my new final sentence once more?';
 		}
 	}
 
@@ -474,30 +532,28 @@
 		const abortController = new AbortController();
 		playAbort = abortController;
 		playing = true;
-		phaseIndex = 0;
+		setProgressionPhase(0);
 		thoughtText = '';
 		responseText = '';
-		progressionDraft = 'I think the count should be larger than 14.';
 
 		try {
 			await sleep(450);
 			if (abortController.signal.aborted) {
 				return;
 			}
-			phaseIndex = 1;
+			setProgressionPhase(1);
 
 			await sleep(500);
 			if (abortController.signal.aborted) {
 				return;
 			}
-			phaseIndex = 2;
-			progressionDraft = '';
+			setProgressionPhase(2);
 
 			await sleep(550);
 			if (abortController.signal.aborted) {
 				return;
 			}
-			phaseIndex = 3;
+			setProgressionPhase(3);
 			for (const line of sampleThoughtLines) {
 				if (abortController.signal.aborted) {
 					return;
@@ -509,7 +565,7 @@
 			if (abortController.signal.aborted) {
 				return;
 			}
-			phaseIndex = 4;
+			setProgressionPhase(4);
 			const responseChunks = sampleResponse.split(/(\s+)/u);
 			for (const chunk of responseChunks) {
 				if (!chunk) {
@@ -525,14 +581,13 @@
 			if (abortController.signal.aborted) {
 				return;
 			}
-			phaseIndex = 5;
+			setProgressionPhase(5);
 
 			await sleep(650);
 			if (abortController.signal.aborted) {
 				return;
 			}
-			phaseIndex = 6;
-			progressionDraft = 'Can you check my new final sentence once more?';
+			setProgressionPhase(6);
 		} finally {
 			playing = false;
 			playAbort = null;
@@ -581,18 +636,35 @@
 		};
 	}
 
+	function buildProgressionPreviewState(): ProgressionPreviewState {
+		const runtimeStatus = (() => {
+			if (phaseIndex === 3) {
+				return 'thinking' as const;
+			}
+			if (phaseIndex === 4) {
+				return 'responding' as const;
+			}
+			return null;
+		})();
+
+		return {
+			thread: buildProgressionThread(),
+			processing: phaseIndex === 2,
+			runtimeStatus,
+			showFollowUpButton: phaseIndex === 5,
+			composer: {
+				draft: progressionComposerDraft,
+				attachments: progressionComposerAttachments,
+				show: phaseIndex <= 4 || phaseIndex === 6,
+				allowAttachments: true,
+				allowTakePhoto: false,
+				resolvedFollowUpMode: phaseIndex === 6
+			}
+		};
+	}
+
 	const progressionPhaseLabel = $derived(progressionLabels[phaseIndex]);
-	const progressionThread = $derived.by(() => buildProgressionThread());
-	const progressionProcessing = $derived(phaseIndex === 2);
-	const progressionRuntimeStatus = $derived.by(() => {
-		if (phaseIndex === 3) {
-			return 'thinking' as const;
-		}
-		if (phaseIndex === 4) {
-			return 'responding' as const;
-		}
-		return null;
-	});
+	const progressionPreviewState = $derived.by(() => buildProgressionPreviewState());
 </script>
 
 <div class="space-y-6">
@@ -675,18 +747,18 @@
 				<PaperSheetQuestionFeedback
 					review={reviewNeedsRevision}
 					open={progressionOpen}
-					draft={progressionDraft}
-					thread={progressionThread}
-					processing={progressionProcessing}
-					runtimeStatus={progressionRuntimeStatus}
+					draft={progressionPreviewState.composer.draft}
+					thread={progressionPreviewState.thread}
+					processing={progressionPreviewState.processing}
+					runtimeStatus={progressionPreviewState.runtimeStatus}
 					thinkingText={thoughtText || null}
 					assistantDraftText={responseText || null}
-					showComposer={phaseIndex <= 4 || phaseIndex === 6}
-					showFollowUpButton={phaseIndex === 5}
-					draftAttachments={[...buildPresetDraftAttachments(), ...progressionAttachments]}
-					allowAttachments={true}
-					allowTakePhoto={false}
-					resolvedFollowUpMode={phaseIndex === 6}
+					showComposer={progressionPreviewState.composer.show}
+					showFollowUpButton={progressionPreviewState.showFollowUpButton}
+					draftAttachments={progressionPreviewState.composer.attachments}
+					allowAttachments={progressionPreviewState.composer.allowAttachments}
+					allowTakePhoto={progressionPreviewState.composer.allowTakePhoto}
+					resolvedFollowUpMode={progressionPreviewState.composer.resolvedFollowUpMode}
 					questionLabel="question 1"
 					onToggle={() => {
 						progressionOpen = !progressionOpen;
@@ -696,19 +768,22 @@
 						applyPhase(6);
 					}}
 					onDraftChange={(value) => {
-						progressionDraft = value;
+						progressionComposerDraft = value;
 					}}
 					onAttachFiles={(files) => {
-						progressionAttachments = [...progressionAttachments, ...createDraftAttachments(files)];
+						progressionComposerAttachments = [
+							...progressionComposerAttachments,
+							...createDraftAttachments(files)
+						];
 					}}
 					onRemoveDraftAttachment={(localId) => {
-						progressionAttachments = progressionAttachments.filter(
+						progressionComposerAttachments = progressionComposerAttachments.filter(
 							(attachment) => attachment.localId !== localId
 						);
 					}}
 					onReply={() => {
-						progressionDraft = '';
-						progressionAttachments = [];
+						progressionComposerDraft = '';
+						progressionComposerAttachments = [];
 					}}
 				/>
 			</div>
@@ -755,6 +830,7 @@
 		</Card.Header>
 		<Card.Content class="grid gap-4 xl:grid-cols-2">
 			{#each galleryCards as card (card.id)}
+				{@const composerState = buildGalleryComposerState(card)}
 				<div class="space-y-3 rounded-xl border border-border/70 p-4">
 					<div class="space-y-1">
 						<p class="text-sm font-semibold text-foreground">{card.title}</p>
@@ -765,18 +841,18 @@
 						<PaperSheetQuestionFeedback
 							review={card.review}
 							open={galleryOpenStates[card.id] ?? (card.open ?? true)}
-							draft={galleryDrafts[card.id] ?? (card.draft ?? '')}
+							draft={composerState.draft}
 							thread={card.thread}
 							processing={card.processing ?? false}
 							runtimeStatus={card.runtimeStatus ?? null}
 							thinkingText={card.thinkingText ?? null}
 							assistantDraftText={card.assistantDraftText ?? null}
-							showComposer={(card.showComposer ?? true) || (galleryFollowUpModes[card.id] ?? false)}
+							showComposer={composerState.show}
 							showFollowUpButton={Boolean(card.showFollowUpButton && !(galleryFollowUpModes[card.id] ?? false))}
-							draftAttachments={galleryAttachments[card.id] ?? []}
-							allowAttachments={card.allowAttachments ?? true}
-							allowTakePhoto={false}
-							resolvedFollowUpMode={Boolean(card.resolvedFollowUpMode || (galleryFollowUpModes[card.id] ?? false))}
+							draftAttachments={composerState.attachments}
+							allowAttachments={composerState.allowAttachments}
+							allowTakePhoto={composerState.allowTakePhoto}
+							resolvedFollowUpMode={composerState.resolvedFollowUpMode}
 							questionLabel={card.id}
 							onToggle={() => {
 								galleryOpenStates = {
@@ -795,35 +871,35 @@
 								};
 							}}
 							onDraftChange={(value) => {
-								galleryDrafts = {
-									...galleryDrafts,
+								galleryComposerDrafts = {
+									...galleryComposerDrafts,
 									[card.id]: value
 								};
 							}}
 							onAttachFiles={(files) => {
-								galleryAttachments = {
-									...galleryAttachments,
+								galleryComposerAttachments = {
+									...galleryComposerAttachments,
 									[card.id]: [
-										...(galleryAttachments[card.id] ?? []),
+										...(galleryComposerAttachments[card.id] ?? []),
 										...createDraftAttachments(files)
 									]
 								};
 							}}
 							onRemoveDraftAttachment={(localId) => {
-								galleryAttachments = {
-									...galleryAttachments,
-									[card.id]: (galleryAttachments[card.id] ?? []).filter(
+								galleryComposerAttachments = {
+									...galleryComposerAttachments,
+									[card.id]: (galleryComposerAttachments[card.id] ?? []).filter(
 										(attachment) => attachment.localId !== localId
 									)
 								};
 							}}
 							onReply={() => {
-								galleryDrafts = {
-									...galleryDrafts,
+								galleryComposerDrafts = {
+									...galleryComposerDrafts,
 									[card.id]: ''
 								};
-								galleryAttachments = {
-									...galleryAttachments,
+								galleryComposerAttachments = {
+									...galleryComposerAttachments,
 									[card.id]: []
 								};
 							}}
