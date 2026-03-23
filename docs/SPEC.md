@@ -432,7 +432,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
   - Failed runs show a Retry button in the run header; retrying creates a new agent run with the same prompt and retry-safe metadata, copies the prior workspace files into a new workspace, and starts a fresh task before navigating to the new run.
   - Run log view defaults to tailing the latest lines (auto-scrolls while pinned to bottom, stops auto-follow when the user scrolls up), preserves newline formatting inside each log entry, and shows the raw chronological log stream instead of appending a merged thought snapshot at the end.
   - A separate `Cloud logs` section fetches Google Cloud Logging for the same run (filtered by the authenticated user plus agent/workspace identifiers) and supports manual refresh so crashed or partially-written runs still expose request/task/runtime logs even when Firestore log flushing stops early.
-  - Workspace files (Markdown renders inline). Image files and image storage-link files are previewable in the modal, and `Raw` opens the underlying file/link target in a new tab.
+  - Workspace files open in a preview modal. Markdown and plain-text files render inline there, including uploaded `.md`/`.txt` storage-link attachments; image files and image storage-link files show image previews, and `Raw` opens the underlying file or link target in a new tab.
   - A `Download zip` action that returns the full workspace contents (including LLM logs) plus a plain-text `agent.log` file for the run.
 - `/spark/lesson` hosts the Spark Lessons experience (quizzes, coding problems, media steps).
 - `/logout` signs out and returns to `/`.

@@ -22,6 +22,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { renderMarkdown } from '$lib/markdown';
 	import { resolveSparkAgentRunUpdatedAt } from '$lib/spark/agentRunTimestamps';
+	import { resolveWorkspaceFilePreviewKind } from '$lib/spark/agentRunFilePreview';
 	import { formatRelativeAge } from '$lib/utils/relativeAge';
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
 	import {
@@ -41,10 +42,6 @@
 		key: string;
 		timestampLabel: string;
 		line: string;
-	};
-	type WorkspaceStorageLink = {
-		storagePath: string;
-		contentType: string;
 	};
 	type AgentAvailableToolView = SparkAgentAvailableTool & {
 		callKindLabel: string | null;
@@ -106,51 +103,55 @@
 	let cloudLogsLoadedAt = $state<Date | null>(null);
 	let cloudLogsRequestSeq = 0;
 	let expandedCloudLogRows = $state<Record<string, boolean>>({});
+	let selectedFileStoragePreviewText = $state<string | null>(null);
+	let selectedFileStoragePreviewError = $state<string | null>(null);
+	let selectedFileStoragePreviewLoading = $state(false);
+	let selectedFileStoragePreviewSeq = 0;
 
 	let runLogScrollEl = $state<HTMLDivElement | null>(null);
 	let runLogScrollFrame: number | null = null;
 
+	function buildWorkspaceLinkHref(workspaceId: string, filePath: string): string {
+		const params = new URLSearchParams({
+			workspaceId,
+			path: filePath
+		});
+		return `/api/spark/agents/workspace-link?${params.toString()}`;
+	}
+
 	const selectedFile = $derived(
 		selectedFilePath ? (files.find((file) => file.path === selectedFilePath) ?? null) : null
 	);
-	const selectedFileStorageLink = $derived.by(() => {
-		if (!selectedFile || selectedFile.type !== 'storage_link') {
+	const selectedFilePreviewKind = $derived.by(() =>
+		selectedFile ? resolveWorkspaceFilePreviewKind(selectedFile) : null
+	);
+	const selectedFileWorkspaceLinkHref = $derived.by(() => {
+		if (!selectedFile || selectedFile.type !== 'storage_link' || !agent?.workspaceId) {
 			return null;
 		}
-		return {
-			storagePath: selectedFile.storagePath,
-			contentType: selectedFile.contentType
-		} satisfies WorkspaceStorageLink;
-	});
-	const selectedFileIsMarkdown = $derived.by(() => {
-		const path = selectedFile?.path?.toLowerCase() ?? '';
-		return path.endsWith('.md') || path.endsWith('.markdown');
+		return buildWorkspaceLinkHref(agent.workspaceId, selectedFile.path);
 	});
 	const selectedFileImageSrc = $derived.by(() => {
-		if (!selectedFile) {
+		if (!selectedFile || selectedFilePreviewKind !== 'image' || !selectedFileWorkspaceLinkHref) {
 			return null;
 		}
-		if (
-			selectedFileStorageLink &&
-			selectedFileStorageLink.contentType.toLowerCase().startsWith('image/') &&
-			agent?.workspaceId
-		) {
-			const params = new URLSearchParams({
-				workspaceId: agent.workspaceId,
-				path: selectedFile.path
-			});
-			return `/api/spark/agents/workspace-link?${params.toString()}`;
-		}
-		return null;
+		return selectedFileWorkspaceLinkHref;
 	});
-	const selectedFileHtml = $derived(
-		selectedFileIsMarkdown &&
-			selectedFile &&
-			selectedFile.type !== 'storage_link' &&
-			selectedFile.content
-			? renderMarkdown(selectedFile.content)
-			: ''
-	);
+	const selectedFilePreviewContent = $derived.by(() => {
+		if (!selectedFile) {
+			return '';
+		}
+		if (selectedFile.type !== 'storage_link') {
+			return selectedFile.content;
+		}
+		return selectedFileStoragePreviewText ?? '';
+	});
+	const selectedFileHtml = $derived.by(() => {
+		if (selectedFilePreviewKind !== 'markdown' || selectedFilePreviewContent.length === 0) {
+			return '';
+		}
+		return renderMarkdown(selectedFilePreviewContent);
+	});
 	const promptHtml = $derived.by(() => {
 		if (!agent) {
 			return '';
@@ -801,6 +802,57 @@
 		if (!browser) {
 			return;
 		}
+		const file = selectedFile;
+		const previewKind = selectedFilePreviewKind;
+		const previewHref = selectedFileWorkspaceLinkHref;
+		const requestSeq = ++selectedFileStoragePreviewSeq;
+
+		selectedFileStoragePreviewText = null;
+		selectedFileStoragePreviewError = null;
+		selectedFileStoragePreviewLoading = false;
+
+		if (!file || file.type !== 'storage_link' || !previewHref) {
+			return;
+		}
+		if (previewKind !== 'markdown' && previewKind !== 'text') {
+			return;
+		}
+
+		selectedFileStoragePreviewLoading = true;
+		void fetch(previewHref, { method: 'GET' })
+			.then(async (response) => {
+				if (!response.ok) {
+					const payload = await response.json().catch(() => null);
+					throw new Error(payload?.message ?? payload?.error ?? 'preview_failed');
+				}
+				return response.text();
+			})
+			.then((content) => {
+				if (requestSeq !== selectedFileStoragePreviewSeq) {
+					return;
+				}
+				selectedFileStoragePreviewText = content;
+			})
+			.catch((previewError) => {
+				if (requestSeq !== selectedFileStoragePreviewSeq) {
+					return;
+				}
+				selectedFileStoragePreviewError =
+					previewError instanceof Error
+						? previewError.message
+						: 'Unable to load this file preview.';
+			})
+			.finally(() => {
+				if (requestSeq === selectedFileStoragePreviewSeq) {
+					selectedFileStoragePreviewLoading = false;
+				}
+			});
+	});
+
+	$effect(() => {
+		if (!browser) {
+			return;
+		}
 		if (!userId || !runId || !authReady) {
 			cloudLogs = [];
 			cloudLogsLoading = false;
@@ -928,6 +980,10 @@
 		cloudLogsError = null;
 		cloudLogsLoadedAt = null;
 		expandedCloudLogRows = {};
+		selectedFileStoragePreviewText = null;
+		selectedFileStoragePreviewError = null;
+		selectedFileStoragePreviewLoading = false;
+		selectedFileStoragePreviewSeq += 1;
 		files = [];
 	});
 
@@ -1453,9 +1509,20 @@
 			</div>
 		</header>
 		<div class="file-dialog__body">
-			{#if selectedFileIsMarkdown}
+			{#if selectedFileStoragePreviewLoading}
+				<div class="file-storage-link-preview">
+					<p>Loading preview…</p>
+				</div>
+			{:else if selectedFileStoragePreviewError}
+				<div class="file-storage-link-preview">
+					<p>Unable to load this file preview.</p>
+					<p class="file-storage-link-preview__path">{selectedFileStoragePreviewError}</p>
+				</div>
+			{:else if selectedFilePreviewKind === 'markdown'}
 				<div class="markdown-preview">{@html selectedFileHtml}</div>
-			{:else if selectedFileImageSrc}
+			{:else if selectedFilePreviewKind === 'text'}
+				<pre class="file-preview"><code>{selectedFilePreviewContent}</code></pre>
+			{:else if selectedFilePreviewKind === 'image' && selectedFileImageSrc}
 				<div class="file-image-preview">
 					<img src={selectedFileImageSrc} alt={selectedFile.path} loading="lazy" />
 				</div>
