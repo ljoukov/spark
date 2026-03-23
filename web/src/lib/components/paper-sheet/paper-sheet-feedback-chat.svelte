@@ -131,6 +131,8 @@
 			showAttach={showComposerTools}
 			showMic={showComposerTools}
 			showTakePhoto={showComposerTools}
+			showSubmitSpinner={runtimeLocked}
+			compactSubmitSpinner={runtimeLocked}
 			inputClass={composerInputClass}
 			disabled={composerDisabled}
 			onInput={({ value }) => {
@@ -242,7 +244,7 @@
 	}
 
 	.paper-sheet-note__composer {
-		padding: 16px 16px 0;
+		padding: 16px 0 0;
 		--chat-composer-surface: var(--note-composer-surface);
 		--chat-composer-border: var(--note-input-border);
 		--chat-composer-stack-gap: 0.4rem;
@@ -277,6 +279,18 @@
 		);
 		--chat-composer-send-disabled-fg: var(--paper-text-subtle, rgba(87, 71, 58, 0.42));
 		--chat-composer-send-shadow: none;
+		--chat-composer-spinner-shell-padding: 0.18rem;
+		--chat-composer-spinner-shell-bg: color-mix(
+			in srgb,
+			var(--paper-surface-elevated, #ffffff) 92%,
+			var(--note-left) 8%
+		);
+		--chat-composer-spinner-shell-border: color-mix(
+			in srgb,
+			var(--note-left) 34%,
+			var(--paper-surface, #ffffff)
+		);
+		--chat-composer-spinner-shell-fg: var(--sheet-color);
 	}
 
 	.paper-sheet-note__composer.is-runtime-locked {
@@ -319,20 +333,9 @@
 		color: var(--paper-placeholder, rgba(148, 163, 184, 0.96));
 	}
 
-	:global(.paper-sheet-note__input--locked) {
-		background: color-mix(
-			in srgb,
-			var(--paper-surface-soft, #f6f6f6) 88%,
-			var(--note-left) 12%
-		);
-		border-radius: 12px;
-		padding: 0.55rem 0.75rem 0.45rem !important;
-		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--note-left) 16%, transparent);
-	}
-
 	@media (max-width: 720px) {
 		.paper-sheet-note__composer {
-			padding: 16px 16px 0;
+			padding: 16px 0 0;
 			--chat-composer-button-size: 2rem;
 		}
 

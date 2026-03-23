@@ -477,7 +477,7 @@
 				</Button>
 			</div>
 
-			<div class="feedback-preview-surface">
+			<div class="feedback-preview-surface feedback-preview-surface--sheet-width">
 				<PaperSheetQuestionFeedback
 					review={reviewNeedsRevision}
 					open={progressionOpen}
@@ -608,6 +608,12 @@
 		--paper-review-teacher-bg: #fff6d8;
 		--paper-review-teacher-border: #d6a11e;
 		--paper-review-teacher-text: #b07a00;
+	}
+
+	.feedback-preview-surface--sheet-width {
+		width: min(100%, 1024px);
+		max-width: 1024px;
+		margin: 0 auto;
 	}
 
 	@media (max-width: 900px) {
