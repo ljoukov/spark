@@ -4,6 +4,7 @@ import type {
 	PaperSheetCalcQuestion,
 	PaperSheetContentSection as SharedPaperSheetContentSection,
 	PaperSheetData as SharedPaperSheetData,
+	PaperSheetFeedbackAttachment,
 	PaperSheetFeedbackThread,
 	PaperSheetFeedbackTurn,
 	PaperSheetFillQuestion,
@@ -19,10 +20,18 @@ import type {
 	PaperSheetSpellingQuestion
 } from '@spark/schemas';
 
-export type { PaperSheetBlank, PaperSheetCalcQuestion, PaperSheetFeedbackThread, PaperSheetFeedbackTurn, PaperSheetFillQuestion, PaperSheetHookSection, PaperSheetInfoBox, PaperSheetLinesQuestion, PaperSheetMatchQuestion, PaperSheetMcqQuestion, PaperSheetQuestionReview, PaperSheetQuestionReviewStatus, PaperSheetReview, PaperSheetScore, PaperSheetSpellingQuestion };
+export type { PaperSheetBlank, PaperSheetCalcQuestion, PaperSheetFeedbackAttachment, PaperSheetFeedbackThread, PaperSheetFeedbackTurn, PaperSheetFillQuestion, PaperSheetHookSection, PaperSheetInfoBox, PaperSheetLinesQuestion, PaperSheetMatchQuestion, PaperSheetMcqQuestion, PaperSheetQuestionReview, PaperSheetQuestionReviewStatus, PaperSheetReview, PaperSheetScore, PaperSheetSpellingQuestion };
 
 export type PaperSheetAnswers = SharedPaperSheetAnswers;
 export type PaperSheetMockReview = PaperSheetReview;
+export type PaperSheetComposerAttachmentDraft = {
+	localId: string;
+	file: File;
+	filename: string;
+	contentType: string;
+	sizeBytes: number;
+	previewUrl?: string | null;
+};
 
 export type PaperSheetQuestion =
 	| PaperSheetFillQuestion

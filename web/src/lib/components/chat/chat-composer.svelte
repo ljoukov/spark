@@ -30,6 +30,7 @@
 		showAttach?: boolean;
 		showMic?: boolean;
 		showTakePhoto?: boolean;
+		submitReady?: boolean;
 		attachmentShortcutLabel?: string | null;
 		onInput?: (detail: { value: string; isExpanded?: boolean }) => void;
 		onSubmit?: (detail: { value: string }) => void;
@@ -58,6 +59,7 @@
 		showAttach = false,
 		showMic = false,
 		showTakePhoto = false,
+		submitReady = undefined,
 		attachmentShortcutLabel = null,
 		onInput = undefined,
 		onSubmit = undefined,
@@ -73,7 +75,9 @@
 	let compactSpinnerVisible = $state(false);
 	let preparingCompactSpinner = $state(false);
 
-	const canSubmit = $derived(!disabled && inputValue.trim().length > 0);
+	const canSubmit = $derived(
+		typeof submitReady === 'boolean' ? submitReady && !disabled : !disabled && inputValue.trim().length > 0
+	);
 	const hasAttachAction = $derived(Boolean(onAttachSelect));
 	const hasTakePhotoAction = $derived(Boolean(onTakePhotoSelect));
 	const hasMicAction = $derived(Boolean(onMicClick));
@@ -96,7 +100,7 @@
 
 	function handleSubmit() {
 		const trimmed = inputValue.trim();
-		if (!trimmed || disabled) {
+		if (!canSubmit || disabled) {
 			return;
 		}
 		onSubmit?.({ value: trimmed });

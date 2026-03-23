@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import {
 	SparkGraderWorksheetReportSchema,
 	SparkTutorComposerStateSchema,
@@ -78,8 +80,28 @@ export function buildTutorQuestionTurnsDirectoryPath(questionId: string): string
 	return `${buildTutorQuestionDirectoryPath(questionId)}/turns`;
 }
 
+export function buildTutorQuestionAttachmentsDirectoryPath(questionId: string): string {
+	return `${buildTutorQuestionDirectoryPath(questionId)}/uploads`;
+}
+
 function formatTurnFileStamp(now: Date): string {
 	return now.toISOString().replace(/[:.]/g, '-');
+}
+
+function sanitizeTutorAttachmentFilename(filename: string): string {
+	const ext = path.extname(filename).toLowerCase();
+	const base = path.basename(filename, ext);
+	const normalizedBase = base
+		.trim()
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '')
+		.slice(0, 80);
+	const normalizedExt = ext
+		.replace(/[^a-z0-9.]+/g, '')
+		.slice(0, 16);
+	const safeBase = normalizedBase.length > 0 ? normalizedBase : 'upload';
+	return `${safeBase}${normalizedExt}`;
 }
 
 export function buildTutorQuestionTurnPath(options: {
@@ -88,6 +110,18 @@ export function buildTutorQuestionTurnPath(options: {
 	now: Date;
 }): string {
 	return `${buildTutorQuestionTurnsDirectoryPath(options.questionId)}/${formatTurnFileStamp(options.now)}-${options.author}.json`;
+}
+
+export function buildTutorQuestionAttachmentPath(options: {
+	questionId: string;
+	fileId: string;
+	filename: string;
+	now: Date;
+	index: number;
+}): string {
+	const stamp = formatTurnFileStamp(options.now);
+	const safeFilename = sanitizeTutorAttachmentFilename(options.filename);
+	return `${buildTutorQuestionAttachmentsDirectoryPath(options.questionId)}/${stamp}-${options.index.toString()}-${options.fileId}-${safeFilename}`;
 }
 
 export function buildTutorComposerState(

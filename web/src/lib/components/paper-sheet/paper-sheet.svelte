@@ -1,13 +1,26 @@
 <script lang="ts">
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import {
+		MAX_SPARK_ATTACHMENTS_PER_REPLY,
+		MAX_SPARK_ATTACHMENT_FILE_SIZE_BYTES,
+		MAX_SPARK_ATTACHMENT_TOTAL_SIZE_BYTES,
+		normalizeAttachmentForModel,
+		resolveClientAttachmentContentType
+	} from '$lib/client/sparkAttachmentDrafts';
 	import { MarkdownContent } from '$lib/components/markdown/index.js';
+	import {
+		SPARK_ATTACHMENT_UNSUPPORTED_MESSAGE,
+		isSparkSupportedClientFile
+	} from '$lib/spark/attachments';
 	import PaperSheetQuestionFeedback from './paper-sheet-question-feedback.svelte';
 	import type {
 		PaperSheetAnswers,
 		PaperSheetBlank,
+		PaperSheetComposerAttachmentDraft,
 		PaperSheetContentSection,
 		PaperSheetData,
+		PaperSheetFeedbackAttachment,
 		PaperSheetFeedbackThread,
 		PaperSheetHookSection,
 		PaperSheetMockReview,
@@ -135,9 +148,34 @@
 		return next;
 	}
 
-	function removeQuestionKey<T extends Record<string, boolean | number | string>>(value: T, questionKey: string): T {
+	function removeQuestionKey<T extends Record<string, unknown>>(value: T, questionKey: string): T {
 		const { [questionKey]: _removed, ...rest } = value;
 		return rest as T;
+	}
+
+	function cleanupPreviewUrl(previewUrl?: string | null): void {
+		if (!previewUrl || typeof URL === 'undefined') {
+			return;
+		}
+		URL.revokeObjectURL(previewUrl);
+	}
+
+	function cleanupDraftAttachments(entries: PaperSheetComposerAttachmentDraft[] | undefined): void {
+		for (const entry of entries ?? []) {
+			cleanupPreviewUrl(entry.previewUrl);
+		}
+	}
+
+	function cleanupThreadAttachmentUrls(threads: Record<string, PaperSheetFeedbackThread>): void {
+		for (const thread of Object.values(threads)) {
+			for (const turn of thread.turns) {
+				for (const attachment of turn.attachments ?? []) {
+					if (attachment.url?.startsWith('blob:')) {
+						cleanupPreviewUrl(attachment.url);
+					}
+				}
+			}
+		}
 	}
 
 	function shouldRenderLinesAnswerAsMarkdown(question: PaperSheetLinesQuestion): boolean {
@@ -505,13 +543,21 @@
 		editable?: boolean;
 		allowFeedbackReplies?: boolean;
 		showFooter?: boolean;
-		onReplyToTutor?: ((questionId: string, draft: string) => void | Promise<void>) | undefined;
+		onReplyToTutor?:
+			| ((
+					questionId: string,
+					draft: string,
+					attachments: File[]
+			  ) => boolean | Promise<boolean> | void | Promise<void>)
+			| undefined;
 	} = $props();
 
 	let localAnswers = $state<PaperSheetAnswers>({});
 	let checked = $state(false);
 	let mockReview = $state<PaperSheetMockReview | null>(null);
 	let feedbackDrafts = $state<Record<string, string>>({});
+	let feedbackDraftAttachments = $state<Record<string, PaperSheetComposerAttachmentDraft[]>>({});
+	let feedbackAttachmentErrors = $state<Record<string, string>>({});
 	let mockFeedbackThreads = $state<Record<string, PaperSheetFeedbackThread>>({});
 	let mockFeedbackSending = $state<Record<string, boolean>>({});
 	let feedbackRequestTokens = $state<Record<string, number>>({});
@@ -535,10 +581,16 @@
 		if (nextSheetSignature === previousSheetSignature) {
 			return;
 		}
+		for (const entries of Object.values(feedbackDraftAttachments)) {
+			cleanupDraftAttachments(entries);
+		}
+		cleanupThreadAttachmentUrls(mockFeedbackThreads);
 		localAnswers = cloneAnswers(getSeedAnswers());
 		checked = false;
 		mockReview = null;
 		feedbackDrafts = {};
+		feedbackDraftAttachments = {};
+		feedbackAttachmentErrors = {};
 		mockFeedbackThreads = {};
 		mockFeedbackSending = {};
 		feedbackRequestTokens = {};
@@ -602,8 +654,14 @@
 		if (reviewMode !== 'mock') {
 			return;
 		}
+		for (const entries of Object.values(feedbackDraftAttachments)) {
+			cleanupDraftAttachments(entries);
+		}
+		cleanupThreadAttachmentUrls(mockFeedbackThreads);
 		mockReview = buildMockReview(sheet);
 		feedbackDrafts = {};
+		feedbackDraftAttachments = {};
+		feedbackAttachmentErrors = {};
 		mockFeedbackThreads = {};
 		mockFeedbackSending = {};
 		feedbackRequestTokens = {};
@@ -613,11 +671,17 @@
 	}
 
 	function handleReset(): void {
+		for (const entries of Object.values(feedbackDraftAttachments)) {
+			cleanupDraftAttachments(entries);
+		}
+		cleanupThreadAttachmentUrls(mockFeedbackThreads);
 		localAnswers = cloneAnswers(getSeedAnswers());
 		activeMatchTerms = {};
 		checked = false;
 		mockReview = null;
 		feedbackDrafts = {};
+		feedbackDraftAttachments = {};
+		feedbackAttachmentErrors = {};
 		mockFeedbackThreads = {};
 		mockFeedbackSending = {};
 		feedbackRequestTokens = {};
@@ -654,6 +718,120 @@
 
 	function getFeedbackDraft(questionKey: string): string {
 		return feedbackDrafts[questionKey] ?? '';
+	}
+
+	function getFeedbackDraftAttachments(questionKey: string): PaperSheetComposerAttachmentDraft[] {
+		return feedbackDraftAttachments[questionKey] ?? [];
+	}
+
+	function getFeedbackAttachmentError(questionKey: string): string | null {
+		return feedbackAttachmentErrors[questionKey] ?? null;
+	}
+
+	function clearFeedbackAttachmentError(questionKey: string): void {
+		if (feedbackAttachmentErrors[questionKey] === undefined) {
+			return;
+		}
+		feedbackAttachmentErrors = removeQuestionKey(feedbackAttachmentErrors, questionKey);
+	}
+
+	function setFeedbackAttachmentError(questionKey: string, message: string): void {
+		feedbackAttachmentErrors = {
+			...feedbackAttachmentErrors,
+			[questionKey]: message
+		};
+	}
+
+	async function addFeedbackDraftAttachments(questionKey: string, files: File[]): Promise<void> {
+		if (files.length === 0) {
+			return;
+		}
+		clearFeedbackAttachmentError(questionKey);
+
+		let nextEntries = [...getFeedbackDraftAttachments(questionKey)];
+		let count = nextEntries.length;
+		let totalSizeBytes = nextEntries.reduce((sum, entry) => sum + entry.sizeBytes, 0);
+
+		for (const sourceFile of files) {
+			let file = sourceFile;
+			try {
+				file = await normalizeAttachmentForModel(sourceFile);
+			} catch (error) {
+				console.warn('Failed to normalize sheet feedback attachment', {
+					questionKey,
+					filename: sourceFile.name,
+					error: error instanceof Error ? error.message : String(error)
+				});
+				setFeedbackAttachmentError(
+					questionKey,
+					'Unable to process this image in your browser. Try a smaller JPG or PNG.'
+				);
+				continue;
+			}
+
+			if (!isSparkSupportedClientFile(file)) {
+				setFeedbackAttachmentError(questionKey, SPARK_ATTACHMENT_UNSUPPORTED_MESSAGE);
+				continue;
+			}
+			if (file.size > MAX_SPARK_ATTACHMENT_FILE_SIZE_BYTES) {
+				setFeedbackAttachmentError(questionKey, 'Each file must be 25 MB or smaller.');
+				continue;
+			}
+			if (count >= MAX_SPARK_ATTACHMENTS_PER_REPLY) {
+				setFeedbackAttachmentError(questionKey, 'You can attach up to 10 files per reply.');
+				break;
+			}
+			if (totalSizeBytes + file.size > MAX_SPARK_ATTACHMENT_TOTAL_SIZE_BYTES) {
+				setFeedbackAttachmentError(questionKey, 'Attachments are limited to 50 MB total per reply.');
+				continue;
+			}
+
+			const previewUrl =
+				typeof URL !== 'undefined' && resolveClientAttachmentContentType(file).startsWith('image/')
+					? URL.createObjectURL(file)
+					: null;
+			nextEntries = [
+				...nextEntries,
+				{
+					localId:
+						typeof crypto !== 'undefined' && 'randomUUID' in crypto
+							? crypto.randomUUID()
+							: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+					file,
+					filename: file.name,
+					contentType: resolveClientAttachmentContentType(file),
+					sizeBytes: file.size,
+					previewUrl
+				}
+			];
+			count += 1;
+			totalSizeBytes += file.size;
+		}
+
+		feedbackDraftAttachments = {
+			...feedbackDraftAttachments,
+			[questionKey]: nextEntries
+		};
+	}
+
+	function removeFeedbackDraftAttachment(questionKey: string, localId: string): void {
+		const entries = getFeedbackDraftAttachments(questionKey);
+		const target = entries.find((entry) => entry.localId === localId);
+		if (!target) {
+			return;
+		}
+		cleanupPreviewUrl(target.previewUrl);
+		const nextEntries = entries.filter((entry) => entry.localId !== localId);
+		feedbackDraftAttachments =
+			nextEntries.length > 0
+				? {
+						...feedbackDraftAttachments,
+						[questionKey]: nextEntries
+					}
+				: removeQuestionKey(feedbackDraftAttachments, questionKey);
+		if (nextEntries.length === 0) {
+			clearFeedbackAttachmentError(questionKey);
+		}
 	}
 
 	function getFeedbackThread(questionKey: string): PaperSheetFeedbackThread | null {
@@ -697,25 +875,36 @@
 		};
 	}
 
-	function replyToTutor(
+	async function replyToTutor(
 		questionKey: string,
 		questionReview: PaperSheetQuestionReview,
 		draftOverride?: string
-	): void {
+	): Promise<void> {
 		const draft = (draftOverride ?? getFeedbackDraft(questionKey)).trim();
-		if (!draft || isFeedbackSending(questionKey)) {
+		const draftAttachments = getFeedbackDraftAttachments(questionKey);
+		if ((draft.length === 0 && draftAttachments.length === 0) || isFeedbackSending(questionKey)) {
 			return;
 		}
 
 		if (reviewMode !== 'mock') {
+			const didSubmit = await onReplyToTutor?.(
+				questionKey,
+				draft,
+				draftAttachments.map((attachment) => attachment.file)
+			);
+			if (didSubmit === false) {
+				return;
+			}
 			feedbackDrafts = {
 				...feedbackDrafts,
 				[questionKey]: ''
 			};
+			clearFeedbackAttachmentError(questionKey);
+			cleanupDraftAttachments(draftAttachments);
+			feedbackDraftAttachments = removeQuestionKey(feedbackDraftAttachments, questionKey);
 			if (followUpComposerQuestions[questionKey]) {
 				followUpComposerQuestions = removeQuestionKey(followUpComposerQuestions, questionKey);
 			}
-			onReplyToTutor?.(questionKey, draft);
 			return;
 		}
 
@@ -724,6 +913,8 @@
 			...feedbackDrafts,
 			[questionKey]: ''
 		};
+		clearFeedbackAttachmentError(questionKey);
+		feedbackDraftAttachments = removeQuestionKey(feedbackDraftAttachments, questionKey);
 		mockFeedbackSending = {
 			...mockFeedbackSending,
 			[questionKey]: true
@@ -747,7 +938,14 @@
 						{
 							id: `${questionKey}-student-${sentAt}`,
 							speaker: 'student',
-							text: draft
+							text: draft,
+							attachments: draftAttachments.map((attachment, index) => ({
+								id: `${questionKey}-draft-${sentAt}-${index.toString()}`,
+								filename: attachment.filename,
+								contentType: attachment.contentType,
+								sizeBytes: attachment.sizeBytes,
+								...(attachment.previewUrl ? { url: attachment.previewUrl } : {})
+							}))
 						},
 						{
 							id: `${questionKey}-tutor-${sentAt + 1}`,
@@ -1256,7 +1454,6 @@
 											resolvedFeedback &&
 											!isFollowUpComposerOpen(questionKey)
 										}
-										showComposerTools={false}
 										resolvedFollowUpMode={isFollowUpComposerOpen(questionKey)}
 										onToggle={() => {
 											toggleFeedbackCard(questionKey);
@@ -1264,11 +1461,21 @@
 										onRequestFollowUp={() => {
 											requestResolvedFollowUp(questionKey);
 										}}
+										draftAttachments={getFeedbackDraftAttachments(questionKey)}
+										draftAttachmentError={getFeedbackAttachmentError(questionKey)}
+										allowAttachments={feedbackRepliesEnabled}
+										allowTakePhoto={false}
+										onAttachFiles={(files) => {
+											void addFeedbackDraftAttachments(questionKey, files);
+										}}
+										onRemoveDraftAttachment={(localId) => {
+											removeFeedbackDraftAttachment(questionKey, localId);
+										}}
 										onDraftChange={(value) => {
 											updateFeedbackDraft(questionKey, value);
 										}}
 										onReply={(value) => {
-											replyToTutor(questionKey, questionReview, value);
+											void replyToTutor(questionKey, questionReview, value);
 										}}
 									/>
 								</div>

@@ -252,11 +252,39 @@ export const PaperSheetReviewSchema = z.object({
 
 export type PaperSheetReview = z.infer<typeof PaperSheetReviewSchema>;
 
-export const PaperSheetFeedbackTurnSchema = z.object({
+export const PaperSheetFeedbackAttachmentSchema = z.object({
   id: trimmedString,
-  speaker: z.enum(["student", "tutor"]),
-  text: trimmedString,
+  filename: trimmedString,
+  contentType: trimmedString,
+  sizeBytes: z.number().int().min(1),
+  filePath: trimmedString.optional(),
+  url: trimmedString.optional(),
 });
+
+export type PaperSheetFeedbackAttachment = z.infer<
+  typeof PaperSheetFeedbackAttachmentSchema
+>;
+
+export const PaperSheetFeedbackTurnSchema = z
+  .object({
+    id: trimmedString,
+    speaker: z.enum(["student", "tutor"]),
+    text: z.string().trim(),
+    attachments: z.array(PaperSheetFeedbackAttachmentSchema).optional(),
+  })
+  .superRefine((turn, ctx) => {
+    if (turn.text.length > 0) {
+      return;
+    }
+    if ((turn.attachments?.length ?? 0) > 0) {
+      return;
+    }
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["text"],
+      message: "Feedback turns need text or at least one attachment.",
+    });
+  });
 
 export type PaperSheetFeedbackTurn = z.infer<
   typeof PaperSheetFeedbackTurnSchema

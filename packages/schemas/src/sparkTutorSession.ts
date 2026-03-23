@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { FirestoreTimestampSchema } from "./firestore";
 import {
+  PaperSheetFeedbackAttachmentSchema,
   PaperSheetAnswersSchema,
   PaperSheetDataSchema,
   PaperSheetReviewSchema,
@@ -119,12 +120,27 @@ export type SparkTutorReviewThreadStatus = z.infer<
   typeof SparkTutorReviewThreadStatusSchema
 >;
 
-export const SparkTutorReviewMessageSchema = z.object({
-  id: trimmedString,
-  author: z.enum(["assistant", "student"]),
-  markdown: z.string().trim().min(1),
-  createdAt: z.string().datetime({ offset: true }),
-});
+export const SparkTutorReviewMessageSchema = z
+  .object({
+    id: trimmedString,
+    author: z.enum(["assistant", "student"]),
+    markdown: z.string().trim(),
+    attachments: z.array(PaperSheetFeedbackAttachmentSchema).optional(),
+    createdAt: z.string().datetime({ offset: true }),
+  })
+  .superRefine((message, ctx) => {
+    if (message.markdown.length > 0) {
+      return;
+    }
+    if ((message.attachments?.length ?? 0) > 0) {
+      return;
+    }
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["markdown"],
+      message: "Review messages need markdown or at least one attachment.",
+    });
+  });
 
 export type SparkTutorReviewMessage = z.infer<
   typeof SparkTutorReviewMessageSchema

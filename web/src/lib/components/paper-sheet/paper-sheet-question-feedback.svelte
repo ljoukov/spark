@@ -1,5 +1,9 @@
 <script lang="ts">
-	import type { PaperSheetFeedbackThread, PaperSheetQuestionReview } from './types';
+	import type {
+		PaperSheetComposerAttachmentDraft,
+		PaperSheetFeedbackThread,
+		PaperSheetQuestionReview
+	} from './types';
 	import PaperSheetFeedbackChat from './paper-sheet-feedback-chat.svelte';
 
 	function getToneClass(
@@ -98,11 +102,16 @@
 		assistantDraftText = null,
 		showComposer = true,
 		showFollowUpButton = false,
-		showComposerTools = true,
 		resolvedFollowUpMode = false,
+		draftAttachments = [],
+		draftAttachmentError = null,
+		allowAttachments = false,
+		allowTakePhoto = false,
 		questionLabel,
 		onToggle,
 		onRequestFollowUp = undefined,
+		onAttachFiles = undefined,
+		onRemoveDraftAttachment = undefined,
 		onDraftChange,
 		onReply
 	}: {
@@ -116,11 +125,16 @@
 		assistantDraftText?: string | null;
 		showComposer?: boolean;
 		showFollowUpButton?: boolean;
-		showComposerTools?: boolean;
 		resolvedFollowUpMode?: boolean;
+		draftAttachments?: PaperSheetComposerAttachmentDraft[];
+		draftAttachmentError?: string | null;
+		allowAttachments?: boolean;
+		allowTakePhoto?: boolean;
 		questionLabel: string;
 		onToggle: () => void;
 		onRequestFollowUp?: () => void;
+		onAttachFiles?: (files: File[]) => void | Promise<void>;
+		onRemoveDraftAttachment?: (localId: string) => void;
 		onDraftChange: (value: string) => void;
 		onReply: (value?: string) => void;
 	} = $props();
@@ -209,14 +223,19 @@
 					{showAssistantDraft}
 					{showComposer}
 					{showFollowUpButton}
-					{showComposerTools}
 					{resolvedFollowUpMode}
 					{draft}
+					{draftAttachments}
+					{draftAttachmentError}
+					{allowAttachments}
+					{allowTakePhoto}
 					placeholder={composerPlaceholder}
 					{questionLabel}
 					{composerDisabled}
 					{runtimeLocked}
 					{onRequestFollowUp}
+					{onAttachFiles}
+					{onRemoveDraftAttachment}
 					{onDraftChange}
 					{onReply}
 				/>
@@ -244,15 +263,11 @@
 		--note-status-pending: var(--paper-review-incorrect-text, #c66317);
 		--note-status-processing: var(--paper-review-incorrect-text, #c66317);
 		--note-status-done: var(--paper-review-correct-text, #1a8c5b);
-		--note-user-bg: color-mix(
-			in srgb,
-			var(--paper-accent-text, #2563eb) 10%,
-			var(--paper-surface-elevated, #ffffff)
-		);
+		--note-user-bg: var(--paper-lines-markdown-bg, #fdfdfd);
 		--note-user-border: color-mix(
 			in srgb,
-			var(--paper-accent-text, #2563eb) 42%,
-			var(--paper-surface, #ffffff)
+			var(--note-left) 24%,
+			var(--paper-border, rgba(33, 74, 58, 0.18))
 		);
 		--note-input-border: color-mix(in srgb, var(--note-left) 58%, var(--paper-surface, #ffffff));
 		--note-text: var(--paper-text, #241d19);

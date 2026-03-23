@@ -3,6 +3,8 @@
 	import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
 	import {
 		PaperSheetQuestionFeedback,
+		type PaperSheetComposerAttachmentDraft,
+		type PaperSheetFeedbackAttachment,
 		type PaperSheetFeedbackThread,
 		type PaperSheetQuestionReview
 	} from '$lib/components/paper-sheet/index.js';
@@ -23,11 +25,79 @@
 		assistantDraftText?: string | null;
 		showComposer?: boolean;
 		showFollowUpButton?: boolean;
-		showComposerTools?: boolean;
+		allowAttachments?: boolean;
 		resolvedFollowUpMode?: boolean;
 		draft?: string;
 		open?: boolean;
 	};
+
+	type FeedbackResponseCard = {
+		id: string;
+		title: string;
+		description: string;
+		thread: PaperSheetFeedbackThread;
+	};
+
+	const SAMPLE_IMAGE_PREVIEW_URL = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240">
+			<rect width="320" height="240" fill="#f6efe1"/>
+			<rect x="22" y="22" width="276" height="196" rx="18" fill="#fffdfa" stroke="#d6c7aa" stroke-width="4"/>
+			<rect x="48" y="48" width="224" height="120" rx="12" fill="#dfeee4"/>
+			<circle cx="92" cy="86" r="18" fill="#f4b860"/>
+			<path d="M64 160l44-42 38 30 38-48 52 60H64z" fill="#4f8c6f"/>
+			<path d="M60 188h200" stroke="#8a7b66" stroke-width="8" stroke-linecap="round"/>
+			<text x="50%" y="206" text-anchor="middle" font-family="Georgia, serif" font-size="22" fill="#5c4b3e">working photo</text>
+		</svg>`
+	)}`;
+
+	const SAMPLE_TEXT_FILE_URL = `data:text/plain;charset=utf-8,${encodeURIComponent(
+		['Divisors above 43:', '44, 45, 55, 60, 66, 90, 99, 110, 132, 165, 180, 198, 220, 330, 396, 495, 660, 990, 1980'].join(
+			'\n'
+		)
+	)}`;
+
+	function createThreadAttachment(kind: 'image' | 'text-file'): PaperSheetFeedbackAttachment {
+		if (kind === 'image') {
+			return {
+				id: 'preview-image',
+				filename: 'divisor-working.png',
+				contentType: 'image/png',
+				sizeBytes: 248_000,
+				url: SAMPLE_IMAGE_PREVIEW_URL
+			};
+		}
+		return {
+			id: 'preview-text-file',
+			filename: 'divisor-list.txt',
+			contentType: 'text/plain',
+			sizeBytes: 1_280,
+			url: SAMPLE_TEXT_FILE_URL
+		};
+	}
+
+	function createDraftAttachment(kind: 'image' | 'text-file'): PaperSheetComposerAttachmentDraft {
+		if (kind === 'image') {
+			return {
+				localId: `draft-image-${Date.now().toString()}`,
+				file: new File(['preview image placeholder'], 'divisor-working.png', {
+					type: 'image/png'
+				}),
+				filename: 'divisor-working.png',
+				contentType: 'image/png',
+				sizeBytes: 248_000,
+				previewUrl: SAMPLE_IMAGE_PREVIEW_URL
+			};
+		}
+		return {
+			localId: `draft-text-${Date.now().toString()}`,
+			file: new File(['Divisors above 43: 44, 45, 55, ...'], 'divisor-list.txt', {
+				type: 'text/plain'
+			}),
+			filename: 'divisor-list.txt',
+			contentType: 'text/plain',
+			sizeBytes: 1_280
+		};
+	}
 
 	const sampleThoughtLines = [
 		'I can keep the divisor idea and just fix the count.',
@@ -60,6 +130,72 @@
 		replyPlaceholder: 'Optional reply...',
 		followUp: 'If you want to polish it further, you can say why 44 is the smallest valid factor.'
 	};
+
+	const responseContentCards: FeedbackResponseCard[] = [
+		{
+			id: 'reply-text-only',
+			title: 'Text only',
+			description: 'Student reply renders as the current text-only bubble.',
+			thread: {
+				status: 'open',
+				turns: [
+					{
+						id: 'reply-text-only-student',
+						speaker: 'student',
+						text: 'I think I forgot to include 44 and some of the larger factor pairs.'
+					}
+				]
+			}
+		},
+		{
+			id: 'reply-text-file-only',
+			title: 'Text file only',
+			description: 'Student reply with no typed text, only an attached text file.',
+			thread: {
+				status: 'open',
+				turns: [
+					{
+						id: 'reply-text-file-student',
+						speaker: 'student',
+						text: '',
+						attachments: [createThreadAttachment('text-file')]
+					}
+				]
+			}
+		},
+		{
+			id: 'reply-image-only',
+			title: 'Image file only',
+			description: 'Student reply with no typed text, only an attached working photo.',
+			thread: {
+				status: 'open',
+				turns: [
+					{
+						id: 'reply-image-only-student',
+						speaker: 'student',
+						text: '',
+						attachments: [createThreadAttachment('image')]
+					}
+				]
+			}
+		},
+		{
+			id: 'reply-image-and-text',
+			title: 'Image + text',
+			description: 'Student reply includes a short note plus an attached image.',
+			thread: {
+				status: 'open',
+				turns: [
+					{
+						id: 'reply-image-text-student',
+						speaker: 'student',
+						text: 'Here is the part of my working where I counted the divisors.',
+						attachments: [createThreadAttachment('image')]
+					}
+				]
+			}
+		}
+	];
 
 	const galleryCards: FeedbackDemoCard[] = [
 		{
@@ -229,6 +365,7 @@
 		Object.fromEntries(galleryCards.map((card) => [card.id, card.open ?? true]))
 	);
 	let galleryFollowUpModes = $state<Record<string, boolean>>({});
+	let galleryAttachments = $state<Record<string, PaperSheetComposerAttachmentDraft[]>>({});
 
 	let phaseIndex = $state<PhaseIndex>(0);
 	let playing = $state(false);
@@ -237,6 +374,45 @@
 	let responseText = $state('');
 	let progressionDraft = $state('');
 	let progressionOpen = $state(true);
+	let progressionAttachments = $state<PaperSheetComposerAttachmentDraft[]>([]);
+	let progressionIncludeImage = $state(false);
+	let progressionIncludeTextFile = $state(false);
+
+	function createDraftAttachments(files: File[]): PaperSheetComposerAttachmentDraft[] {
+		return files.map((file, index) => ({
+			localId:
+				typeof crypto !== 'undefined' && 'randomUUID' in crypto
+					? crypto.randomUUID()
+					: `preview-${Date.now().toString()}-${index.toString()}`,
+			file,
+			filename: file.name,
+			contentType: file.type || 'application/octet-stream',
+			sizeBytes: file.size,
+			...(file.type.startsWith('image/') ? { previewUrl: URL.createObjectURL(file) } : {})
+		}));
+	}
+
+	function buildPresetDraftAttachments(): PaperSheetComposerAttachmentDraft[] {
+		const attachments: PaperSheetComposerAttachmentDraft[] = [];
+		if (progressionIncludeImage) {
+			attachments.push(createDraftAttachment('image'));
+		}
+		if (progressionIncludeTextFile) {
+			attachments.push(createDraftAttachment('text-file'));
+		}
+		return attachments;
+	}
+
+	function buildPresetThreadAttachments(): PaperSheetFeedbackAttachment[] {
+		const attachments: PaperSheetFeedbackAttachment[] = [];
+		if (progressionIncludeImage) {
+			attachments.push(createThreadAttachment('image'));
+		}
+		if (progressionIncludeTextFile) {
+			attachments.push(createThreadAttachment('text-file'));
+		}
+		return attachments;
+	}
 
 	function clampPhase(value: number): PhaseIndex {
 		if (value <= 0) {
@@ -370,6 +546,7 @@
 	}
 
 	function buildProgressionThread(): PaperSheetFeedbackThread | null {
+		const presetAttachments = buildPresetThreadAttachments();
 		if (phaseIndex === 0) {
 			return null;
 		}
@@ -380,7 +557,8 @@
 					{
 						id: 'progression-student',
 						speaker: 'student',
-						text: 'I think I missed some divisors, but I am not sure which ones.'
+						text: 'I think I missed some divisors, but I am not sure which ones.',
+						...(presetAttachments.length > 0 ? { attachments: presetAttachments } : {})
 					}
 				]
 			};
@@ -391,7 +569,8 @@
 				{
 					id: 'progression-student',
 					speaker: 'student',
-					text: 'I recounted them and the corrected answer is 19.'
+					text: 'I recounted them and the corrected answer is 19.',
+					...(presetAttachments.length > 0 ? { attachments: presetAttachments } : {})
 				},
 				{
 					id: 'progression-tutor',
@@ -477,6 +656,21 @@
 				</Button>
 			</div>
 
+			<div class="feedback-options">
+				<label class="feedback-option">
+					<input type="checkbox" bind:checked={progressionIncludeImage} disabled={playing} />
+					<span>with image</span>
+				</label>
+				<label class="feedback-option">
+					<input
+						type="checkbox"
+						bind:checked={progressionIncludeTextFile}
+						disabled={playing}
+					/>
+					<span>with text file</span>
+				</label>
+			</div>
+
 			<div class="feedback-preview-surface feedback-preview-surface--sheet-width">
 				<PaperSheetQuestionFeedback
 					review={reviewNeedsRevision}
@@ -489,7 +683,9 @@
 					assistantDraftText={responseText || null}
 					showComposer={phaseIndex <= 4 || phaseIndex === 6}
 					showFollowUpButton={phaseIndex === 5}
-					showComposerTools={false}
+					draftAttachments={[...buildPresetDraftAttachments(), ...progressionAttachments]}
+					allowAttachments={true}
+					allowTakePhoto={false}
 					resolvedFollowUpMode={phaseIndex === 6}
 					questionLabel="question 1"
 					onToggle={() => {
@@ -502,11 +698,53 @@
 					onDraftChange={(value) => {
 						progressionDraft = value;
 					}}
+					onAttachFiles={(files) => {
+						progressionAttachments = [...progressionAttachments, ...createDraftAttachments(files)];
+					}}
+					onRemoveDraftAttachment={(localId) => {
+						progressionAttachments = progressionAttachments.filter(
+							(attachment) => attachment.localId !== localId
+						);
+					}}
 					onReply={() => {
 						progressionDraft = '';
+						progressionAttachments = [];
 					}}
 				/>
 			</div>
+		</Card.Content>
+	</Card.Root>
+
+	<Card.Root class="border-border/70 bg-card/95 shadow-sm">
+		<Card.Header>
+			<Card.Title>Reply content states</Card.Title>
+			<Card.Description>
+				Focused previews for how student replies render with text-only, file-only, and mixed content.
+			</Card.Description>
+		</Card.Header>
+		<Card.Content class="grid gap-4 xl:grid-cols-2">
+			{#each responseContentCards as card (card.id)}
+				<div class="space-y-3 rounded-xl border border-border/70 p-4">
+					<div class="space-y-1">
+						<p class="text-sm font-semibold text-foreground">{card.title}</p>
+						<p class="text-xs text-muted-foreground">{card.description}</p>
+					</div>
+
+					<div class="feedback-preview-surface">
+						<PaperSheetQuestionFeedback
+							review={reviewNeedsRevision}
+							open={true}
+							draft=""
+							thread={card.thread}
+							showComposer={false}
+							questionLabel={card.id}
+							onToggle={() => {}}
+							onDraftChange={() => {}}
+							onReply={() => {}}
+						/>
+					</div>
+				</div>
+			{/each}
 		</Card.Content>
 	</Card.Root>
 
@@ -535,7 +773,9 @@
 							assistantDraftText={card.assistantDraftText ?? null}
 							showComposer={(card.showComposer ?? true) || (galleryFollowUpModes[card.id] ?? false)}
 							showFollowUpButton={Boolean(card.showFollowUpButton && !(galleryFollowUpModes[card.id] ?? false))}
-							showComposerTools={card.showComposerTools ?? false}
+							draftAttachments={galleryAttachments[card.id] ?? []}
+							allowAttachments={card.allowAttachments ?? true}
+							allowTakePhoto={false}
 							resolvedFollowUpMode={Boolean(card.resolvedFollowUpMode || (galleryFollowUpModes[card.id] ?? false))}
 							questionLabel={card.id}
 							onToggle={() => {
@@ -560,10 +800,31 @@
 									[card.id]: value
 								};
 							}}
+							onAttachFiles={(files) => {
+								galleryAttachments = {
+									...galleryAttachments,
+									[card.id]: [
+										...(galleryAttachments[card.id] ?? []),
+										...createDraftAttachments(files)
+									]
+								};
+							}}
+							onRemoveDraftAttachment={(localId) => {
+								galleryAttachments = {
+									...galleryAttachments,
+									[card.id]: (galleryAttachments[card.id] ?? []).filter(
+										(attachment) => attachment.localId !== localId
+									)
+								};
+							}}
 							onReply={() => {
 								galleryDrafts = {
 									...galleryDrafts,
 									[card.id]: ''
+								};
+								galleryAttachments = {
+									...galleryAttachments,
+									[card.id]: []
 								};
 							}}
 						/>
@@ -575,6 +836,28 @@
 </div>
 
 <style>
+	.feedback-options {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.75rem 1rem;
+		align-items: center;
+	}
+
+	.feedback-option {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--foreground);
+	}
+
+	.feedback-option input {
+		width: 1rem;
+		height: 1rem;
+		accent-color: #214a3a;
+	}
+
 	.feedback-progress-labels {
 		display: grid;
 		grid-template-columns: repeat(7, minmax(0, 1fr));

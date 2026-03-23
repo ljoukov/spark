@@ -1,18 +1,25 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
 import {
+	PaperSheetFeedbackAttachmentSchema,
 	SparkTutorSessionSchema,
 	type PaperSheetQuestion,
+	type PaperSheetFeedbackAttachment,
 	type SparkGraderWorksheetReport
 } from '@spark/schemas';
+import { upsertWorkspaceStorageLinkFileDoc } from '@spark/llm';
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
+import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken';
+import { uploadStorageObject } from '$lib/server/gcp/storageRest';
 import {
 	findWorksheetQuestionEntry,
 	safeParseGraderWorksheetReport
 } from '$lib/server/grader/problemReport';
 import { getGraderRun, getWorkspaceTextFile } from '$lib/server/grader/repo';
+import { detectSparkAttachmentContentType } from '$lib/server/spark/attachmentContentType';
+import { SPARK_ATTACHMENT_UNSUPPORTED_MESSAGE } from '$lib/spark/attachments';
 import {
 	TUTOR_FALLBACK_REVIEW_REPLY_MARKDOWN,
 	recoverTutorSessionIfStale
@@ -29,7 +36,6 @@ import {
 import {
 	createTutorSession,
 	findTutorSessionForSheet,
-	getTutorSession,
 	patchTutorSession
 } from '$lib/server/tutorSessions/repo';
 import {
@@ -38,11 +44,16 @@ import {
 	requireTutorServiceAccountJson
 } from '$lib/server/tutorSessions/service';
 import {
+	buildTutorQuestionAttachmentPath,
 	buildTutorQuestionTurnPath,
 	readTutorWorkspaceState,
 	seedTutorWorkspace,
 	writeTutorWorkspaceTextFile
 } from '$lib/server/tutorSessions/workspace';
+
+const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
+const MAX_TOTAL_SIZE_BYTES = 50 * 1024 * 1024;
+const MAX_FILES_PER_REPLY = 10;
 
 const paramsSchema = z.object({
 	sheetId: z.string().trim().min(1)
@@ -51,16 +62,82 @@ const paramsSchema = z.object({
 const requestSchema = z.object({
 	action: z.literal('reply'),
 	questionId: z.string().trim().min(1),
-	text: z.string().trim().min(1)
+	text: z.string().trim()
 });
+
+type ParsedTurnRequest = z.infer<typeof requestSchema> & {
+	files: File[];
+};
 
 function stringifyJson(value: unknown): string {
 	return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-function formatThreadMessages(markdownByRole: Array<{ author: 'assistant' | 'student'; markdown: string }>): string {
+function isFileLike(value: FormDataEntryValue | null): value is File {
+	if (!value) {
+		return false;
+	}
+	if (typeof File !== 'undefined' && value instanceof File) {
+		return true;
+	}
+	return typeof value === 'object' && value !== null && 'arrayBuffer' in value;
+}
+
+async function parseTurnRequest(request: Request): Promise<ParsedTurnRequest> {
+	const contentType = request.headers.get('content-type') ?? '';
+	if (contentType.includes('application/json')) {
+		return {
+			...requestSchema.parse(await request.json()),
+			files: []
+		};
+	}
+
+	const formData = await request.formData();
+	const parsed = requestSchema.parse({
+		action: formData.get('action'),
+		questionId: formData.get('questionId'),
+		text: formData.get('text') ?? ''
+	});
+	const files: File[] = [];
+	for (const entry of formData.getAll('file')) {
+		if (isFileLike(entry)) {
+			files.push(entry);
+		}
+	}
+	return {
+		...parsed,
+		files
+	};
+}
+
+function formatAttachmentList(attachments: PaperSheetFeedbackAttachment[]): string {
+	return attachments
+		.map(
+			(attachment) =>
+				`- ${attachment.filename} (${attachment.contentType}, ${attachment.sizeBytes.toString()} bytes)${attachment.filePath ? ` -> ${attachment.filePath}` : ''}`
+		)
+		.join('\n');
+}
+
+function formatThreadMessages(
+	markdownByRole: Array<{
+		author: 'assistant' | 'student';
+		markdown: string;
+		attachments?: PaperSheetFeedbackAttachment[] | undefined;
+	}>
+): string {
 	return markdownByRole
-		.map((entry) => `${entry.author === 'assistant' ? 'Assistant' : 'Student'}:\n${entry.markdown}`)
+		.map((entry) =>
+			[
+				`${entry.author === 'assistant' ? 'Assistant' : 'Student'}:`,
+				entry.markdown.trim().length > 0 ? entry.markdown : '(no text)',
+				entry.attachments && entry.attachments.length > 0
+					? ['Attachments:', formatAttachmentList(entry.attachments)].join('\n')
+					: null
+			]
+				.filter((value) => value !== null)
+				.join('\n')
+		)
 		.join('\n\n');
 }
 
@@ -122,11 +199,142 @@ function formatRecordedAnswer(report: SparkGraderWorksheetReport, questionId: st
 		.join('\n');
 }
 
+async function persistReplyAttachments(options: {
+	serviceAccountJson: string;
+	userId: string;
+	workspaceId: string;
+	questionId: string;
+	files: File[];
+	now: Date;
+}): Promise<PaperSheetFeedbackAttachment[]> {
+	if (options.files.length === 0) {
+		return [];
+	}
+	if (options.files.length > MAX_FILES_PER_REPLY) {
+		throw new z.ZodError([
+			{
+				code: z.ZodIssueCode.custom,
+				path: ['file'],
+				message: 'You can attach up to 10 files per reply.'
+			}
+		]);
+	}
+
+	let totalSizeBytes = 0;
+	const bucketName = `${parseGoogleServiceAccountJson(options.serviceAccountJson).projectId}.firebasestorage.app`;
+	const attachments: PaperSheetFeedbackAttachment[] = [];
+
+	for (const [index, file] of options.files.entries()) {
+		if (typeof file.size === 'number' && file.size > MAX_FILE_SIZE_BYTES) {
+			throw new z.ZodError([
+				{
+					code: z.ZodIssueCode.custom,
+					path: ['file', index],
+					message: 'Each file must be 25 MB or smaller.'
+				}
+			]);
+		}
+
+		const buffer = new Uint8Array(await file.arrayBuffer());
+		if (buffer.byteLength === 0) {
+			throw new z.ZodError([
+				{
+					code: z.ZodIssueCode.custom,
+					path: ['file', index],
+					message: 'Attached files cannot be empty.'
+				}
+			]);
+		}
+		if (buffer.byteLength > MAX_FILE_SIZE_BYTES) {
+			throw new z.ZodError([
+				{
+					code: z.ZodIssueCode.custom,
+					path: ['file', index],
+					message: 'Each file must be 25 MB or smaller.'
+				}
+			]);
+		}
+
+		totalSizeBytes += buffer.byteLength;
+		if (totalSizeBytes > MAX_TOTAL_SIZE_BYTES) {
+			throw new z.ZodError([
+				{
+					code: z.ZodIssueCode.custom,
+					path: ['file'],
+					message: 'Attachments are limited to 50 MB total per reply.'
+				}
+			]);
+		}
+
+		const contentType = detectSparkAttachmentContentType({
+			buffer,
+			filename: file.name,
+			claimedContentType: file.type
+		});
+		if (!contentType) {
+			throw new z.ZodError([
+				{
+					code: z.ZodIssueCode.custom,
+					path: ['file', index],
+					message: SPARK_ATTACHMENT_UNSUPPORTED_MESSAGE
+				}
+			]);
+		}
+
+		const fileId = createHash('md5').update(buffer).digest('hex');
+		const storagePath = `spark/uploads/${options.userId}/${fileId}`;
+		const filePath = buildTutorQuestionAttachmentPath({
+			questionId: options.questionId,
+			fileId,
+			filename: file.name || 'upload',
+			now: options.now,
+			index
+		});
+
+		await uploadStorageObject({
+			serviceAccountJson: options.serviceAccountJson,
+			bucketName,
+			objectName: storagePath,
+			contentType,
+			data: buffer,
+			onlyIfMissing: true
+		});
+		await upsertWorkspaceStorageLinkFileDoc({
+			serviceAccountJson: options.serviceAccountJson,
+			userId: options.userId,
+			workspaceId: options.workspaceId,
+			filePath,
+			storagePath,
+			contentType,
+			sizeBytes: buffer.byteLength,
+			createdAt: options.now,
+			updatedAt: options.now
+		});
+
+		attachments.push(
+			PaperSheetFeedbackAttachmentSchema.parse({
+				id: fileId,
+				filename: file.name || 'upload',
+				contentType,
+				sizeBytes: buffer.byteLength,
+				filePath
+			})
+		);
+	}
+
+	return attachments;
+}
+
 function buildSheetReplyPrompt(options: {
 	report: SparkGraderWorksheetReport;
 	questionId: string;
-	threadMessages: Array<{ author: 'assistant' | 'student'; markdown: string }>;
+	threadMessages: Array<{
+		author: 'assistant' | 'student';
+		markdown: string;
+		attachments?: PaperSheetFeedbackAttachment[] | undefined;
+	}>;
 	studentReplyMarkdown: string;
+	studentAttachments: PaperSheetFeedbackAttachment[];
 	studentTurnFilePath: string;
 }): string {
 	const entry = findWorksheetQuestionEntry(options.report.sheet, options.questionId);
@@ -142,6 +350,7 @@ function buildSheetReplyPrompt(options: {
 		'Focus only on the selected worksheet question.',
 		'The student is looking at the worksheet question, their recorded answer, the grading note, and the interactive feedback thread on the same card.',
 		'The student has already written their new reply into the workspace file listed below.',
+		'If the latest student turn includes uploaded images or documents, inspect those workspace files before you answer.',
 		'That workspace history is append-only. Do not ask to delete or rewrite prior files.',
 		'Use `wait_for_student_input` if the question still needs another revision.',
 		'Use `complete_tutor_session` only if this question is now satisfied.',
@@ -154,6 +363,7 @@ function buildSheetReplyPrompt(options: {
 		'- `state/review.json`: current per-question thread state for the whole sheet.',
 		`- \`feedback/questions/${options.questionId}/question.json\`: metadata for the selected worksheet question.`,
 		`- \`feedback/questions/${options.questionId}/turns/*.json\`: append-only student/assistant turn history for this question.`,
+		`- \`feedback/questions/${options.questionId}/uploads/*\`: uploaded student files for this question thread.`,
 		`- \`${options.studentTurnFilePath}\`: the latest student reply for this turn.`,
 		'',
 		`Worksheet: ${options.report.sheet.title}`,
@@ -173,7 +383,12 @@ function buildSheetReplyPrompt(options: {
 		'',
 		`Latest student response file: ${options.studentTurnFilePath}`,
 		'Latest student response content:',
-		options.studentReplyMarkdown,
+		options.studentReplyMarkdown.trim().length > 0 ? options.studentReplyMarkdown : '(no text)',
+		'',
+		'Latest student attachments:',
+		options.studentAttachments.length > 0
+			? formatAttachmentList(options.studentAttachments)
+			: '(none)',
 		'',
 		'Whole-sheet marking notes:',
 		references.gradingMarkdown ?? '(missing)',
@@ -202,15 +417,30 @@ export const POST: RequestHandler = async ({ request, params }) => {
 	const userId = authResult.user.uid;
 
 	let parsedParams: z.infer<typeof paramsSchema>;
-	let parsedBody: z.infer<typeof requestSchema>;
+	let parsedBody: ParsedTurnRequest;
 	try {
 		parsedParams = paramsSchema.parse(params);
-		parsedBody = requestSchema.parse(await request.json());
+		parsedBody = await parseTurnRequest(request);
 	} catch (error) {
 		if (error instanceof z.ZodError) {
 			return json({ error: 'invalid_request', issues: error.issues }, { status: 400 });
 		}
 		return json({ error: 'invalid_request' }, { status: 400 });
+	}
+
+	if (parsedBody.text.length === 0 && parsedBody.files.length === 0) {
+		return json(
+			{
+				error: 'invalid_request',
+				issues: [
+					{
+						path: ['text'],
+						message: 'Reply with text or attach at least one file.'
+					}
+				]
+			},
+			{ status: 400 }
+		);
 	}
 
 	const run = await getGraderRun(userId, parsedParams.sheetId);
@@ -320,10 +550,33 @@ export const POST: RequestHandler = async ({ request, params }) => {
 		author: 'student',
 		now
 	});
+	let studentAttachments: PaperSheetFeedbackAttachment[];
+	try {
+		studentAttachments = await persistReplyAttachments({
+			serviceAccountJson,
+			userId,
+			workspaceId: session.workspaceId,
+			questionId: parsedBody.questionId,
+			files: parsedBody.files,
+			now
+		});
+	} catch (error) {
+		if (error instanceof z.ZodError) {
+			return json({ error: 'invalid_request', issues: error.issues }, { status: 400 });
+		}
+		console.error('Failed to persist sheet reply attachments', {
+			error,
+			userId,
+			sheetId: parsedParams.sheetId,
+			questionId: parsedBody.questionId
+		});
+		return json({ error: 'attachment_upload_failed' }, { status: 500 });
+	}
 	const respondingThread = appendTutorReviewMessage({
 		thread: currentThread,
 		author: 'student',
 		markdown: parsedBody.text,
+		attachments: studentAttachments,
 		createdAt,
 		status: 'responding'
 	});
@@ -344,6 +597,7 @@ export const POST: RequestHandler = async ({ request, params }) => {
 			content: stringifyJson({
 				author: 'student',
 				markdown: parsedBody.text,
+				attachments: studentAttachments,
 				createdAt
 			}),
 			now
@@ -370,9 +624,11 @@ export const POST: RequestHandler = async ({ request, params }) => {
 		questionId: parsedBody.questionId,
 		threadMessages: respondingThread.messages.map((message) => ({
 			author: message.author,
-			markdown: message.markdown
+			markdown: message.markdown,
+			attachments: message.attachments
 		})),
 		studentReplyMarkdown: parsedBody.text,
+		studentAttachments,
 		studentTurnFilePath
 	});
 	const agentId = randomUUID();

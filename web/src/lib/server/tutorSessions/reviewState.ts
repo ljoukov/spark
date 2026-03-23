@@ -4,6 +4,7 @@ import {
 	SparkTutorReviewMessageSchema,
 	SparkTutorReviewStateSchema,
 	SparkTutorReviewThreadSchema,
+	type PaperSheetFeedbackAttachment,
 	type SparkGraderWorksheetReport,
 	type SparkTutorReviewMessage,
 	type SparkTutorReviewState,
@@ -48,12 +49,14 @@ const EMPTY_SHEET_STATE: SparkTutorReviewState = SparkTutorReviewStateSchema.par
 function createReviewMessage(options: {
 	author: 'assistant' | 'student';
 	markdown: string;
+	attachments?: PaperSheetFeedbackAttachment[] | undefined;
 	createdAt: string;
 }): SparkTutorReviewMessage {
 	return SparkTutorReviewMessageSchema.parse({
 		id: randomUUID(),
 		author: options.author,
 		markdown: options.markdown,
+		...(options.attachments ? { attachments: options.attachments } : {}),
 		createdAt: options.createdAt
 	});
 }
@@ -119,6 +122,7 @@ export function appendTutorReviewMessage(options: {
 	thread: SparkTutorReviewThread;
 	author: 'assistant' | 'student';
 	markdown: string;
+	attachments?: PaperSheetFeedbackAttachment[] | undefined;
 	createdAt: string;
 	status?: SparkTutorReviewThread['status'];
 	resolvedAt?: string;
@@ -132,6 +136,7 @@ export function appendTutorReviewMessage(options: {
 			createReviewMessage({
 				author: options.author,
 				markdown: options.markdown,
+				...(options.attachments ? { attachments: options.attachments } : {}),
 				createdAt: options.createdAt
 			})
 		],

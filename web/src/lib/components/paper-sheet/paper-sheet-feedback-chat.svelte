@@ -1,17 +1,23 @@
 <script lang="ts">
 	import { ChatComposer } from '$lib/components/chat/index.js';
 	import { MarkdownContent } from '$lib/components/markdown/index.js';
+	import {
+		SPARK_ATTACHMENT_FILE_INPUT_ACCEPT,
+		isSparkImageAttachmentMimeType,
+		resolveSparkAttachmentBadge
+	} from '$lib/spark/attachments';
 	import { normalizeTutorMarkdown } from '@spark/schemas';
+	import type {
+		PaperSheetComposerAttachmentDraft,
+		PaperSheetFeedbackTurn
+	} from './types';
 
-	type PaperSheetFeedbackDisplayTurn = {
-		id: string;
-		speaker: 'student' | 'tutor';
-		text: string;
-	};
-
-	function appendDraft(seed: string): void {
-		const nextValue = draft.trim().length === 0 ? seed : `${draft}\n${seed}`;
-		onDraftChange(nextValue);
+	function openPicker(input: HTMLInputElement | null): void {
+		if (!input) {
+			return;
+		}
+		input.value = '';
+		input.click();
 	}
 
 	let {
@@ -22,35 +28,48 @@
 		showAssistantDraft = false,
 		showComposer = true,
 		showFollowUpButton = false,
-		showComposerTools = true,
 		resolvedFollowUpMode = false,
 		draft,
+		draftAttachments = [],
+		draftAttachmentError = null,
+		allowAttachments = false,
+		allowTakePhoto = false,
 		placeholder,
 		questionLabel,
 		composerDisabled = false,
 		runtimeLocked = false,
 		onRequestFollowUp = undefined,
+		onAttachFiles = undefined,
+		onRemoveDraftAttachment = undefined,
 		onDraftChange,
 		onReply
 	}: {
-		displayThread: PaperSheetFeedbackDisplayTurn[];
+		displayThread: PaperSheetFeedbackTurn[];
 		processing?: boolean;
 		thinkingText?: string | null;
 		assistantDraftText?: string | null;
 		showAssistantDraft?: boolean;
 		showComposer?: boolean;
 		showFollowUpButton?: boolean;
-		showComposerTools?: boolean;
 		resolvedFollowUpMode?: boolean;
 		draft: string;
+		draftAttachments?: PaperSheetComposerAttachmentDraft[];
+		draftAttachmentError?: string | null;
+		allowAttachments?: boolean;
+		allowTakePhoto?: boolean;
 		placeholder: string;
 		questionLabel: string;
 		composerDisabled?: boolean;
 		runtimeLocked?: boolean;
 		onRequestFollowUp?: () => void;
+		onAttachFiles?: (files: File[]) => void | Promise<void>;
+		onRemoveDraftAttachment?: (localId: string) => void;
 		onDraftChange: (value: string) => void;
 		onReply: (value?: string) => void;
 	} = $props();
+
+	let attachmentInputRef = $state<HTMLInputElement | null>(null);
+	let photoInputRef = $state<HTMLInputElement | null>(null);
 
 	const visibleThinkingText = $derived(showAssistantDraft ? null : thinkingText);
 	const visibleDraft = $derived(runtimeLocked ? '' : draft);
@@ -58,19 +77,75 @@
 	const visibleAssistantDraftText = $derived(
 		assistantDraftText ? normalizeTutorMarkdown(assistantDraftText) : ''
 	);
+	const submitReady = $derived(
+		!composerDisabled && (visibleDraft.trim().length > 0 || draftAttachments.length > 0)
+	);
 	const composerInputClass = $derived(
 		runtimeLocked ? 'paper-sheet-note__input paper-sheet-note__input--locked' : 'paper-sheet-note__input'
 	);
+
+	function handleAttachmentInput(event: Event): void {
+		const target = event.currentTarget;
+		if (!(target instanceof HTMLInputElement)) {
+			return;
+		}
+		const files = target.files ? Array.from(target.files) : [];
+		target.value = '';
+		if (files.length === 0) {
+			return;
+		}
+		void onAttachFiles?.(files);
+	}
 </script>
 
 <div class="paper-sheet-note__thread" aria-live="polite" aria-relevant="additions text">
 	{#each displayThread as turn (turn.id)}
 		<div class={`paper-sheet-note__turn is-${turn.speaker}`}>
 			<div class={`paper-sheet-note__bubble is-${turn.speaker}`}>
-				<MarkdownContent
-					markdown={turn.speaker === 'tutor' ? normalizeTutorMarkdown(turn.text) : turn.text}
-					class="paper-sheet-note__bubble-markdown"
-				/>
+				{#if turn.attachments && turn.attachments.length > 0}
+					<div class="paper-sheet-note__attachments">
+						{#each turn.attachments as attachment (attachment.id)}
+							{@const isImage = isSparkImageAttachmentMimeType(attachment.contentType)}
+							{@const attachmentUrl = attachment.url}
+							{@const badge = resolveSparkAttachmentBadge({
+								filename: attachment.filename,
+								contentType: attachment.contentType
+							})}
+							{#if isImage && attachmentUrl}
+								<a
+									class="paper-sheet-note__attachment-card is-image"
+									href={attachmentUrl}
+									target="_blank"
+									rel="noreferrer"
+								>
+									<img src={attachmentUrl} alt={attachment.filename} loading="lazy" />
+									<span class="paper-sheet-note__attachment-name">{attachment.filename}</span>
+								</a>
+							{:else if attachmentUrl}
+								<a
+									class="paper-sheet-note__attachment-card is-file"
+									href={attachmentUrl}
+									target="_blank"
+									rel="noreferrer"
+								>
+									<span class="paper-sheet-note__attachment-badge">{badge}</span>
+									<span class="paper-sheet-note__attachment-name">{attachment.filename}</span>
+								</a>
+							{:else}
+								<div class="paper-sheet-note__attachment-card is-file">
+									<span class="paper-sheet-note__attachment-badge">{badge}</span>
+									<span class="paper-sheet-note__attachment-name">{attachment.filename}</span>
+								</div>
+							{/if}
+						{/each}
+					</div>
+				{/if}
+				{#if turn.text.trim().length > 0}
+					<MarkdownContent
+						markdown={turn.speaker === 'tutor' ? normalizeTutorMarkdown(turn.text) : turn.text}
+						class="paper-sheet-note__bubble-markdown"
+					/>
+				{/if}
 			</div>
 		</div>
 	{/each}
@@ -119,6 +194,55 @@
 
 {#if showComposer}
 	<div class={`paper-sheet-note__composer ${runtimeLocked ? 'is-runtime-locked' : ''}`}>
+		<input
+			class="paper-sheet-note__file-input"
+			bind:this={attachmentInputRef}
+			type="file"
+			accept={SPARK_ATTACHMENT_FILE_INPUT_ACCEPT}
+			multiple
+			onchange={handleAttachmentInput}
+		/>
+		<input
+			class="paper-sheet-note__file-input"
+			bind:this={photoInputRef}
+			type="file"
+			accept="image/*"
+			capture="environment"
+			onchange={handleAttachmentInput}
+		/>
+		{#if draftAttachments.length > 0}
+			<div class="paper-sheet-note__attachments is-draft">
+				{#each draftAttachments as attachment (attachment.localId)}
+					{@const isImage = isSparkImageAttachmentMimeType(attachment.contentType)}
+					{@const badge = resolveSparkAttachmentBadge({
+						filename: attachment.filename,
+						contentType: attachment.contentType
+					})}
+					<div class={`paper-sheet-note__attachment-card ${isImage && attachment.previewUrl ? 'is-image' : 'is-file'}`}>
+						{#if isImage && attachment.previewUrl}
+							<img src={attachment.previewUrl} alt={attachment.filename} loading="lazy" />
+						{:else}
+							<span class="paper-sheet-note__attachment-badge">{badge}</span>
+						{/if}
+						<span class="paper-sheet-note__attachment-name">{attachment.filename}</span>
+						<button
+							type="button"
+							class="paper-sheet-note__attachment-remove"
+							aria-label={`Remove ${attachment.filename}`}
+							disabled={composerDisabled}
+							onclick={() => {
+								onRemoveDraftAttachment?.(attachment.localId);
+							}}
+						>
+							×
+						</button>
+					</div>
+				{/each}
+			</div>
+		{/if}
+		{#if draftAttachmentError}
+			<p class="paper-sheet-note__attachment-error" role="alert">{draftAttachmentError}</p>
+		{/if}
 		<ChatComposer
 			value={visibleDraft}
 			placeholder={visiblePlaceholder}
@@ -128,9 +252,10 @@
 			attachAriaLabel={`Open attachment options for ${questionLabel}`}
 			submitMode="enter"
 			maxLines={5}
-			showAttach={showComposerTools}
-			showMic={showComposerTools}
-			showTakePhoto={showComposerTools}
+			showAttach={allowAttachments}
+			showMic={false}
+			showTakePhoto={allowAttachments && allowTakePhoto}
+			{submitReady}
 			showSubmitSpinner={runtimeLocked}
 			compactSubmitSpinner={runtimeLocked}
 			inputClass={composerInputClass}
@@ -139,22 +264,16 @@
 				onDraftChange(value);
 			}}
 			onAttachSelect={() => {
-				if (!showComposerTools) {
+				if (!allowAttachments) {
 					return;
 				}
-				appendDraft('[Mock attachment] I want to show my working for this answer.');
+				openPicker(attachmentInputRef);
 			}}
 			onTakePhotoSelect={() => {
-				if (!showComposerTools) {
+				if (!allowAttachments || !allowTakePhoto) {
 					return;
 				}
-				appendDraft('[Mock photo] Here is a photo of the part I want checked.');
-			}}
-			onMicClick={() => {
-				if (!showComposerTools) {
-					return;
-				}
-				appendDraft('I think I should make one point more clearly here.');
+				openPicker(photoInputRef);
 			}}
 			onSubmit={({ value }) => {
 				if (composerDisabled) {
@@ -220,9 +339,90 @@
 		line-height: inherit;
 	}
 
+	.paper-sheet-note__attachments {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.6rem;
+		margin-bottom: 0.45rem;
+	}
+
+	.paper-sheet-note__attachments.is-draft {
+		margin-bottom: 0.7rem;
+	}
+
+	.paper-sheet-note__attachment-card {
+		display: flex;
+		align-items: center;
+		gap: 0.55rem;
+		max-width: min(18rem, 100%);
+		padding: 0.45rem 0.55rem;
+		border-radius: 12px;
+		border: 1px solid color-mix(in srgb, var(--note-left) 18%, transparent);
+		background: color-mix(in srgb, var(--paper-surface-elevated, #ffffff) 92%, transparent);
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.paper-sheet-note__attachment-card.is-image {
+		align-items: stretch;
+		flex-direction: column;
+		width: min(12rem, 100%);
+		padding: 0.4rem;
+	}
+
+	.paper-sheet-note__attachment-card.is-image img {
+		display: block;
+		width: 100%;
+		aspect-ratio: 4 / 3;
+		object-fit: cover;
+		border-radius: 10px;
+		background: color-mix(in srgb, var(--note-left) 8%, transparent);
+	}
+
+	.paper-sheet-note__attachment-badge {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 2.2rem;
+		padding: 0.2rem 0.4rem;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--note-left) 12%, transparent);
+		font-size: 0.72rem;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+	}
+
+	.paper-sheet-note__attachment-name {
+		min-width: 0;
+		font-size: 0.82rem;
+		line-height: 1.3;
+		overflow-wrap: anywhere;
+	}
+
+	.paper-sheet-note__attachment-remove {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		margin-left: auto;
+		width: 1.5rem;
+		height: 1.5rem;
+		border: 0;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--note-left) 12%, transparent);
+		color: inherit;
+		cursor: pointer;
+	}
+
+	.paper-sheet-note__attachment-error {
+		margin: 0 0 0.55rem;
+		font-size: 0.82rem;
+		font-weight: 600;
+		color: var(--note-left);
+	}
+
 	.paper-sheet-note__bubble.is-student {
 		padding: 10px 14px;
-		border: 1px solid var(--note-user-border);
+		border: 1.5px solid var(--note-user-border);
 		border-radius: 8px 8px 0 8px;
 		background: var(--note-user-bg);
 		box-shadow: var(--paper-card-shadow, 0 1px 4px rgba(0, 0, 0, 0.08));
@@ -291,6 +491,10 @@
 			var(--paper-surface, #ffffff)
 		);
 		--chat-composer-spinner-shell-fg: var(--sheet-color);
+	}
+
+	.paper-sheet-note__file-input {
+		display: none;
 	}
 
 	.paper-sheet-note__composer.is-runtime-locked {

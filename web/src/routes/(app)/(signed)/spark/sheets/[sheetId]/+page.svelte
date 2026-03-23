@@ -3,6 +3,7 @@
 	import { PaperSheet } from '$lib/components/paper-sheet/index.js';
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
 	import type {
+		PaperSheetFeedbackAttachment,
 		SparkAgentRunStream,
 		PaperSheetFeedbackThread,
 		SparkGraderWorksheetReport,
@@ -26,6 +27,10 @@
 
 	type ClientUser = NonNullable<PageData['user']> | null;
 	type FeedbackRuntimeStatus = 'connecting' | 'thinking' | 'responding';
+	type PendingReply = {
+		text: string;
+		attachments: PaperSheetFeedbackAttachment[];
+	};
 
 	const userStore = getContext<Readable<ClientUser> | undefined>('spark:user');
 	const userSnapshot = userStore ? fromStore(userStore) : null;
@@ -50,18 +55,42 @@
 	let activeAgentStream = $state<SparkAgentRunStream | null>(null);
 	let requestError = $state<string | null>(null);
 	let submittingQuestionIds = $state<Record<string, boolean>>({});
-	let pendingReplies = $state<Record<string, string>>({});
+	let pendingReplies = $state<Record<string, PendingReply>>({});
 
 	function encodeWorkspaceFileId(filePath: string): string {
 		return encodeURIComponent(filePath);
 	}
 
-	function removeQuestionKey<T extends Record<string, string | boolean>>(
-		value: T,
-		questionId: string
-	): T {
+	function removeQuestionKey<T extends Record<string, unknown>>(value: T, questionId: string): T {
 		const { [questionId]: _removed, ...rest } = value;
 		return rest as T;
+	}
+
+	function cleanupPendingReply(reply: PendingReply | undefined): void {
+		if (typeof URL === 'undefined') {
+			return;
+		}
+		for (const attachment of reply?.attachments ?? []) {
+			if (attachment.url?.startsWith('blob:')) {
+				URL.revokeObjectURL(attachment.url);
+			}
+		}
+	}
+
+	function buildSheetAttachmentUrl(filePath: string, filename: string): string {
+		const params = new URLSearchParams({
+			path: filePath,
+			filename
+		});
+		return `/api/spark/sheets/${data.run.id}/attachment?${params.toString()}`;
+	}
+
+	function buildAttachmentSignature(attachment: {
+		filename: string;
+		contentType: string;
+		sizeBytes: number;
+	}): string {
+		return `${attachment.filename}::${attachment.contentType}::${attachment.sizeBytes.toString()}`;
 	}
 
 	function parseWorkspaceTextFile(
@@ -102,45 +131,64 @@
 		}
 	}
 
-	async function submitQuestionReply(questionId: string, draft: string): Promise<void> {
+	async function submitQuestionReply(questionId: string, draft: string, attachments: File[]): Promise<boolean> {
 		if (submittingQuestionIds[questionId] || data.run.status !== 'done') {
-			return;
+			return false;
 		}
+		const pendingReply: PendingReply = {
+			text: draft,
+			attachments: attachments.map((file, index) => ({
+				id:
+					typeof crypto !== 'undefined' && 'randomUUID' in crypto
+						? crypto.randomUUID()
+						: `pending-${questionId}-${index.toString()}-${Date.now().toString()}`,
+				filename: file.name,
+				contentType: file.type || 'application/octet-stream',
+				sizeBytes: file.size,
+				...(file.type.startsWith('image/') ? { url: URL.createObjectURL(file) } : {})
+			}))
+		};
 		submittingQuestionIds = {
 			...submittingQuestionIds,
 			[questionId]: true
 		};
 		pendingReplies = {
 			...pendingReplies,
-			[questionId]: draft
+			[questionId]: pendingReply
 		};
 		activeTurnQuestionId = questionId;
 		activeAgentStream = null;
 		requestError = null;
 
 		try {
+			const formData = new FormData();
+			formData.append('action', 'reply');
+			formData.append('questionId', questionId);
+			formData.append('text', draft);
+			for (const attachment of attachments) {
+				formData.append('file', attachment);
+			}
 			const response = await fetch(`/api/spark/sheets/${data.run.id}/turn`, {
 				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({
-					action: 'reply',
-					questionId,
-					text: draft
-				})
+				body: formData
 			});
 
 			const payload = (await response.json().catch(() => null)) as
 				| {
 						error?: string;
+						issues?: Array<{ message?: string }>;
 						sessionId?: string;
 						workspaceId?: string;
 				  }
 				| null;
 			if (!response.ok) {
-				requestError = payload?.error ?? 'Unable to send your worksheet reply.';
+				requestError =
+					payload?.issues?.[0]?.message ??
+					payload?.error ??
+					'Unable to send your worksheet reply.';
+				cleanupPendingReply(pendingReply);
 				pendingReplies = removeQuestionKey(pendingReplies, questionId);
+				return false;
 			} else {
 				if (payload?.sessionId) {
 					interactionSessionId = payload.sessionId;
@@ -148,10 +196,13 @@
 				if (payload?.workspaceId) {
 					interactionWorkspaceId = payload.workspaceId;
 				}
+				return true;
 			}
 		} catch {
 			requestError = 'Unable to send your worksheet reply.';
+			cleanupPendingReply(pendingReply);
 			pendingReplies = removeQuestionKey(pendingReplies, questionId);
+			return false;
 		} finally {
 			submittingQuestionIds = removeQuestionKey(submittingQuestionIds, questionId);
 		}
@@ -302,15 +353,22 @@
 		}
 		let nextPendingReplies = pendingReplies;
 		let changed = false;
-		for (const [questionId, draft] of Object.entries(pendingReplies)) {
+		for (const [questionId, pendingReply] of Object.entries(pendingReplies)) {
 			const thread = reviewState.threads[questionId];
 			const lastStudentMessage =
 				thread?.messages.findLast((message) => message.author === 'student') ?? null;
-			if (lastStudentMessage?.markdown === draft) {
+			const lastMessageSignatures = (lastStudentMessage?.attachments ?? []).map(buildAttachmentSignature);
+			const pendingSignatures = pendingReply.attachments.map(buildAttachmentSignature);
+			if (
+				lastStudentMessage?.markdown === pendingReply.text &&
+				lastMessageSignatures.length === pendingSignatures.length &&
+				lastMessageSignatures.every((signature, index) => signature === pendingSignatures[index])
+			) {
 				if (!changed) {
 					nextPendingReplies = { ...pendingReplies };
 					changed = true;
 				}
+				cleanupPendingReply(pendingReply);
 				delete nextPendingReplies[questionId];
 			}
 		}
@@ -343,20 +401,34 @@
 			const turns: PaperSheetFeedbackThread['turns'] = thread.messages.map((message) => ({
 				id: message.id,
 				speaker: message.author === 'assistant' ? ('tutor' as const) : ('student' as const),
-				text: message.markdown
+				text: message.markdown,
+				attachments: message.attachments?.map((attachment) => ({
+					...attachment,
+					...(attachment.filePath
+						? { url: buildSheetAttachmentUrl(attachment.filePath, attachment.filename) }
+						: {})
+				}))
 			}));
 			const pendingReply = pendingReplies[questionId];
 			const lastStudentTurn = turns.findLast((turn) => turn.speaker === 'student') ?? null;
+			const lastTurnSignatures = (lastStudentTurn?.attachments ?? []).map(buildAttachmentSignature);
+			const pendingSignatures = (pendingReply?.attachments ?? []).map(buildAttachmentSignature);
+			const shouldAppendPendingTurn =
+				pendingReply !== undefined &&
+				(lastStudentTurn?.text !== pendingReply.text ||
+					lastTurnSignatures.length !== pendingSignatures.length ||
+					lastTurnSignatures.some((signature, index) => signature !== pendingSignatures[index]));
 			const status: PaperSheetFeedbackThread['status'] =
-				pendingReply && lastStudentTurn?.text !== pendingReply ? 'responding' : thread.status;
+				shouldAppendPendingTurn ? 'responding' : thread.status;
 			const nextTurns: PaperSheetFeedbackThread['turns'] =
-				pendingReply && lastStudentTurn?.text !== pendingReply
+				shouldAppendPendingTurn
 					? [
 							...turns,
 							{
 								id: `pending-${questionId}`,
 								speaker: 'student',
-								text: pendingReply
+								text: pendingReply.text,
+								attachments: pendingReply.attachments
 							}
 						]
 					: turns;
@@ -432,8 +504,8 @@
 				feedbackRuntimeStatuses={feedbackRuntimeStatuses}
 				feedbackThinking={feedbackThinking}
 				feedbackAssistantDrafts={feedbackAssistantDrafts}
-				onReplyToTutor={(questionId, draft) => {
-					void submitQuestionReply(questionId, draft);
+				onReplyToTutor={(questionId, draft, attachments) => {
+					return submitQuestionReply(questionId, draft, attachments);
 				}}
 			/>
 		</div>
