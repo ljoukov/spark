@@ -210,7 +210,7 @@
 
 	.paper-sheet-note__bubble {
 		max-width: min(32rem, 100%);
-		font-size: 13px;
+		font-size: 16px;
 		line-height: 1.8;
 		color: var(--note-text);
 	}
@@ -261,7 +261,7 @@
 		--chat-composer-card-gap: 0.4rem;
 		--chat-composer-text: var(--note-text);
 		--chat-composer-placeholder: var(--paper-placeholder, rgba(148, 163, 184, 0.96));
-		--chat-composer-font-size: 13px;
+		--chat-composer-font-size: 16px;
 		--chat-composer-line-height: 1.45;
 		--chat-composer-textarea-padding: 0 0.1rem 0.05rem;
 		--chat-composer-button-size: 2rem;
