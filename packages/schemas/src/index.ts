@@ -12,3 +12,4 @@ export * from "./sparkAgent";
 export * from "./sparkAgentTask";
 export * from "./sparkGrader";
 export * from "./sparkTutorSession";
+export * from "./tutorMarkdown";

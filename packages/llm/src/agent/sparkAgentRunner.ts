@@ -52,6 +52,7 @@ import {
   SparkTutorReviewThreadSchema,
   SparkTutorScreenStateSchema,
   SparkAgentWorkspaceFileSchema,
+  normalizeTutorMarkdown,
   type CodeProblem,
   type QuizDefinition,
   type Session,
@@ -8041,6 +8042,9 @@ export async function runSparkAgentTask(
           `Tutor review thread "${tutorQuestionId}" was not found.`,
         );
       }
+      const assistantReplyMarkdown = normalizeTutorMarkdown(
+        input.assistantReplyMarkdown,
+      );
       const now = new Date();
       const nowIso = now.toISOString();
       const nextThread = {
@@ -8051,7 +8055,7 @@ export async function runSparkAgentTask(
           {
             id: randomUUID(),
             author: "assistant",
-            markdown: input.assistantReplyMarkdown,
+            markdown: assistantReplyMarkdown,
             createdAt: nowIso,
           },
         ],
@@ -8097,7 +8101,7 @@ export async function runSparkAgentTask(
         author: "assistant",
         now,
       });
-      streamedAssistantText = input.assistantReplyMarkdown;
+      streamedAssistantText = assistantReplyMarkdown;
       logSync?.setStream({
         assistant: streamedAssistantText,
         thoughts: streamedThoughtsText,
@@ -8109,7 +8113,7 @@ export async function runSparkAgentTask(
           filePath: turnFilePath,
           content: stringifyJsonFile({
             author: "assistant",
-            markdown: input.assistantReplyMarkdown,
+            markdown: assistantReplyMarkdown,
             createdAt: nowIso,
             resolved: input.resolved,
           }),
@@ -8188,6 +8192,9 @@ export async function runSparkAgentTask(
       }
       const now = new Date();
       const nowIso = now.toISOString();
+      const assistantReplyMarkdown = normalizeTutorMarkdown(
+        input.assistantReplyMarkdown,
+      );
       const nextThread = SparkTutorReviewThreadSchema.parse({
         ...currentThread,
         status: "open",
@@ -8196,7 +8203,7 @@ export async function runSparkAgentTask(
           {
             id: randomUUID(),
             author: "assistant",
-            markdown: input.assistantReplyMarkdown,
+            markdown: assistantReplyMarkdown,
             createdAt: nowIso,
           },
         ],
@@ -8242,7 +8249,7 @@ export async function runSparkAgentTask(
           filePath: turnFilePath,
           content: stringifyJsonFile({
             author: "assistant",
-            markdown: input.assistantReplyMarkdown,
+            markdown: assistantReplyMarkdown,
             createdAt: nowIso,
             resolved: false,
           }),

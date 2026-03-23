@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { normalizeTutorMarkdown } from '@spark/schemas';
 import { renderMarkdown } from './markdown';
 
 test('renders KaTeX for inline code spans that contain only $...$ math', () => {
@@ -57,4 +58,16 @@ test('does not render KaTeX for \\(...\\) inside fenced code blocks', () => {
 	const html = renderMarkdown('```\\n\\\\(x^2\\\\)\\n```');
 	expect(html).toContain('<code>');
 	expect(html).not.toContain('class="katex"');
+});
+
+test('renders KaTeX after normalizing over-escaped tutor math markdown', () => {
+	const html = renderMarkdown(
+		normalizeTutorMarkdown(
+			'Fair enough: \\\\(n\\\\) is between \\\\(25\\\\) and \\\\(100\\\\).\\n\\\\[26,27,\\\\dots,100.\\\\]'
+		)
+	);
+	expect(html).toContain('class="katex"');
+	expect(html).toContain('class="katex-display"');
+	expect(html).not.toContain('\\\\(n\\\\)');
+	expect(html).not.toContain('\\\\[26,27,\\\\dots,100.\\\\]');
 });
