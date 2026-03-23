@@ -21,6 +21,7 @@
 	import { getAuth, onIdTokenChanged } from 'firebase/auth';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { renderMarkdown } from '$lib/markdown';
+	import { resolveSparkAgentRunUpdatedAt } from '$lib/spark/agentRunTimestamps';
 	import { formatRelativeAge } from '$lib/utils/relativeAge';
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
 	import {
@@ -153,11 +154,12 @@
 		return renderMarkdown(agent.resultSummary);
 	});
 	const runStats = $derived<SparkAgentRunStats | null>(runLog?.stats ?? null);
+	const displayedUpdatedAt = $derived.by(() => resolveSparkAgentRunUpdatedAt(agent, runLog));
 	const runDurationLabel = $derived.by(() => {
 		if (!agent) {
 			return null;
 		}
-		return formatDuration(agent.createdAt, agent.updatedAt);
+		return formatDuration(agent.createdAt, displayedUpdatedAt ?? agent.updatedAt);
 	});
 	const showStopButton = $derived.by(() => {
 		if (!runId || !agent) {
@@ -1014,7 +1016,7 @@
 					</div>
 					<div>
 						<span>Updated</span>
-						<p>{formatTimestamp(agent.updatedAt)}</p>
+						<p>{formatTimestamp(displayedUpdatedAt ?? agent.updatedAt)}</p>
 					</div>
 					<div>
 						<span>Duration</span>

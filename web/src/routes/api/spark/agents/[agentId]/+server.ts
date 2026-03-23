@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { env } from '$env/dynamic/private';
+import { resolveSparkAgentRunUpdatedAt } from '$lib/spark/agentRunTimestamps';
 import { getFirestoreDocument, listFirestoreDocuments } from '$lib/server/gcp/firestoreRest';
 import {
 	buildWorkspaceFilesCollectionPath,
@@ -145,5 +146,11 @@ export const GET: RequestHandler = async ({ request, params }) => {
 		}
 	}
 
-	return json({ agent, files, log }, { status: 200 });
+	const effectiveUpdatedAt = resolveSparkAgentRunUpdatedAt(agent, log);
+	const responseAgent =
+		effectiveUpdatedAt && effectiveUpdatedAt.getTime() !== agent.updatedAt.getTime()
+			? { ...agent, updatedAt: effectiveUpdatedAt }
+			: agent;
+
+	return json({ agent: responseAgent, files, log }, { status: 200 });
 };

@@ -278,6 +278,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
   - Fields: `{ id, prompt, status, workspaceId, stop_requested?, inputAttachments?, createdAt, updatedAt, statesTimeline[], resultSummary?, error? }`.
   - `status` ∈ `created | executing | stopped | failed | done`.
   - `statesTimeline[]` entries contain `{ state, timestamp }`.
+  - `updatedAt` is refreshed whenever the runner persists new run activity (status changes, streamed text, or log batches), so `/spark/agents` ordering and run-detail duration reflect the latest recorded agent activity.
 - Agent runs use a hosted web search tool during the LLM tool loop when available (e.g. OpenAI Responses `web_search` with external web access enabled).
 - Stop: the `/spark/agents` UI can set `stop_requested = true`. While running, the server polls `stop_requested` every 10 seconds and stops the run by setting `status = "stopped"` (and returns success to Cloud Tasks so it won’t retry).
 - Completion: the agent is expected to call the `done` tool once. If the tool loop ends with a final text response without calling `done`, the server writes the response to `agent-output.md` in the workspace, stores a truncated (≤ 1000 chars) version in `resultSummary`, and marks the run as `done`.

@@ -1,4 +1,5 @@
 import { getFirestoreDocument, listFirestoreDocuments } from '$lib/server/gcp/firestoreRest';
+import { resolveSparkAgentRunUpdatedAt } from '$lib/spark/agentRunTimestamps';
 import {
 	buildWorkspaceFilesCollectionPath,
 	encodeWorkspaceFileId,
@@ -48,7 +49,10 @@ function parseLogTimestamp(key: string): Date | null {
 	return new Date(ms);
 }
 
-function serializeAgent(agent: SparkAgentState): {
+function serializeAgent(
+	agent: SparkAgentState,
+	options?: { updatedAt?: Date }
+): {
 	id: string;
 	prompt: string;
 	status: string;
@@ -67,7 +71,7 @@ function serializeAgent(agent: SparkAgentState): {
 		workspaceId: agent.workspaceId,
 		stopRequested: Boolean(agent.stop_requested),
 		createdAt: agent.createdAt.toISOString(),
-		updatedAt: agent.updatedAt.toISOString(),
+		updatedAt: (options?.updatedAt ?? agent.updatedAt).toISOString(),
 		statesTimeline: agent.statesTimeline.map((entry) => ({
 			state: entry.state,
 			timestamp: entry.timestamp.toISOString()
@@ -220,10 +224,14 @@ export const load: PageServerLoad = async ({ params }) => {
 		}
 	}
 
+	const effectiveUpdatedAt = resolveSparkAgentRunUpdatedAt(agent, log);
+
 	return {
 		agentDocFound: true,
 		agentParseOk: true,
-		agent: serializeAgent(agent),
+		agent: serializeAgent(agent, {
+			updatedAt: effectiveUpdatedAt ?? agent.updatedAt
+		}),
 		parseIssues: [],
 		files: serializeFiles(files),
 		log: log ? serializeLog(log) : null

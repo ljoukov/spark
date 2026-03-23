@@ -3417,6 +3417,10 @@ class AgentLogSync {
     return `users/${this.userId}/agents/${this.agentId}/logs/log`;
   }
 
+  private agentDocumentPath(): string {
+    return `users/${this.userId}/agents/${this.agentId}`;
+  }
+
   append(line: string): void {
     if (this.disposed) {
       return;
@@ -3594,11 +3598,20 @@ class AgentLogSync {
     }
 
     try {
-      await patchFirestoreDocument({
-        serviceAccountJson: this.serviceAccountJson,
-        documentPath: this.documentPath(),
-        updates: payload,
-      });
+      await Promise.all([
+        patchFirestoreDocument({
+          serviceAccountJson: this.serviceAccountJson,
+          documentPath: this.documentPath(),
+          updates: payload,
+        }),
+        patchFirestoreDocument({
+          serviceAccountJson: this.serviceAccountJson,
+          documentPath: this.agentDocumentPath(),
+          updates: {
+            updatedAt: now,
+          },
+        }),
+      ]);
       this.createdAtWritten = true;
     } catch (error) {
       for (const [key, value] of linesEntries) {
