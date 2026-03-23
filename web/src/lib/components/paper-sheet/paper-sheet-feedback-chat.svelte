@@ -328,7 +328,6 @@
 	}
 
 	.paper-sheet-note__bubble {
-		max-width: min(32rem, 100%);
 		font-size: 16px;
 		line-height: 1.8;
 		color: var(--note-text);

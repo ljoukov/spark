@@ -479,6 +479,31 @@
 			: {}
 	);
 
+	$effect(() => {
+		if (!browser || !activeRuntimeQuestionId) {
+			return;
+		}
+		const questionId = activeRuntimeQuestionId;
+		const thread = feedbackThreads[questionId] ?? null;
+		const lastTurn = thread?.turns.at(-1) ?? null;
+		console.log('[sheet-feedback-debug] runtime snapshot', {
+			sheetId: data.run.id,
+			questionId,
+			activeTurnQuestionId,
+			activeTurnAgentId,
+			runtimeStatus: feedbackRuntimeStatuses[questionId] ?? null,
+			streamThoughtLength: activeAgentStream?.thoughts?.trim().length ?? 0,
+			streamAssistantLength: activeAgentStream?.assistant?.trim().length ?? 0,
+			thinkingTextLength: feedbackThinking[questionId]?.trim().length ?? 0,
+			assistantDraftLength: feedbackAssistantDrafts[questionId]?.trim().length ?? 0,
+			threadStatus: thread?.status ?? null,
+			lastTurnSpeaker: lastTurn?.speaker ?? null,
+			lastTurnPreview: lastTurn?.text.slice(0, 160) ?? null,
+			isSubmitting: Boolean(submittingQuestionIds[questionId]),
+			hasPendingReply: pendingReplies[questionId] !== undefined
+		});
+	});
+
 </script>
 
 <svelte:head>

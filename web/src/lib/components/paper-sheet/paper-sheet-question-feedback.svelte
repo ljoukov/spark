@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { browser } from '$app/environment';
 	import type {
 		PaperSheetComposerAttachmentDraft,
 		PaperSheetFeedbackThread,
@@ -190,6 +191,30 @@
 			? 'Ask a followup about this feedback...'
 			: review.replyPlaceholder ?? 'Write your reply here...'
 	);
+
+	$effect(() => {
+		if (
+			!browser ||
+			!thread &&
+				runtimeStatus === null &&
+				(thinkingText?.trim().length ?? 0) === 0 &&
+				(assistantDraftText?.trim().length ?? 0) === 0
+		) {
+			return;
+		}
+		const lastTurn = displayThread.at(-1) ?? null;
+		console.log('[paper-sheet-feedback-debug] render state', {
+			questionLabel,
+			runtimeStatus,
+			threadStatus: thread?.status ?? null,
+			thinkingTextLength: thinkingText?.trim().length ?? 0,
+			assistantDraftLength: assistantDraftText?.trim().length ?? 0,
+			showAssistantDraft,
+			showThinkingBlock: (thinkingText?.trim().length ?? 0) > 0 && !showAssistantDraft,
+			lastTurnSpeaker: lastTurn?.speaker ?? null,
+			lastTurnPreview: lastTurn?.text.slice(0, 160) ?? null
+		});
+	});
 </script>
 
 <section class={`paper-sheet-note ${getToneClass(review, thread)}`}>
