@@ -1792,6 +1792,10 @@
 		color: var(--paper-hook-text);
 	}
 
+	:global(.paper-sheet__hook > :last-child) {
+		padding-bottom: 8px;
+	}
+
 	.paper-sheet__section {
 		margin-bottom: 24px;
 		overflow: hidden;
@@ -1951,7 +1955,7 @@
 		align-self: flex-start;
 		padding-left: 8px;
 		margin-top: 2px;
-		font-size: var(--paper-reading-size);
+		font-size: 13.5px;
 		line-height: 1;
 		font-weight: 700;
 		white-space: nowrap;
@@ -2321,10 +2325,21 @@
 		}
 	}
 
+	@media (max-width: 768px) {
+		.paper-sheet__body {
+			padding-right: 4px;
+			padding-left: 4px;
+		}
+	}
+
 	@media (max-width: 720px) {
 		.paper-sheet__header-row,
 		.paper-sheet__footer {
 			flex-direction: column;
+		}
+
+		.paper-sheet__section-body {
+			padding: 8px 6px;
 		}
 
 		.paper-sheet__total-box {
