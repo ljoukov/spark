@@ -3,7 +3,14 @@
 	import { MarkdownContent } from '$lib/components/markdown/index.js';
 	import type { PaperSheetFeedbackThread, PaperSheetQuestionReview } from './types';
 
-	function getToneClass(review: PaperSheetQuestionReview): string {
+	function getToneClass(
+		review: PaperSheetQuestionReview,
+		thread: PaperSheetFeedbackThread | null
+	): string {
+		if (thread?.status === 'resolved') {
+			return 'is-correct';
+		}
+
 		switch (review.status) {
 			case 'correct':
 				return 'is-correct';
@@ -171,7 +178,7 @@
 	);
 </script>
 
-<section class={`paper-sheet-note ${getToneClass(review)}`}>
+<section class={`paper-sheet-note ${getToneClass(review, thread)}`}>
 	<div class="paper-sheet-note__frame">
 		<button type="button" class="paper-sheet-note__header" aria-expanded={open} onclick={onToggle}>
 			<span class="paper-sheet-note__pill">{noteLabel}</span>

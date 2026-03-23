@@ -144,6 +144,10 @@
 		return question.renderMode === 'markdown' || areInputsLocked();
 	}
 
+	function shouldShowLinesMarkdownRow(question: PaperSheetQuestion): boolean {
+		return question.type === 'lines' && shouldRenderLinesAnswerAsMarkdown(question);
+	}
+
 	function createScoreTone(score: PaperSheetScore): {
 		background: string;
 		border: string;
@@ -995,9 +999,10 @@
 						{@const feedbackThread = getFeedbackThread(questionKey)}
 						{@const showQuestionFeedback = questionReview && shouldShowQuestionFeedback(questionReview)}
 						{@const resolvedFeedback = feedbackThread?.status === 'resolved'}
+						{@const showLinesMarkdown = shouldShowLinesMarkdownRow(question)}
 
 						<div
-							class={`paper-sheet__question ${showQuestionFeedback ? 'has-feedback' : ''} ${resolvedFeedback ? 'is-resolved' : ''}`}
+							class={`paper-sheet__question ${showQuestionFeedback ? 'has-feedback' : ''} ${resolvedFeedback ? 'is-resolved' : ''} ${showLinesMarkdown ? 'has-lines-markdown' : ''}`}
 						>
 							<div class={`paper-sheet__question-number ${resolvedFeedback ? 'is-resolved' : ''}`}>
 								{questionNumbers[questionKey]}
@@ -1085,11 +1090,7 @@
 									{@const textValue = getTextAnswer(questionKey)}
 
 									<MarkdownContent markdown={question.prompt} class="paper-sheet__prompt" />
-									{#if shouldRenderLinesAnswerAsMarkdown(question)}
-										<div class="paper-sheet__lines-markdown">
-											<MarkdownContent markdown={textValue} class="paper-sheet__answer-markdown" />
-										</div>
-									{:else}
+									{#if !showLinesMarkdown}
 										<textarea
 											class="paper-sheet__lines-input"
 											value={textValue}
@@ -1224,6 +1225,15 @@
 							<div class={`paper-sheet__question-marks ${resolvedFeedback ? 'is-resolved' : ''}`}>
 								[{question.marks}m]
 							</div>
+
+							{#if showLinesMarkdown}
+								<div class="paper-sheet__lines-markdown">
+									<MarkdownContent
+										markdown={getTextAnswer(questionKey)}
+										class="paper-sheet__answer-markdown"
+									/>
+								</div>
+							{/if}
 
 							{#if showQuestionFeedback}
 								<div class="paper-sheet__question-feedback">
@@ -1747,6 +1757,10 @@
 		min-width: 0;
 	}
 
+	.paper-sheet__question.has-lines-markdown .paper-sheet__question-feedback {
+		grid-row: 3;
+	}
+
 	.paper-sheet__prompt {
 		margin-bottom: 10px;
 		font-size: 13.5px;
@@ -1916,6 +1930,9 @@
 	}
 
 	.paper-sheet__lines-markdown {
+		grid-column: 2 / 4;
+		grid-row: 2;
+		min-width: 0;
 		border: 1.5px solid var(--paper-border);
 		border-radius: 6px;
 		background:
@@ -2078,6 +2095,15 @@
 		}
 
 		.paper-sheet__question-feedback {
+			grid-column: 1 / -1;
+			grid-row: 3;
+		}
+
+		.paper-sheet__question.has-lines-markdown .paper-sheet__question-feedback {
+			grid-row: 4;
+		}
+
+		.paper-sheet__lines-markdown {
 			grid-column: 1 / -1;
 			grid-row: 3;
 		}
