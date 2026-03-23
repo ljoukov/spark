@@ -99,8 +99,8 @@ Notes:
 
 ## Input, Voice, and Accessibility
 
-- The Spark AI Agent input supports text plus attachments (images and PDFs).
-- Upload constraints follow platform defaults: JPEG/PNG (normalized to JPEG) and PDFs, max 25 MB per upload.
+- The Spark AI Agent input supports text plus attachments (images, PDFs, TXT, Markdown, and LaTeX documents).
+- Upload constraints follow platform defaults: JPEG/PNG (normalized to JPEG), GIF/WEBP/HEIC/HEIF images, and PDF/TXT/Markdown/LaTeX documents, max 25 MB per upload.
 - Voice mode supports both live audio and push-to-talk; transcripts are always visible.
 - In voice mode, Spark AI Agent can still produce visual output.
 - Visual outputs must have text descriptions so the voice experience can describe them when needed.

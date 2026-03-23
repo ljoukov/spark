@@ -65,8 +65,8 @@ type Approach = {
   id:
     | "pdf-gemini-flash"
     | "pdf-gemini-pro"
-    | "images-chatgpt-5-3-codex"
-    | "images-gpt-5-2";
+    | "images-chatgpt-5-3-codex-spark"
+    | "images-gpt-5-4-mini";
   label: string;
   type: "pdf_tool" | "image_model";
   modelId: LlmTextModelId;
@@ -86,16 +86,16 @@ const APPROACHES: readonly Approach[] = [
     modelId: "gemini-2.5-pro",
   },
   {
-    id: "images-chatgpt-5-3-codex",
-    label: "PDF as images + chatgpt-gpt-5.3-codex",
+    id: "images-chatgpt-5-3-codex-spark",
+    label: "PDF as images + chatgpt-gpt-5.3-codex-spark",
     type: "image_model",
-    modelId: "chatgpt-gpt-5.3-codex",
+    modelId: "chatgpt-gpt-5.3-codex-spark",
   },
   {
-    id: "images-gpt-5-2",
-    label: "PDF as images + gpt-5.2",
+    id: "images-gpt-5-4-mini",
+    label: "PDF as images + gpt-5.4-mini",
     type: "image_model",
-    modelId: "gpt-5.2",
+    modelId: "gpt-5.4-mini",
   },
 ] as const;
 
@@ -104,7 +104,7 @@ const COORDINATE_MODES: readonly CoordinateMode[] = ["norm", "int1000"] as const
 
 const JUDGE_MODEL_IDS = [
   "gemini-2.5-pro",
-  "chatgpt-gpt-5.3-codex",
+  "chatgpt-gpt-5.3-codex-spark",
 ] as const satisfies readonly [LlmTextModelId, LlmTextModelId];
 
 const DiagramManifestSchema = z.object({

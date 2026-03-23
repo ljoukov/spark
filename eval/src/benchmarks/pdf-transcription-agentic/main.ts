@@ -66,7 +66,7 @@ const OUTPUT_ROOT_DIR = path.join(BENCHMARK_DIR, "output");
 const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4";
 const JUDGE_MODEL_IDS = [
   "gemini-2.5-pro",
-  "chatgpt-gpt-5.3-codex",
+  "chatgpt-gpt-5.3-codex-spark",
 ] as const satisfies readonly [LlmTextModelId, LlmTextModelId];
 const MAX_STEPS = 200;
 const TARGET_PROBLEM_IDS = ["H1", "H2", "H3"] as const;

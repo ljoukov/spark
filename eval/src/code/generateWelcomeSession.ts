@@ -35,7 +35,7 @@ const TEMPLATE_SESSIONS_COLLECTION = "sessions";
 const DEFAULT_STORY_PLAN_ITEM_ID = "story";
 
 const SUPPORTED_BRIEF_EXTENSIONS = [".txt", ".md", ".markdown"] as const;
-const OPENAI_TEXT_MODEL_ID = "gpt-5.2";
+const OPENAI_TEXT_MODEL_ID = "gpt-5.4-mini";
 const QuizDefinitionsCheckpointSchema = z.array(QuizDefinitionSchema);
 
 const optionsSchema = z

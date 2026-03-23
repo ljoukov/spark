@@ -25,6 +25,17 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import { streamSse } from '$lib/client/sse';
 	import {
+		SPARK_ATTACHMENT_FILE_INPUT_ACCEPT,
+		SPARK_ATTACHMENT_UNSUPPORTED_MESSAGE,
+		isSparkImageAttachmentMimeType,
+		isSparkSupportedClientFile,
+		normalizeSparkAttachmentMimeType,
+		resolveSparkAttachmentBadge,
+		resolveSparkAttachmentExtension,
+		resolveSparkAttachmentExtensionForContentType,
+		resolveSparkAttachmentMimeType
+	} from '$lib/spark/attachments';
+	import {
 		SparkAgentAttachmentSchema,
 		hasSparkAgentConversationNormalizationIssues,
 		normalizeSparkAgentConversation,
@@ -196,43 +207,10 @@
 		return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 	}
 
-	function resolveFileExtension(name: string): string {
-		const parts = name.split('.');
-		if (parts.length < 2) {
-			return '';
-		}
-		return parts[parts.length - 1]?.toLowerCase() ?? '';
-	}
-
 	function replaceFileExtension(name: string, extension: string): string {
 		const base = name.replace(/\.[^/.]+$/, '');
 		const normalizedBase = base.length > 0 ? base : 'upload';
 		return `${normalizedBase}.${extension}`;
-	}
-
-	function resolveExtensionForContentType(contentType: string): string {
-		if (contentType === 'application/pdf') {
-			return 'pdf';
-		}
-		if (contentType === 'image/gif') {
-			return 'gif';
-		}
-		if (contentType === 'image/heic') {
-			return 'heic';
-		}
-		if (contentType === 'image/heif') {
-			return 'heif';
-		}
-		if (contentType === 'image/png') {
-			return 'png';
-		}
-		if (contentType === 'image/webp') {
-			return 'webp';
-		}
-		if (contentType === 'image/jpeg') {
-			return 'jpg';
-		}
-		return '';
 	}
 
 	function resolveAttachmentFingerprint(
@@ -244,50 +222,14 @@
 	}
 
 	function isImageType(contentType: string, filename: string): boolean {
-		if (contentType.startsWith('image/')) {
+		const resolvedContentType = resolveSparkAttachmentMimeType({
+			filename,
+			claimedContentType: contentType
+		});
+		if (resolvedContentType && isSparkImageAttachmentMimeType(resolvedContentType)) {
 			return true;
 		}
-		const ext = resolveFileExtension(filename);
-		return (
-			ext === 'jpg' ||
-			ext === 'jpeg' ||
-			ext === 'png' ||
-			ext === 'webp' ||
-			ext === 'gif' ||
-			ext === 'heic' ||
-			ext === 'heif'
-		);
-	}
-
-	function isPdfType(contentType: string, filename: string): boolean {
-		if (contentType === 'application/pdf') {
-			return true;
-		}
-		return resolveFileExtension(filename) === 'pdf';
-	}
-
-	function isSupportedClientFile(file: File): boolean {
-		const allowed = new Set([
-			'image/jpeg',
-			'image/png',
-			'image/webp',
-			'image/gif',
-			'image/heic',
-			'image/heif',
-			'application/pdf'
-		]);
-		if (file.type) {
-			const normalized = file.type.toLowerCase();
-			if (
-				allowed.has(normalized) ||
-				normalized.startsWith('image/heic') ||
-				normalized.startsWith('image/heif')
-			) {
-				return true;
-			}
-		}
-		const ext = resolveFileExtension(file.name);
-		return ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif', 'pdf'].includes(ext);
+		return false;
 	}
 
 	function cleanupPreviewUrl(url: string | null | undefined): void {
@@ -826,7 +768,7 @@
 			if (!file) {
 				continue;
 			}
-			if (!isSupportedClientFile(file)) {
+			if (!isSparkSupportedClientFile(file)) {
 				continue;
 			}
 			selected.push(file);
@@ -835,7 +777,7 @@
 			return selected;
 		}
 		for (const file of Array.from(dataTransfer.files)) {
-			if (!isSupportedClientFile(file)) {
+			if (!isSparkSupportedClientFile(file)) {
 				continue;
 			}
 			selected.push(file);
@@ -851,8 +793,9 @@
 		let nextCounter = clipboardAttachmentCounter;
 		for (const file of files) {
 			nextCounter += 1;
-			const extensionFromName = resolveFileExtension(file.name);
-			const extensionFromType = resolveExtensionForContentType(resolveClientContentType(file));
+			const extensionFromName = resolveSparkAttachmentExtension(file.name);
+			const extensionFromType =
+				resolveSparkAttachmentExtensionForContentType(resolveClientContentType(file)) ?? '';
 			const extension = extensionFromName || extensionFromType;
 			const filename =
 				extension.length > 0 ? `clipboard-${nextCounter}.${extension}` : `clipboard-${nextCounter}`;
@@ -923,7 +866,7 @@
 		event.preventDefault();
 		fileDragDepth = 0;
 		if (droppedFiles.length === 0) {
-			attachmentError = 'Only JPG, PNG, WEBP, GIF, HEIC/HEIF, or PDF files are supported.';
+			attachmentError = SPARK_ATTACHMENT_UNSUPPORTED_MESSAGE;
 			return;
 		}
 		if (sending) {
@@ -933,49 +876,26 @@
 	}
 
 	function resolveClientContentType(file: File): string {
-		if (file.type) {
-			return file.type.toLowerCase();
-		}
-		const ext = resolveFileExtension(file.name);
-		if (ext === 'pdf') {
-			return 'application/pdf';
-		}
-		if (ext === 'gif') {
-			return 'image/gif';
-		}
-		if (ext === 'heic') {
-			return 'image/heic';
-		}
-		if (ext === 'heif') {
-			return 'image/heif';
-		}
-		if (ext === 'png') {
-			return 'image/png';
-		}
-		if (ext === 'webp') {
-			return 'image/webp';
-		}
-		if (ext === 'jpg' || ext === 'jpeg') {
-			return 'image/jpeg';
-		}
-		return '';
+		return (
+			resolveSparkAttachmentMimeType({
+				filename: file.name,
+				claimedContentType: file.type
+			}) ?? normalizeSparkAttachmentMimeType(file.type) ?? ''
+		);
 	}
 
 	function isHeicType(contentType: string, filename: string): boolean {
-		const normalizedType = contentType.toLowerCase();
+		const normalizedType = normalizeSparkAttachmentMimeType(contentType) ?? '';
 		if (normalizedType === 'image/heic' || normalizedType === 'image/heif') {
 			return true;
 		}
-		if (normalizedType.startsWith('image/heic') || normalizedType.startsWith('image/heif')) {
-			return true;
-		}
-		const ext = resolveFileExtension(filename);
+		const ext = resolveSparkAttachmentExtension(filename);
 		return ext === 'heic' || ext === 'heif';
 	}
 
 	function isRasterImageType(contentType: string): boolean {
-		const normalizedType = contentType.toLowerCase();
-		if (!normalizedType.startsWith('image/')) {
+		const normalizedType = normalizeSparkAttachmentMimeType(contentType);
+		if (!normalizedType || !isSparkImageAttachmentMimeType(normalizedType)) {
 			return false;
 		}
 		if (normalizedType === 'image/gif') {
@@ -1090,7 +1010,7 @@
 	}
 
 	const ATTACHMENT_ERROR_REASON_BY_CODE: Record<string, string> = {
-		unsupported_file: 'This format is not supported. Use JPG, PNG, WEBP, GIF, HEIC/HEIF, or PDF.',
+		unsupported_file: SPARK_ATTACHMENT_UNSUPPORTED_MESSAGE,
 		file_too_large: 'This file is too large. Max size is 25 MB.',
 		too_many_files: 'You can attach up to 10 files per conversation.',
 		total_size_exceeded: 'Attachments are limited to 50 MB per conversation.',
@@ -1427,8 +1347,8 @@
 				continue;
 			}
 
-			if (!isSupportedClientFile(file)) {
-				attachmentError = 'Only JPG, PNG, WEBP, GIF, HEIC/HEIF, or PDF files are supported.';
+			if (!isSparkSupportedClientFile(file)) {
+				attachmentError = SPARK_ATTACHMENT_UNSUPPORTED_MESSAGE;
 				continue;
 			}
 			if (file.size > MAX_FILE_SIZE_BYTES) {
@@ -2000,9 +1920,12 @@
 											{@const file = attachment.file}
 											{@const name = resolveAttachmentName(file)}
 											{@const isImage = isImageType(file.contentType, name)}
-											{@const isPdf = isPdfType(file.contentType, name)}
 											{@const fileUrl = resolveAttachmentDownloadUrl(conversationId, file.id)}
 											{@const sizeLabel = formatBytes(file.sizeBytes)}
+											{@const badge = resolveSparkAttachmentBadge({
+												filename: name,
+												contentType: file.contentType
+											})}
 											{@const tooltip = `${name} • ${sizeLabel}`}
 											<div class="message-attachment-wrap" use:tooltipAction={tooltip}>
 												<div class={`message-attachment ${isImage ? 'is-image' : 'is-file'}`}>
@@ -2017,13 +1940,9 @@
 															target={fileUrl ? '_blank' : undefined}
 															rel="noreferrer"
 														>
-															<span class="message-attachment__icon">
-																{isPdf ? 'PDF' : 'DOC'}
-															</span>
+															<span class="message-attachment__icon">{badge}</span>
 															<span class="message-attachment__name">{name}</span>
-															{#if isPdf}
-																<span class="message-attachment__size">{sizeLabel}</span>
-															{/if}
+															<span class="message-attachment__size">{sizeLabel}</span>
 														</a>
 													{/if}
 												</div>
@@ -2092,7 +2011,7 @@
 							class="sr-only"
 							type="file"
 							multiple
-							accept="image/*,application/pdf"
+							accept={SPARK_ATTACHMENT_FILE_INPUT_ACCEPT}
 							bind:this={attachmentInputRef}
 							onchange={handleFileInputChange}
 						/>
@@ -2108,11 +2027,14 @@
 							<div class="composer-attachments" role="list">
 								{#each attachments as attachment (attachment.localId)}
 									{@const isImage = isImageType(attachment.contentType, attachment.filename)}
-									{@const isPdf = isPdfType(attachment.contentType, attachment.filename)}
 									{@const previewUrl =
 										attachment.previewUrl ??
 										resolveAttachmentDownloadUrl(conversationId, attachment.id)}
 									{@const sizeLabel = formatBytes(attachment.sizeBytes)}
+									{@const badge = resolveSparkAttachmentBadge({
+										filename: attachment.filename,
+										contentType: attachment.contentType
+									})}
 									{@const failureMessage =
 										attachment.status === 'failed'
 											? (attachment.error ?? 'Upload failed. Retry or remove this file.')
@@ -2127,16 +2049,11 @@
 										>
 											{#if isImage && previewUrl}
 												<img src={previewUrl} alt={attachment.filename} loading="lazy" />
-											{:else if isPdf}
-												<div class="attachment-doc">
-													<span class="attachment-doc__icon">PDF</span>
-													<span class="attachment-doc__name">{attachment.filename}</span>
-													<span class="attachment-doc__size">{sizeLabel}</span>
-												</div>
 											{:else}
 												<div class="attachment-doc">
-													<span class="attachment-doc__icon">FILE</span>
+													<span class="attachment-doc__icon">{badge}</span>
 													<span class="attachment-doc__name">{attachment.filename}</span>
+													<span class="attachment-doc__size">{sizeLabel}</span>
 												</div>
 											{/if}
 											{#if attachment.status === 'uploading'}

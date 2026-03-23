@@ -70,7 +70,7 @@ function formatCurrencyUsd(value: number): string {
 function resolveOpenAiReasoningEffort(
   modelId: LlmTextModelId,
 ): OpenAiReasoningEffort | undefined {
-  if (modelId.includes("gpt-5.2")) {
+  if (modelId.includes("gpt-5.4") || modelId.includes("gpt-5.3-codex-spark")) {
     return "medium";
   }
   return undefined;

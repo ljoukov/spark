@@ -15,7 +15,7 @@ Canonical workflow instructions are maintained in:
 
 The benchmark writes that skill into `workspace/TASK.md` and instructs the agent to follow it.
 
-It then runs two judges (`gemini-2.5-pro`, `chatgpt-gpt-5.3-codex`) and reports pass/fail, latency, cost, and tool calls.
+It then runs two judges (`gemini-2.5-pro`, `chatgpt-gpt-5.3-codex-spark`) and reports pass/fail, latency, cost, and tool calls.
 
 ## Run
 

@@ -39,7 +39,7 @@ function getChallengeLabel(includeCoding: boolean): string {
   return includeCoding ? "Coding challenges" : "Lesson problems";
 }
 
-const DEFAULT_TEXT_MODEL_ID: LlmTextModelId = "gpt-5.2";
+const DEFAULT_TEXT_MODEL_ID: LlmTextModelId = "gpt-5.4-mini";
 
 const ENV_TEXT_MODEL_ID = process.env.SPARK_LLM_TEXT_MODEL_ID?.trim();
 

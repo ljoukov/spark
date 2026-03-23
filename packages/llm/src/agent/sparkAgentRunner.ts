@@ -900,7 +900,7 @@ export function resolveSparkAgentToolCallsDir(rootDir: string): string {
 export function resolveSparkAgentThinkingLevel(
   modelId: LlmTextModelId,
 ): LlmThinkingLevel | undefined {
-  if (modelId.includes("gpt-5.4") || modelId.includes("gpt-5.3-codex")) {
+  if (modelId.includes("gpt-5.4") || modelId.includes("gpt-5.3-codex-spark")) {
     return "medium";
   }
   if (modelId.includes("gpt-5.2")) {
@@ -912,7 +912,6 @@ export function resolveSparkAgentThinkingLevel(
 export function resolveSparkAgentSubagentSelection(): AgentSubagentToolSelection {
   return {
     promptPattern: "codex",
-    model: DEFAULT_AGENT_MODEL_ID,
   };
 }
 

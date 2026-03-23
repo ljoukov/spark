@@ -3,6 +3,8 @@ import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { getFirestoreDocument, patchFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken';
 import { downloadStorageObject, uploadStorageObject } from '$lib/server/gcp/storageRest';
+import { detectSparkAttachmentContentType } from '$lib/server/spark/attachmentContentType';
+import { SPARK_ATTACHMENT_UNSUPPORTED_MESSAGE } from '$lib/spark/attachments';
 import { SparkAgentAttachmentSchema, type SparkAgentAttachment } from '@spark/schemas';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
@@ -11,8 +13,6 @@ import { env } from '$env/dynamic/private';
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 const MAX_TOTAL_SIZE_BYTES = 50 * 1024 * 1024;
 const MAX_FILES_PER_CONVERSATION = 10;
-const HEIC_MAJOR_BRANDS = new Set(['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'hevm', 'hevs']);
-const HEIF_MAJOR_BRANDS = new Set(['mif1', 'msf1']);
 
 const conversationIdSchema = z.string().trim().min(1, 'conversationId is required');
 const removeSchema = z.object({
@@ -33,97 +33,6 @@ function isFileLike(value: FormDataEntryValue | null): value is File {
 		return true;
 	}
 	return typeof value === 'object' && value !== null && 'arrayBuffer' in value;
-}
-
-function readAsciiToken(buffer: Uint8Array, offset: number): string | null {
-	if (buffer.length < offset + 4) {
-		return null;
-	}
-	let token = '';
-	for (let i = 0; i < 4; i += 1) {
-		token += String.fromCharCode(buffer[offset + i] ?? 0);
-	}
-	return token;
-}
-
-function detectHeifContentType(buffer: Uint8Array): string | null {
-	const boxType = readAsciiToken(buffer, 4);
-	if (boxType !== 'ftyp') {
-		return null;
-	}
-	const maxOffset = Math.min(buffer.length - 4, 64);
-	for (let offset = 8; offset <= maxOffset; offset += 4) {
-		const brand = readAsciiToken(buffer, offset);
-		if (!brand) {
-			continue;
-		}
-		const normalizedBrand = brand.toLowerCase();
-		if (HEIC_MAJOR_BRANDS.has(normalizedBrand)) {
-			return 'image/heic';
-		}
-		if (HEIF_MAJOR_BRANDS.has(normalizedBrand)) {
-			return 'image/heif';
-		}
-	}
-	return null;
-}
-
-function detectContentType(buffer: Uint8Array): string | null {
-	if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
-		return 'image/jpeg';
-	}
-	if (
-		buffer.length >= 8 &&
-		buffer[0] === 0x89 &&
-		buffer[1] === 0x50 &&
-		buffer[2] === 0x4e &&
-		buffer[3] === 0x47 &&
-		buffer[4] === 0x0d &&
-		buffer[5] === 0x0a &&
-		buffer[6] === 0x1a &&
-		buffer[7] === 0x0a
-	) {
-		return 'image/png';
-	}
-	if (
-		buffer.length >= 12 &&
-		buffer[0] === 0x52 &&
-		buffer[1] === 0x49 &&
-		buffer[2] === 0x46 &&
-		buffer[3] === 0x46 &&
-		buffer[8] === 0x57 &&
-		buffer[9] === 0x45 &&
-		buffer[10] === 0x42 &&
-		buffer[11] === 0x50
-	) {
-		return 'image/webp';
-	}
-	if (
-		buffer.length >= 6 &&
-		buffer[0] === 0x47 &&
-		buffer[1] === 0x49 &&
-		buffer[2] === 0x46 &&
-		buffer[3] === 0x38 &&
-		(buffer[4] === 0x37 || buffer[4] === 0x39) &&
-		buffer[5] === 0x61
-	) {
-		return 'image/gif';
-	}
-	const heifContentType = detectHeifContentType(buffer);
-	if (heifContentType) {
-		return heifContentType;
-	}
-	if (
-		buffer.length >= 5 &&
-		buffer[0] === 0x25 &&
-		buffer[1] === 0x50 &&
-		buffer[2] === 0x44 &&
-		buffer[3] === 0x46 &&
-		buffer[4] === 0x2d
-	) {
-		return 'application/pdf';
-	}
-	return null;
 }
 
 function normalizeAttachments(raw: unknown, fallback: Date): SparkAgentAttachment[] {
@@ -397,7 +306,11 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ error: 'file_too_large', message: 'File exceeds 25 MB limit' }, { status: 413 });
 	}
 
-	const contentType = detectContentType(buffer);
+	const contentType = detectSparkAttachmentContentType({
+		buffer,
+		filename: fileEntry.name,
+		claimedContentType: fileEntry.type
+	});
 	if (!contentType) {
 		logAttachmentPostReject({
 			userId,
@@ -410,7 +323,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json(
 			{
 				error: 'unsupported_file',
-				message: 'Only JPG, PNG, WEBP, GIF, HEIC/HEIF, or PDF files are supported.'
+				message: SPARK_ATTACHMENT_UNSUPPORTED_MESSAGE
 			},
 			{ status: 415 }
 		);

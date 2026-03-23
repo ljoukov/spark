@@ -110,8 +110,9 @@ export type LlmImageModelId = string;
 export type LlmModelId = string;
 
 const LEGACY_LLM_MODEL_ID_ALIASES = {
-  "gpt-5.2-codex": "gpt-5.3-codex",
-  "chatgpt-gpt-5.2-codex": "chatgpt-gpt-5.3-codex",
+  "gpt-5.2-codex": "chatgpt-gpt-5.3-codex-spark",
+  "chatgpt-gpt-5.2-codex": "chatgpt-gpt-5.3-codex-spark",
+  "chatgpt-gpt-5.3-codex": "chatgpt-gpt-5.3-codex-spark",
 } as const;
 
 function normaliseLlmModelId(modelId: string): string {

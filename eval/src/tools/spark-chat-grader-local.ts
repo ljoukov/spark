@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 import { Command } from "commander";
-import type { LlmContentPart, LlmInputMessage } from "@ljoukov/llm";
+import { files, type LlmContentPart, type LlmInputMessage } from "@ljoukov/llm";
 import {
   createSparkChatCreateGraderTool,
   launchSparkLocalGraderRun,
@@ -83,37 +83,64 @@ function resolveAttachmentContentType(filePath: string): string {
       return "image/heif";
     case ".pdf":
       return "application/pdf";
+    case ".txt":
+      return "text/plain";
+    case ".md":
+    case ".markdown":
+      return "text/markdown";
+    case ".tex":
+    case ".ltx":
+    case ".latex":
+      return "application/x-tex";
   }
   throw new Error(`Unsupported attachment type for ${filePath}.`);
+}
+
+function isImageAttachmentContentType(contentType: string): boolean {
+  return contentType.startsWith("image/");
 }
 
 async function loadAttachments(
   attachmentPaths: readonly string[],
 ): Promise<{
   attachments: SparkChatAttachmentInput[];
-  inlineParts: LlmContentPart[];
+  promptParts: LlmContentPart[];
 }> {
   const attachments: SparkChatAttachmentInput[] = [];
-  const inlineParts: LlmContentPart[] = [];
+  const promptParts: LlmContentPart[] = [];
   for (const attachmentPath of attachmentPaths) {
     const resolvedPath = path.resolve(process.cwd(), attachmentPath);
     const bytes = await readFile(resolvedPath);
     const contentType = resolveAttachmentContentType(resolvedPath);
+    const filename = path.basename(resolvedPath);
     const attachmentId = createHash("md5").update(bytes).digest("hex");
     attachments.push({
       id: attachmentId,
       localPath: resolvedPath,
       contentType,
-      filename: path.basename(resolvedPath),
+      filename,
       sizeBytes: bytes.length,
     });
-    inlineParts.push({
-      type: "inlineData",
-      data: Buffer.from(bytes).toString("base64"),
+    if (isImageAttachmentContentType(contentType)) {
+      promptParts.push({
+        type: "inlineData",
+        data: Buffer.from(bytes).toString("base64"),
+        mimeType: contentType,
+      });
+      continue;
+    }
+    const stored = await files.create({
+      data: bytes,
+      filename,
       mimeType: contentType,
     });
+    promptParts.push({
+      type: "input_file",
+      file_id: stored.id,
+      filename: stored.filename ?? filename,
+    });
   }
-  return { attachments, inlineParts };
+  return { attachments, promptParts };
 }
 
 async function readSharedTextFile(filePath: string): Promise<string> {
@@ -160,7 +187,7 @@ async function main(): Promise<void> {
   const toolCallDir = path.join(logsDir, "tool_calls", "create_grader");
   const systemPrompt = await readSharedTextFile(systemPromptPath);
   const graderTaskTemplate = await readSharedTextFile(graderTaskTemplatePath);
-  const { attachments, inlineParts } = await loadAttachments(cli.attachments);
+  const { attachments, promptParts } = await loadAttachments(cli.attachments);
 
   let structuredPlan: SparkGraderLaunchPlan | null = null;
   let graderHandle: SparkLocalGraderRunHandle | null = null;
@@ -200,7 +227,7 @@ async function main(): Promise<void> {
     {
       role: "user",
       content: [
-        ...inlineParts,
+        ...promptParts,
         {
           type: "text",
           text: cli.text,
@@ -240,7 +267,6 @@ async function main(): Promise<void> {
       workspaceId: resolvedGraderHandle.workspaceId,
       workspacePath: resolvedGraderHandle.workspaceRoot,
       summaryPath: resolvedPlan.summaryPath,
-      problemsDir: resolvedPlan.problemsDir,
       agentLogPath: graderResult.agentLogPath,
       llmLogsDir: graderResult.llmLogsDir,
       doneSummary: graderResult.doneSummary,

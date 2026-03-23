@@ -157,8 +157,8 @@ Recommended defaults:
     - Assistant output renders markdown via SparkMarkdown (including LaTeX + code blocks).
     - Code blocks render inside a framed container with a language label and copy button; user bubbles can expand to the same max width as assistant replies with a small left inset.
     - The attach menu (plus button) includes “Add photos & files” and, on mobile-capable devices, “Take photo”.
-    - Pasting clipboard files into the composer attaches supported images/PDFs (JPG/PNG/WEBP/GIF/HEIC/HEIF/PDF) through the same upload path as picker-selected files; pasted files are named `clipboard-{N}` (with inferred extension when available).
-    - Dragging and dropping supported images/PDFs anywhere in the browser viewport while `/spark` is open attaches them through the same upload path as picker/paste flows.
+    - Pasting clipboard files into the composer attaches supported images/documents (JPG/PNG/WEBP/GIF/HEIC/HEIF/PDF/TXT/Markdown/LaTeX) through the same upload path as picker-selected files; pasted files are named `clipboard-{N}` (with inferred extension when available).
+    - Dragging and dropping supported images/documents anywhere in the browser viewport while `/spark` is open attaches them through the same upload path as picker/paste flows.
     - While dragging supported files over the `/spark` browser window, the UI shows a full-screen HTML drop overlay: a dashed rounded panel styled like the “Start a new conversation” surface, three colorful cards (code/image/document), a down-arrow cue, title `Add anything`, and subtext `Drop documents and images here to add to Spark`; the backdrop reuses Spark’s blob color atmosphere, and the panel animates in/out with a short upward slide while keeping a more solid interior fill for readability.
     - HEIC/HEIF uploads are normalized to JPEG client-side before upload when decoding succeeds, so current model adapters can treat them as standard image inputs.
     - Attachments render as horizontally scrolling preview cards above the input field. Each card shows a spinner while uploading and a remove `×` once ready.
@@ -171,7 +171,7 @@ Recommended defaults:
       - The assistant response streams as it is generated (no explicit "Responding..." label; tokens append into the message body).
     - Conversations are stored in Firestore as a single append-only document per thread.
     - Phase 1 always routes user messages to the agent LLM and streams responses back to the client (no direct messaging yet).
-    - The server downloads any attachments on the latest user message and submits them to the LLM as inline parts.
+    - The server downloads any attachments on the latest user message, submits images as inline parts, and submits documents through canonical file attachments (`files.create(...)` -> `input_file`).
 
 **Non-Goals**
 
@@ -179,7 +179,7 @@ Recommended defaults:
 
 ## 2) Key Functional Requirements
 
-- Inputs: JPG/PNG/WEBP/GIF/HEIC/HEIF images and PDFs. Max 25 MB per file (413 on server rejection), max 10 files per conversation, and 50 MB total per conversation (client + server enforced). Text is optional when attachments are present.
+- Inputs: JPG/PNG/WEBP/GIF/HEIC/HEIF images plus PDF/TXT/Markdown/LaTeX documents. Max 25 MB per file (413 on server rejection), max 10 files per conversation, and 50 MB total per conversation (client + server enforced). Text is optional when attachments are present.
 - Metadata: `programme = gcse_triple_science`, optional `subject`, `board`, `topic`, `subtopic`. Server enriches or corrects metadata when confident; clients treat board/subject as optional choices.
 - Generation modes:
   - **Extraction mode** when source already contains Q&A pairs — preserve wording verbatim.
@@ -259,7 +259,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
   Test user login: for local/preview testing, set `TEST_USER_EMAIL_ID_PASSWORD=email/userId/password`. This does **not** bypass Firebase Auth; it is only a reference for signing in via `/login-with-email`. Admin access is still controlled by `ADMIN_USER_IDS`, and Firestore rules have no test-user exceptions.
 
   Web SSR session: the web app issues a long-lived, encrypted, HTTP-only session cookie (`appSession`, max age 1 year) after successful Firebase sign-in (minted via `POST /api/login`). This cookie is used by `web/src/hooks.server.ts` to keep `/spark/*` SSR routes logged in even when the 1-hour Firebase ID token expires (for example after laptop sleep). The cookie is cleared via `POST /api/logout` (also called by `/logout`). Requires `COOKIE_SECRET_KEY` (32 bytes, base64) in the server environment.
-- **Cloud Monitoring**: Spark writes custom metrics under `custom.googleapis.com/spark/**` for LLM call latency, tool-loop timing phases, agent run duration, and task-runner process CPU/RSS summaries. With `@ljoukov/llm` 5.x Spark bridges the library's shared telemetry API into Cloud Monitoring, so direct `generate*` calls and agent loops can emit metrics through one process-wide sink while Spark still adds task-runner-specific step timing and process-resource metrics. `/admin/metrics` reads these series back through the same Google service-account JSON. The service account used in `GOOGLE_SERVICE_ACCOUNT_JSON` must have both `roles/monitoring.metricWriter` and `roles/monitoring.viewer`.
+- **Cloud Monitoring**: Spark writes custom metrics under `custom.googleapis.com/spark/**` for LLM call latency, tool-loop timing phases, agent run duration, and task-runner process CPU/RSS summaries. With `@ljoukov/llm` 7.x Spark bridges the library's shared telemetry API into Cloud Monitoring, so direct `generate*` calls and agent loops can emit metrics through one process-wide sink while Spark still adds task-runner-specific step timing and process-resource metrics. `/admin/metrics` reads these series back through the same Google service-account JSON. The service account used in `GOOGLE_SERVICE_ACCOUNT_JSON` must have both `roles/monitoring.metricWriter` and `roles/monitoring.viewer`.
 
 - **Firestore**: Single source of truth for job metadata, quiz content, attempts, summaries, and client events. Server access uses the Firestore REST API with a service-account JWT flow (WebCrypto) using `GOOGLE_SERVICE_ACCOUNT_JSON`. Structured to minimize document sizes (<1 MB) and keep hot paths under 10 writes/sec per doc.
 - **Firebase Storage**: Raw uploads stored short-term (7-day TTL) under `/spark/uploads/<uid>/<md5>` with security rules enforcing ownership. Server access uses the Storage JSON API (REST) with the same service-account JWT flow; objects are read/written by `storagePath` (no `downloadUrl` requirement). The server derives the storage bucket automatically as `<projectId>.firebasestorage.app` from the Google service account; do not override via environment variables.
@@ -493,7 +493,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 
 ## 9) LLM Guardrails & Prompting
 
-- LLM providers: Gemini (Vertex AI) and OpenAI (Responses API). The shared wrapper defaults OpenAI calls to `gpt-5.2` with `reasoning: { effort: "medium" }` when an OpenAI model is selected. Spark chat (`POST /api/spark/agent/messages`) uses `chatgpt-gpt-5.4` with `thinkingLevel: "medium"`, and Spark run-agent execution (`packages/llm/src/agent/sparkAgentRunner.ts`) also uses `chatgpt-gpt-5.4` with `thinkingLevel: "medium"`. When Spark agent subagents are enabled, Spark pins them to `chatgpt-gpt-5.4` as well rather than letting the model choose a subagent backend. Free-text grading uses `gemini-flash-latest`.
+- LLM providers: Gemini (Vertex AI) and OpenAI (Responses API / ChatGPT Codex backend). The shared wrapper defaults OpenAI API text calls to `gpt-5.4-mini` with `reasoning: { effort: "medium" }` when an OpenAI model is selected. Spark chat (`POST /api/spark/agent/messages`) uses `chatgpt-gpt-5.4` with `thinkingLevel: "medium"`, and Spark run-agent execution (`packages/llm/src/agent/sparkAgentRunner.ts`) also uses `chatgpt-gpt-5.4` with `thinkingLevel: "medium"`. When Spark agent subagents are enabled, Spark keeps the Codex prompt pattern and Spark itself chooses the same parent model rather than letting the model choose an arbitrary subagent backend. Free-text grading uses `gemini-flash-latest`.
 - Extraction prompt: preserve original wording; label low-confidence items; ensure per-question metadata includes source page reference.
 - Generation prompt: board + subject aware; include numeric tolerance, significant figures instructions; produce rationale snippet.
 - Grading prompt: strict rubric enforcement with partial credit; return plain text with `%AWARDED_MARKS%: X`, `%MAX_MARKS%: Y`, and `%FEEDBACK%:` followed by Markdown that includes sections (a) grade + reasoning (including a `Your answer: X/Y` line), (b) a perfect full-mark answer, and (c) per-mark bullet points. For partial/zero marks, include short “Where you got marks” / “What you missed” lines after the grade reason. The grader result label {correct, partial, incorrect} is derived from marks for UI tone/summary.

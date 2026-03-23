@@ -39,8 +39,8 @@ All calls accept:
   - `tools?`: `{ type: 'web-search', mode?: 'cached' | 'live' }` and `{ type: 'code-execution' }` (mapped to Google Search / OpenAI web search + code interpreter)
 
 OpenAI model routing:
-- `gpt-5.4`, `gpt-5.2`, `gpt-5.3-codex` → OpenAI API (`gpt-5.2-codex` is normalized to `gpt-5.3-codex`).
-- `chatgpt-gpt-5.4`, `chatgpt-gpt-5.4-fast`, `chatgpt-gpt-5.2`, `chatgpt-gpt-5.3-codex`, `chatgpt-gpt-5.1-codex-mini` → ChatGPT Codex backend (OAuth) (`chatgpt-gpt-5.2-codex` is normalized to `chatgpt-gpt-5.3-codex`).
+- `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano` → OpenAI API.
+- `chatgpt-gpt-5.4`, `chatgpt-gpt-5.4-fast`, `chatgpt-gpt-5.4-mini`, `chatgpt-gpt-5.3-codex-spark` → ChatGPT Codex backend (OAuth). Legacy aliases `gpt-5.2-codex`, `chatgpt-gpt-5.2-codex`, and `chatgpt-gpt-5.3-codex` are normalized to `chatgpt-gpt-5.3-codex-spark`.
 
 ### JSON convenience
 
@@ -100,7 +100,7 @@ const tools = {
 };
 
 const result = await runToolLoop({
-  modelId: "gpt-5.2",
+  modelId: "gpt-5.4-mini",
   prompt:
     "Use the tools to get the San Francisco weather in celsius. " +
     "Call weather first, then convertFahrenheitToCelsius.",

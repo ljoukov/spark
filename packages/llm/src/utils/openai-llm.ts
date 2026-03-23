@@ -6,11 +6,11 @@ const MAX_PARALLEL_REQUESTS = 3;
 const MIN_INTERVAL_BETWEEN_START_MS = 200;
 const START_JITTER_MS = 200;
 
-export const OPENAI_MODEL_IDS = ["gpt-5.4", "gpt-5.3-codex", "gpt-5.2"] as const;
+export const OPENAI_MODEL_IDS = ["gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"] as const;
 
 export const CHATGPT_ONLY_MODEL_IDS = [
   "gpt-5.4-fast",
-  "gpt-5.1-codex-mini",
+  "gpt-5.3-codex-spark",
 ] as const;
 
 export type OpenAiModelId = (typeof OPENAI_MODEL_IDS)[number];
@@ -35,18 +35,12 @@ export const OPENAI_MODEL_VARIANT_IDS = [
   ),
 ] as const satisfies readonly [OpenAiModelVariantId, ...OpenAiModelVariantId[]];
 
-export const DEFAULT_OPENAI_MODEL_ID: OpenAiModelId = "gpt-5.2";
+export const DEFAULT_OPENAI_MODEL_ID: OpenAiModelId = "gpt-5.4-mini";
 
 export type OpenAiPricing = {
   readonly inputRate: number;
   readonly cachedRate: number;
   readonly outputRate: number;
-};
-
-const OPENAI_GPT_52_PRICING: OpenAiPricing = {
-  inputRate: 1.75 / 1_000_000,
-  cachedRate: 0.175 / 1_000_000,
-  outputRate: 14 / 1_000_000,
 };
 
 const OPENAI_GPT_54_PRICING: OpenAiPricing = {
@@ -61,16 +55,16 @@ const OPENAI_GPT_54_PRIORITY_PRICING: OpenAiPricing = {
   outputRate: 30 / 1_000_000,
 };
 
-const OPENAI_GPT_53_CODEX_PRICING: OpenAiPricing = {
-  inputRate: 1.25 / 1_000_000,
-  cachedRate: 0.125 / 1_000_000,
-  outputRate: 10 / 1_000_000,
-};
-
-const OPENAI_GPT_51_CODEX_MINI_PRICING: OpenAiPricing = {
+const OPENAI_GPT_54_MINI_PRICING: OpenAiPricing = {
   inputRate: 0.25 / 1_000_000,
   cachedRate: 0.025 / 1_000_000,
-  outputRate: 2.0 / 1_000_000,
+  outputRate: 2 / 1_000_000,
+};
+
+const OPENAI_GPT_54_NANO_PRICING: OpenAiPricing = {
+  inputRate: 0.05 / 1_000_000,
+  cachedRate: 0.005 / 1_000_000,
+  outputRate: 0.4 / 1_000_000,
 };
 
 export type OpenAiReasoningEffort = "low" | "medium" | "high" | "xhigh";
@@ -123,17 +117,17 @@ export function getOpenAiPricing(modelId: string): OpenAiPricing | undefined {
   if (modelId.includes("gpt-5.4-fast")) {
     return OPENAI_GPT_54_PRIORITY_PRICING;
   }
+  if (modelId.includes("gpt-5.4-mini")) {
+    return OPENAI_GPT_54_MINI_PRICING;
+  }
+  if (modelId.includes("gpt-5.4-nano")) {
+    return OPENAI_GPT_54_NANO_PRICING;
+  }
+  if (modelId.includes("gpt-5.3-codex-spark")) {
+    return OPENAI_GPT_54_MINI_PRICING;
+  }
   if (modelId.includes("gpt-5.4")) {
     return OPENAI_GPT_54_PRICING;
-  }
-  if (modelId.includes("gpt-5.3-codex")) {
-    return OPENAI_GPT_53_CODEX_PRICING;
-  }
-  if (modelId.includes("gpt-5.2")) {
-    return OPENAI_GPT_52_PRICING;
-  }
-  if (modelId.includes("gpt-5.1-codex-mini")) {
-    return OPENAI_GPT_51_CODEX_MINI_PRICING;
   }
   return undefined;
 }

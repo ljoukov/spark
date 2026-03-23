@@ -6,8 +6,8 @@ This benchmark compares end-to-end transcription quality for the Hamilton 2017 P
 
 - `PDF + gemini-flash-latest`
 - `PDF + gemini-2.5-pro`
-- `PDF as images + chatgpt-gpt-5.3-codex`
-- `PDF as images + gpt-5.2`
+- `PDF as images + chatgpt-gpt-5.3-codex-spark`
+- `PDF as images + gpt-5.4-mini`
 
 Each approach is evaluated across:
 
@@ -17,7 +17,7 @@ Each approach is evaluated across:
 The benchmark runs all configurations in parallel, produces per-config artifacts, and then runs two judges:
 
 - `gemini-2.5-pro`
-- `chatgpt-gpt-5.3-codex`
+- `chatgpt-gpt-5.3-codex-spark`
 
 ## How To Run
 

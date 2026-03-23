@@ -13,7 +13,7 @@ import {
 	upsertWorkspaceStorageLinkFileDoc,
 	upsertWorkspaceTextFileDoc
 } from '@spark/llm';
-import { tool } from '@ljoukov/llm';
+import { files, tool } from '@ljoukov/llm';
 import type { LlmContentPart, LlmInputMessage, LlmToolSet } from '@ljoukov/llm';
 import {
 	SparkAgentAttachmentSchema,
@@ -39,6 +39,13 @@ import {
 import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken';
 import { downloadStorageObject } from '$lib/server/gcp/storageRest';
 import { encodeBytesToBase64 } from '$lib/server/gcp/base64';
+import {
+	isSparkDocumentAttachmentMimeType,
+	isSparkSupportedAttachmentMimeType,
+	normalizeSparkAttachmentMimeType,
+	resolveSparkAttachmentExtension,
+	resolveSparkAttachmentExtensionForContentType
+} from '$lib/spark/attachments';
 import { env } from '$env/dynamic/private';
 import { deriveLessonStatus, countCompletedSteps } from '$lib/server/lessons/status';
 import {
@@ -73,15 +80,6 @@ const GENERATION_RETRY_BASE_DELAY_MS = 800;
 const GENERATION_RETRY_MAX_DELAY_MS = 4_000;
 const ATTACHMENT_DOWNLOAD_TIMEOUT_MS = 10_000;
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
-const SUPPORTED_ATTACHMENT_MIME_TYPES = new Set([
-	'image/jpeg',
-	'image/png',
-	'image/webp',
-	'image/gif',
-	'image/heic',
-	'image/heif',
-	'application/pdf'
-]);
 const FALLBACK_RESPONSE = [
 	'Here is a quick 3-day GCSE Biology sprint you can follow:',
 	'',
@@ -607,7 +605,24 @@ function extractTextParts(parts: SparkAgentContentPart[]): string {
 }
 
 function isSupportedAttachmentMime(value: string): boolean {
-	return SUPPORTED_ATTACHMENT_MIME_TYPES.has(value);
+	return isSparkSupportedAttachmentMimeType(value);
+}
+
+function resolveAttachmentPromptFilename(
+	attachment: z.infer<typeof attachmentSchema> & { contentType: string }
+): string {
+	const rawFilename = attachment.filename?.trim();
+	const extension = resolveSparkAttachmentExtensionForContentType(attachment.contentType) ?? 'bin';
+	if (!rawFilename) {
+		return `${attachment.id}.${extension}`;
+	}
+	const currentExtension = resolveSparkAttachmentExtension(rawFilename);
+	if (currentExtension === extension) {
+		return rawFilename;
+	}
+	const baseName = rawFilename.replace(/\.[^/.]+$/u, '').trim();
+	const normalizedBaseName = baseName.length > 0 ? baseName : attachment.id;
+	return `${normalizedBaseName}.${extension}`;
 }
 
 async function downloadAttachmentParts(
@@ -618,7 +633,8 @@ async function downloadAttachmentParts(
 		return [];
 	}
 	const downloadTasks = attachments.map(async (attachment) => {
-		if (!isSupportedAttachmentMime(attachment.contentType)) {
+		const normalizedMimeType = normalizeSparkAttachmentMimeType(attachment.contentType);
+		if (!normalizedMimeType || !isSupportedAttachmentMime(normalizedMimeType)) {
 			throw new Error(`Unsupported attachment type ${attachment.contentType}`);
 		}
 
@@ -640,17 +656,29 @@ async function downloadAttachmentParts(
 		if (bytes.length > MAX_ATTACHMENT_BYTES) {
 			throw new Error(`Attachment ${attachment.id} exceeds 25 MB limit`);
 		}
+		if (isSparkDocumentAttachmentMimeType(normalizedMimeType)) {
+			const filename = resolveAttachmentPromptFilename({
+				...attachment,
+				contentType: normalizedMimeType
+			});
+			const stored = await files.create({
+				data: bytes,
+				filename,
+				mimeType: normalizedMimeType
+			});
+			return {
+				type: 'input_file',
+				file_id: stored.id,
+				filename: stored.filename ?? filename
+			} satisfies LlmContentPart;
+		}
 		return {
-			data: bytes,
-			mimeType: attachment.contentType
-		};
+			type: 'inlineData',
+			data: encodeBytesToBase64(bytes),
+			mimeType: normalizedMimeType
+		} satisfies LlmContentPart;
 	});
-	const buffers = await Promise.all(downloadTasks);
-	return buffers.map((entry) => ({
-		type: 'inlineData',
-		data: encodeBytesToBase64(entry.data),
-		mimeType: entry.mimeType
-	}));
+	return Promise.all(downloadTasks);
 }
 
 function buildLlmInputMessages(

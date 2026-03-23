@@ -87,7 +87,7 @@ function parseCliOptions(args: readonly string[]):
       model: z.enum(MODEL_IDS).optional(),
     })
     .transform(({ model }) => ({
-      modelIds: [model ?? "gpt-5.2"],
+      modelIds: [model ?? "gpt-5.4-mini"],
     }));
 
   const raw: { model?: string } = {};

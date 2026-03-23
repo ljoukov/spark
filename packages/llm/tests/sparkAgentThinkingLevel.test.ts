@@ -9,12 +9,12 @@ describe("resolveSparkAgentThinkingLevel", () => {
     expect(resolveSparkAgentThinkingLevel("chatgpt-gpt-5.4")).toBe("medium");
   });
 
-  it("uses medium thinking for gpt-5.3-codex agent runs", async () => {
+  it("uses medium thinking for gpt-5.3-codex-spark agent runs", async () => {
     const { resolveSparkAgentThinkingLevel } = await import(
       "../src/agent/sparkAgentRunner"
     );
 
-    expect(resolveSparkAgentThinkingLevel("chatgpt-gpt-5.3-codex")).toBe(
+    expect(resolveSparkAgentThinkingLevel("chatgpt-gpt-5.3-codex-spark")).toBe(
       "medium",
     );
   });
@@ -34,7 +34,6 @@ describe("resolveSparkAgentThinkingLevel", () => {
 
     expect(resolveSparkAgentSubagentSelection()).toEqual({
       promptPattern: "codex",
-      model: "chatgpt-gpt-5.4",
     });
   });
 });
