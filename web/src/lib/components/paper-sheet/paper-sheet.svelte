@@ -1450,10 +1450,9 @@
 								{@const hasAnswerMarkdown = answerMarkdown.trim().length > 0}
 								<div class="paper-sheet__lines-markdown">
 									{#if hasAnswerMarkdown}
-										<MarkdownContent
-											markdown={answerMarkdown}
-											class="paper-sheet__answer-markdown"
-										/>
+										<div class="paper-sheet__answer-markdown">
+											<MarkdownContent markdown={answerMarkdown} />
+										</div>
 									{:else}
 										<p class="paper-sheet__answer-placeholder">
 											No answer found in the submission.
@@ -1573,6 +1572,8 @@
 		--paper-placeholder: #999999;
 		--paper-reading-size: 16px;
 		--paper-reading-line-height: 1.8;
+		--paper-answer-line-height: 2.3;
+		--paper-answer-row-height: calc(var(--paper-answer-line-height) * 1em);
 		--paper-hook-text: #444444;
 		--paper-theory-text: #222222;
 		--paper-info-text: #333333;
@@ -2158,18 +2159,18 @@
 		background:
 			repeating-linear-gradient(
 				transparent,
-				transparent calc(1.8em - 1px),
-				var(--paper-lines-rule-alt) calc(1.8em - 1px),
-				var(--paper-lines-rule-alt) 1.8em
+				transparent calc(var(--paper-answer-row-height) - 1px),
+				var(--paper-lines-rule-alt) calc(var(--paper-answer-row-height) - 1px),
+				var(--paper-lines-rule-alt) var(--paper-answer-row-height)
 			),
 			var(--paper-lines-markdown-bg);
 		padding: 10px 12px;
 	}
 
 	.paper-sheet__answer-markdown {
-		min-height: calc(1.8em * 3);
+		min-height: calc(var(--paper-answer-row-height) * 2);
 		font-size: var(--paper-reading-size);
-		line-height: var(--paper-reading-line-height);
+		line-height: var(--paper-answer-line-height);
 		--markdown-strong: var(--sheet-color);
 	}
 
