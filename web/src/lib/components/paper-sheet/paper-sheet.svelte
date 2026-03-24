@@ -2168,7 +2168,7 @@
 	}
 
 	.paper-sheet__answer-markdown {
-		min-height: calc(var(--paper-answer-row-height) * 2);
+		min-height: var(--paper-answer-row-height);
 		font-size: var(--paper-reading-size);
 		line-height: var(--paper-answer-line-height);
 		--markdown-strong: var(--sheet-color);
