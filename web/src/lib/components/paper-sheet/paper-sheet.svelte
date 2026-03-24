@@ -1141,6 +1141,25 @@
 	</header>
 
 	<div class="paper-sheet__body">
+		{#if currentReview && scoreTone}
+			<aside
+				class="paper-sheet__score-card"
+				style={`background:${scoreTone.background}; border-color:${scoreTone.border};`}
+				aria-label="Worksheet review summary"
+			>
+				<div class="paper-sheet__score-head">
+					<div class="paper-sheet__score-copy">
+						<p class="paper-sheet__score-label">{currentReview.label}</p>
+					</div>
+					<p class="paper-sheet__score-value" style={`color:${scoreTone.text};`}>
+						<span class="paper-sheet__score-got">{currentReview.score.got}</span>
+						<span class="paper-sheet__score-total">/ {currentReview.score.total}</span>
+					</p>
+				</div>
+				<p class="paper-sheet__score-message">{currentReview.message}</p>
+			</aside>
+		{/if}
+
 		{#if hookSection}
 			<MarkdownContent markdown={hookSection.text} class="paper-sheet__hook" />
 		{/if}
@@ -1490,26 +1509,6 @@
 			</section>
 		{/each}
 
-		{#if currentReview && scoreTone}
-			<div
-				class="paper-sheet__score-card"
-				style={`background:${scoreTone.background}; border-color:${scoreTone.border};`}
-			>
-				<p class="paper-sheet__score-label">{currentReview.label}</p>
-				<p class="paper-sheet__score-value" style={`color:${scoreTone.text};`}>
-					{currentReview.score.got} / {currentReview.score.total}
-				</p>
-				<p class="paper-sheet__score-message">{currentReview.message}</p>
-				<p class="paper-sheet__score-note">{currentReview.note}</p>
-				{#if currentReview.objectiveQuestionCount !== undefined || currentReview.teacherReviewQuestionCount !== undefined}
-					<p class="paper-sheet__score-note">
-						{currentReview.objectiveQuestionCount ?? 0} objective questions ·
-						{currentReview.teacherReviewQuestionCount ?? 0} teacher-reviewed responses
-					</p>
-				{/if}
-			</div>
-		{/if}
-
 		{#if reviewMode === 'mock'}
 			<div class="paper-sheet__actions">
 				{#if checked}
@@ -1784,7 +1783,7 @@
 	}
 
 	.paper-sheet__hook {
-		margin-bottom: 24px;
+		margin: 0 0 18px;
 		padding-left: 16px;
 		border-left: 4px solid var(--sheet-accent);
 		font-size: var(--paper-reading-size);
@@ -2215,36 +2214,63 @@
 	}
 
 	.paper-sheet__score-card {
-		margin: 8px 0 16px;
+		width: 100%;
+		margin: 0 0 24px;
 		border: 2px solid #22a66e;
-		border-radius: 10px;
+		border-radius: 14px;
 		padding: 20px 24px;
-		text-align: center;
+		box-shadow: 0 14px 28px -26px rgba(15, 23, 42, 0.5);
+	}
+
+	.paper-sheet__score-head {
+		display: grid;
+		grid-template-columns: minmax(0, 1.2fr) auto;
+		align-items: flex-start;
+		gap: 18px 24px;
+	}
+
+	.paper-sheet__score-copy {
+		min-width: 0;
 	}
 
 	.paper-sheet__score-label {
-		margin: 0 0 4px;
-		font-size: var(--paper-reading-size);
-		color: var(--paper-text-muted);
+		margin: 0;
+		max-width: 26ch;
+		font-size: 30px;
+		line-height: 1.15;
+		font-weight: 700;
+		color: var(--paper-text-strong);
 	}
 
 	.paper-sheet__score-value {
 		margin: 0;
-		font-size: 36px;
-		line-height: 1;
+		flex-shrink: 0;
+		font-size: 46px;
+		line-height: 0.95;
 		font-weight: 900;
+		letter-spacing: -0.04em;
+	}
+
+	.paper-sheet__score-got,
+	.paper-sheet__score-total {
+		display: inline-block;
+	}
+
+	.paper-sheet__score-total {
+		font-size: 24px;
+		font-weight: 700;
+		letter-spacing: -0.02em;
+		line-height: 1;
+		opacity: 0.82;
 	}
 
 	.paper-sheet__score-message {
-		margin: 6px 0 0;
+		margin: 14px 0 0;
+		max-width: 76ch;
 		font-size: var(--paper-reading-size);
+		line-height: 1.55;
+		font-weight: 600;
 		color: var(--paper-text-soft);
-	}
-
-	.paper-sheet__score-note {
-		margin: 4px 0 0;
-		font-size: var(--paper-reading-size);
-		color: var(--paper-text-subtle);
 	}
 
 	.paper-sheet__actions {
@@ -2303,6 +2329,24 @@
 
 		.paper-sheet__total-box {
 			text-align: left;
+		}
+
+		.paper-sheet__score-head {
+			grid-template-columns: minmax(0, 1fr);
+			gap: 12px;
+		}
+
+		.paper-sheet__score-label {
+			max-width: none;
+			font-size: 24px;
+		}
+
+		.paper-sheet__score-value {
+			font-size: 40px;
+		}
+
+		.paper-sheet__score-total {
+			font-size: 22px;
 		}
 
 		.paper-sheet__question {
