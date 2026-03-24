@@ -6,6 +6,12 @@
 
 	const sections = [
 		{
+			title: 'Catalog',
+			description:
+				'Canonical inventory of every supported sheet surface, with required inputs and live specimens.',
+			href: '/admin/ui/sheet/catalog'
+		},
+		{
 			title: 'Worksheet',
 			description:
 				'Full paper-sheet previews with seeded sample worksheets and tab switching between subjects.',
@@ -19,20 +25,23 @@
 		},
 		{
 			title: 'Annotated text',
-			description:
-				'Standalone annotated-text previews with light and dark theme toggles.',
+			description: 'Standalone annotated-text previews with light and dark theme toggles.',
 			href: '/admin/ui/sheet/annotated-text'
 		}
 	] as const;
 </script>
+
+<svelte:head>
+	<title>Sheet UI previews · Spark admin</title>
+</svelte:head>
 
 <div class="space-y-6">
 	<div class="space-y-3">
 		<div class="space-y-2">
 			<h1 class="text-2xl font-semibold tracking-tight text-foreground">Sheet UI previews</h1>
 			<p class="max-w-3xl text-sm text-muted-foreground">
-				Admin-only visual checks for the paper worksheet surface, the extracted feedback chat
-				component states, and annotated text rendering.
+				Entry point for the sheet preview surfaces. Use the catalog for the full support matrix,
+				then open the focused preview that matches the surface you want to inspect.
 			</p>
 		</div>
 
@@ -48,11 +57,15 @@
 	<Card.Root class="border-border/70 bg-card/95 shadow-sm">
 		<Card.Header>
 			<Card.Title>Preview sections</Card.Title>
-			<Card.Description>Open the focused preview that matches the surface you want to inspect.</Card.Description>
+			<Card.Description
+				>Open the focused preview that matches the surface you want to inspect.</Card.Description
+			>
 		</Card.Header>
-		<Card.Content class="grid gap-3 md:grid-cols-3">
+		<Card.Content class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
 			{#each sections as section}
-				<div class="flex h-full flex-col justify-between gap-4 rounded-xl border border-border/70 p-4">
+				<div
+					class="flex h-full flex-col justify-between gap-4 rounded-xl border border-border/70 p-4"
+				>
 					<div class="space-y-1">
 						<p class="text-sm font-semibold text-foreground">{section.title}</p>
 						<p class="text-xs text-muted-foreground">{section.description}</p>

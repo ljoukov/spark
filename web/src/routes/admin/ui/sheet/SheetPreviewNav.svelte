@@ -2,10 +2,11 @@
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils.js';
 
-	type SheetPreviewTabId = 'overview' | 'worksheet' | 'feedback' | 'annotated-text';
+	type SheetPreviewTabId = 'overview' | 'catalog' | 'worksheet' | 'feedback' | 'annotated-text';
 
 	const tabs: Array<{ id: SheetPreviewTabId; href: string; label: string }> = [
 		{ id: 'overview', href: '/admin/ui/sheet', label: 'Overview' },
+		{ id: 'catalog', href: '/admin/ui/sheet/catalog', label: 'Catalog' },
 		{ id: 'worksheet', href: '/admin/ui/sheet/worksheet', label: 'Worksheet' },
 		{ id: 'feedback', href: '/admin/ui/sheet/feedback', label: 'Feedback states' },
 		{
@@ -23,7 +24,9 @@
 		<a
 			href={tab.href}
 			aria-current={current === tab.id ? 'page' : undefined}
-			class={cn(buttonVariants({ variant: current === tab.id ? 'default' : 'secondary', size: 'sm' }))}
+			class={cn(
+				buttonVariants({ variant: current === tab.id ? 'default' : 'secondary', size: 'sm' })
+			)}
 		>
 			{tab.label}
 		</a>
