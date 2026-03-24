@@ -670,7 +670,7 @@
 			bind:this={sheetScrollContainer}
 			class={cn('overflow-auto rounded-lg', sheetPreview.heightClass)}
 		>
-			<div>
+			<div class="mx-auto w-full max-w-[1024px]">
 				<PaperSheet
 					sheet={sheetPreview.sheet}
 					reviewMode={sheetPreview.reviewMode ?? 'none'}
