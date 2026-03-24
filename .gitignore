@@ -14,3 +14,4 @@ dist
 **/.build/
 **/.swiftpm/
 .vercel
+tmp/
