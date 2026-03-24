@@ -452,11 +452,14 @@
 
 	@media (max-width: 720px) {
 		.paper-sheet-note__header {
-			flex-wrap: wrap;
+			display: grid;
+			grid-template-columns: max-content minmax(0, 1fr) max-content;
+			align-items: center;
 		}
 
 		.paper-sheet-note__status {
 			margin-left: 0;
+			justify-self: end;
 		}
 	}
 
