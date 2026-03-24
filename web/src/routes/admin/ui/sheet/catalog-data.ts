@@ -13,9 +13,6 @@ export type SheetCatalogPreviewKind =
 	| 'lines'
 	| 'calc'
 	| 'match'
-	| 'match-idea-tiles'
-	| 'match-idea-lines'
-	| 'match-idea-reorder'
 	| 'spelling'
 	| 'review-summary'
 	| 'question-feedback'
@@ -37,10 +34,7 @@ export type SheetCatalogItem = {
 		| 'PaperSheet'
 		| 'PaperSheetQuestionFeedback'
 		| 'PaperSheetFeedbackChat'
-		| 'AnnotatedTextPanel'
-		| 'MatchIdeaTiles'
-		| 'MatchIdeaLines'
-		| 'MatchIdeaReorder';
+		| 'AnnotatedTextPanel';
 	kindLabel: string;
 	title: string;
 	description: string;
@@ -297,45 +291,6 @@ export const sheetCatalogItems: SheetCatalogItem[] = [
 		answerShape: 'answers[question.id] = Record<string, string>',
 		note: 'Each pair requires both `term` and `match`.',
 		previewKind: 'match'
-	},
-	{
-		id: 'match-idea-tiles',
-		categoryId: 'inputs',
-		component: 'MatchIdeaTiles',
-		kindLabel: 'Design idea',
-		title: 'Match pairs – Tap tiles (Duolingo-style)',
-		description:
-			'All terms and definitions are shuffled into a flat grid of equal-sized tiles. The student taps any tile, then taps its match. Correct pairs highlight and fade; wrong pairs shake and reset. No two-column cognitive load — just tap-tap. The grid is 2-col on mobile, 3-col on wider screens.',
-		requiredInputs: ['question.pairs[]'],
-		answerShape: 'answers[question.id] = Record<string, string>',
-		note: 'Inspired by Duolingo word-matching. Color-coded dots distinguish terms (blue) from definitions (purple). Very thumb-friendly on mobile — no drag gesture required.',
-		previewKind: 'match-idea-tiles'
-	},
-	{
-		id: 'match-idea-lines',
-		categoryId: 'inputs',
-		component: 'MatchIdeaLines',
-		kindLabel: 'Design idea',
-		title: 'Match pairs – Connect with lines',
-		description:
-			'Two columns: terms on the left, shuffled definitions on the right. Tap a term, then tap a definition — a colored SVG bezier line is drawn between them. Tap a connected term to remove its line. Each connection gets a unique color so crossed lines remain legible.',
-		requiredInputs: ['question.pairs[]'],
-		answerShape: 'answers[question.id] = Record<string, string>',
-		note: 'Visual and satisfying — the student sees their connections grow. Works on mobile with tap-tap; the SVG overlay re-renders on resize. Tap a connected term to detach and reassign.',
-		previewKind: 'match-idea-lines'
-	},
-	{
-		id: 'match-idea-reorder',
-		categoryId: 'inputs',
-		component: 'MatchIdeaReorder',
-		kindLabel: 'Design idea',
-		title: 'Match pairs – Drag to reorder',
-		description:
-			'Terms are fixed on the left. Definitions appear on the right in shuffled order. The student drags definitions (or taps ▲/▼ arrows on mobile) to reorder them so each definition aligns horizontally with its matching term. A "Check" button reveals correct (green) and incorrect (orange) rows.',
-		requiredInputs: ['question.pairs[]'],
-		answerShape: 'answers[question.id] = Record<string, string>',
-		note: 'No two-step selection needed — the intent is clear from spatial alignment. ▲/▼ arrow buttons ensure the interaction works on touch devices without native drag support.',
-		previewKind: 'match-idea-reorder'
 	},
 	{
 		id: 'spelling-question',

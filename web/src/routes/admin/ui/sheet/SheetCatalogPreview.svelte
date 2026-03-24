@@ -16,9 +16,6 @@
 		type PaperSheetReview
 	} from '$lib/components/paper-sheet/index.js';
 	import { cn } from '$lib/utils.js';
-	import MatchIdeaTiles from './match-idea-tiles.svelte';
-	import MatchIdeaLines from './match-idea-lines.svelte';
-	import MatchIdeaReorder from './match-idea-reorder.svelte';
 	import type { SheetCatalogItem } from './catalog-data';
 
 	type RuntimeStage = 'pending' | 'thinking' | 'responding' | 'resolved';
@@ -718,51 +715,6 @@
 				attachmentDraft = value;
 			}}
 			onReply={() => {}}
-		/>
-	</div>
-{:else if item.previewKind === 'match-idea-tiles'}
-	<div class="rounded-xl border border-border/70 bg-muted/20 p-3">
-		<p class="mb-3 text-xs font-medium text-muted-foreground">
-			Tap a term tile, then tap its matching definition. Correct pairs highlight green; wrong pairs
-			shake.
-		</p>
-		<MatchIdeaTiles
-			pairs={[
-				{ term: 'Villa', match: 'A large Roman country house' },
-				{ term: 'Hypocaust', match: 'Underfloor heating system' },
-				{ term: 'Mosaic', match: 'A picture made from small tiles' }
-			]}
-			accentColor="#2E6DA4"
-		/>
-	</div>
-{:else if item.previewKind === 'match-idea-lines'}
-	<div class="rounded-xl border border-border/70 bg-muted/20 p-3">
-		<p class="mb-3 text-xs font-medium text-muted-foreground">
-			Tap a term on the left, then tap a definition on the right. A bezier line connects them. Tap a
-			connected term to remove the line.
-		</p>
-		<MatchIdeaLines
-			pairs={[
-				{ term: 'Villa', match: 'A large Roman country house' },
-				{ term: 'Hypocaust', match: 'Underfloor heating system' },
-				{ term: 'Mosaic', match: 'A picture made from small tiles' }
-			]}
-			accentColor="#2E6DA4"
-		/>
-	</div>
-{:else if item.previewKind === 'match-idea-reorder'}
-	<div class="rounded-xl border border-border/70 bg-muted/20 p-3">
-		<p class="mb-3 text-xs font-medium text-muted-foreground">
-			Terms are fixed on the left. Drag definitions on the right (or use ▲/▼ arrows) to align each
-			definition with its term, then check.
-		</p>
-		<MatchIdeaReorder
-			pairs={[
-				{ term: 'Villa', match: 'A large Roman country house' },
-				{ term: 'Hypocaust', match: 'Underfloor heating system' },
-				{ term: 'Mosaic', match: 'A picture made from small tiles' }
-			]}
-			accentColor="#2E6DA4"
 		/>
 	</div>
 {:else if item.previewKind === 'runtime-feedback'}
