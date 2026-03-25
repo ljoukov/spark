@@ -184,9 +184,11 @@ function createLlmGroupSummary(options: {
 		key: options.key,
 		callCount: options.latencyPoints.length,
 		okCount: options.latencyPoints.filter((point) => metricLabel(point, 'status') === 'ok').length,
-		blockedCount: options.latencyPoints.filter((point) => metricLabel(point, 'status') === 'blocked')
+		blockedCount: options.latencyPoints.filter(
+			(point) => metricLabel(point, 'status') === 'blocked'
+		).length,
+		errorCount: options.latencyPoints.filter((point) => metricLabel(point, 'status') === 'error')
 			.length,
-		errorCount: options.latencyPoints.filter((point) => metricLabel(point, 'status') === 'error').length,
 		averageLatencyMs: latencySummary.average,
 		p95LatencyMs: latencySummary.p95,
 		maxLatencyMs: latencySummary.max,
@@ -225,9 +227,11 @@ function buildAgentTypeSummary(options: {
 		agentType: options.agentType,
 		runCount: options.durationPoints.length,
 		okCount: options.durationPoints.filter((point) => metricLabel(point, 'status') === 'ok').length,
-		stoppedCount: options.durationPoints.filter((point) => metricLabel(point, 'status') === 'stopped')
+		stoppedCount: options.durationPoints.filter(
+			(point) => metricLabel(point, 'status') === 'stopped'
+		).length,
+		errorCount: options.durationPoints.filter((point) => metricLabel(point, 'status') === 'error')
 			.length,
-		errorCount: options.durationPoints.filter((point) => metricLabel(point, 'status') === 'error').length,
 		averageDurationMs: durationSummary.average,
 		p95DurationMs: durationSummary.p95,
 		averageCpuUtilization: cpuSummary.average,
@@ -237,11 +241,12 @@ function buildAgentTypeSummary(options: {
 	};
 }
 
-export async function loadLlmMetricsDashboard(windowKey: MetricsWindowKey): Promise<LlmMetricsDashboard> {
+export async function loadLlmMetricsDashboard(
+	windowKey: MetricsWindowKey
+): Promise<LlmMetricsDashboard> {
 	const serviceAccountJson = requireServiceAccountJson();
 	const loadedAt = new Date();
 	const startTime = buildWindowStart(windowKey, loadedAt);
-	const taskRunnerFilter = 'resource.labels.job = "spark-task-runner"';
 	const primaryScopeFilter = 'metric.labels.scope = "primary"';
 
 	const [
@@ -271,41 +276,47 @@ export async function loadLlmMetricsDashboard(windowKey: MetricsWindowKey): Prom
 		listSparkMetricPoints({
 			serviceAccountJson,
 			metricType: SPARK_MONITORING_METRIC_TYPES.llmToolLoopStepLatencyMs,
-			startTime,
-			extraFilter: taskRunnerFilter
+			startTime
 		}),
 		listSparkMetricPoints({
 			serviceAccountJson,
 			metricType: SPARK_MONITORING_METRIC_TYPES.agentRunDurationMs,
 			startTime,
-			extraFilter: `${taskRunnerFilter} AND ${primaryScopeFilter}`
+			extraFilter: primaryScopeFilter
 		}),
 		listSparkMetricPoints({
 			serviceAccountJson,
 			metricType: SPARK_MONITORING_METRIC_TYPES.agentProcessCpuUtilization,
-			startTime,
-			extraFilter: taskRunnerFilter
+			startTime
 		}),
 		listSparkMetricPoints({
 			serviceAccountJson,
 			metricType: SPARK_MONITORING_METRIC_TYPES.agentProcessRssPeakBytes,
-			startTime,
-			extraFilter: taskRunnerFilter
+			startTime
 		})
 	]);
 
-	const operationKeys = new Set<string>(callLatencyPoints.map((point) => metricLabel(point, 'operation')));
+	const operationKeys = new Set<string>(
+		callLatencyPoints.map((point) => metricLabel(point, 'operation'))
+	);
 	const operations = Array.from(operationKeys)
 		.map((operation) =>
 			createLlmGroupSummary({
 				key: operation,
-				latencyPoints: callLatencyPoints.filter((point) => metricLabel(point, 'operation') === operation),
-				tokenPoints: callTokenPoints.filter((point) => metricLabel(point, 'operation') === operation),
+				latencyPoints: callLatencyPoints.filter(
+					(point) => metricLabel(point, 'operation') === operation
+				),
+				tokenPoints: callTokenPoints.filter(
+					(point) => metricLabel(point, 'operation') === operation
+				),
 				costPoints: callCostPoints.filter((point) => metricLabel(point, 'operation') === operation)
 			})
 		)
 		.map((summary) => ({ ...summary, operation: summary.key }))
-		.sort((left, right) => right.callCount - left.callCount || left.operation.localeCompare(right.operation));
+		.sort(
+			(left, right) =>
+				right.callCount - left.callCount || left.operation.localeCompare(right.operation)
+		);
 
 	const modelKeys = new Set<string>(callLatencyPoints.map((point) => metricLabel(point, 'model')));
 	const models = Array.from(modelKeys)
@@ -318,7 +329,9 @@ export async function loadLlmMetricsDashboard(windowKey: MetricsWindowKey): Prom
 			})
 		)
 		.map((summary) => ({ ...summary, model: summary.key }))
-		.sort((left, right) => right.callCount - left.callCount || left.model.localeCompare(right.model));
+		.sort(
+			(left, right) => right.callCount - left.callCount || left.model.localeCompare(right.model)
+		);
 
 	const stepPhases = Array.from(groupByLabel(stepLatencyPoints, 'phase').entries())
 		.map(([phase, points]) => {
@@ -331,7 +344,9 @@ export async function loadLlmMetricsDashboard(windowKey: MetricsWindowKey): Prom
 				maxLatencyMs: summary.max
 			};
 		})
-		.sort((left, right) => right.callCount - left.callCount || left.phase.localeCompare(right.phase));
+		.sort(
+			(left, right) => right.callCount - left.callCount || left.phase.localeCompare(right.phase)
+		);
 
 	const agentTypeKeys = new Set<string>([
 		...agentRunDurationPoints.map((point) => metricLabel(point, 'agent_type')),
@@ -349,7 +364,10 @@ export async function loadLlmMetricsDashboard(windowKey: MetricsWindowKey): Prom
 				rssPoints: agentRssPoints.filter((point) => metricLabel(point, 'agent_type') === agentType)
 			})
 		)
-		.sort((left, right) => right.runCount - left.runCount || left.agentType.localeCompare(right.agentType));
+		.sort(
+			(left, right) =>
+				right.runCount - left.runCount || left.agentType.localeCompare(right.agentType)
+		);
 
 	const latencySummary = summarizeValues(callLatencyPoints.map((point) => point.value));
 	const durationSummary = summarizeValues(agentRunDurationPoints.map((point) => point.value));

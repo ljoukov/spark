@@ -99,7 +99,9 @@
 				<p class="mt-1 text-xs text-muted-foreground">{data.dashboard.windowLabel}</p>
 			</div>
 			<div class="rounded-xl border border-border/70 bg-card/95 p-4 shadow-sm">
-				<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">Average latency</p>
+				<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+					Average latency
+				</p>
 				<p class="mt-2 text-2xl font-semibold">
 					{formatLatency(data.dashboard.overview.averageLatencyMs)}
 				</p>
@@ -108,7 +110,9 @@
 				</p>
 			</div>
 			<div class="rounded-xl border border-border/70 bg-card/95 p-4 shadow-sm">
-				<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">Total tokens</p>
+				<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+					Total tokens
+				</p>
 				<p class="mt-2 text-2xl font-semibold">
 					{formatNumber(data.dashboard.overview.totalTokens)}
 				</p>
@@ -135,7 +139,7 @@
 				</Card.Header>
 				<Card.Content class="overflow-x-auto">
 					<table class="min-w-full text-sm">
-						<thead class="text-left text-xs uppercase tracking-wide text-muted-foreground">
+						<thead class="text-left text-xs tracking-wide text-muted-foreground uppercase">
 							<tr>
 								<th class="px-2 py-2">Operation</th>
 								<th class="px-2 py-2">Calls</th>
@@ -176,7 +180,7 @@
 				</Card.Header>
 				<Card.Content class="overflow-x-auto">
 					<table class="min-w-full text-sm">
-						<thead class="text-left text-xs uppercase tracking-wide text-muted-foreground">
+						<thead class="text-left text-xs tracking-wide text-muted-foreground uppercase">
 							<tr>
 								<th class="px-2 py-2">Model</th>
 								<th class="px-2 py-2">Calls</th>
@@ -214,12 +218,13 @@
 				<Card.Header>
 					<Card.Title>Tool-loop phases</Card.Title>
 					<Card.Description>
-						Per-step timing phases emitted by agent tool loops in the task runner.
+						Per-step timing phases emitted by Spark agent tool loops across chat and background
+						jobs.
 					</Card.Description>
 				</Card.Header>
 				<Card.Content class="overflow-x-auto">
 					<table class="min-w-full text-sm">
-						<thead class="text-left text-xs uppercase tracking-wide text-muted-foreground">
+						<thead class="text-left text-xs tracking-wide text-muted-foreground uppercase">
 							<tr>
 								<th class="px-2 py-2">Phase</th>
 								<th class="px-2 py-2">Samples</th>
@@ -255,12 +260,12 @@
 				<Card.Header>
 					<Card.Title>Agent resource usage</Card.Title>
 					<Card.Description>
-						Task-runner CPU and RSS summaries tagged by agent workload type.
+						CPU and RSS summaries tagged by agent workload type across Spark jobs.
 					</Card.Description>
 				</Card.Header>
 				<Card.Content class="overflow-x-auto">
 					<table class="min-w-full text-sm">
-						<thead class="text-left text-xs uppercase tracking-wide text-muted-foreground">
+						<thead class="text-left text-xs tracking-wide text-muted-foreground uppercase">
 							<tr>
 								<th class="px-2 py-2">Agent type</th>
 								<th class="px-2 py-2">Runs</th>

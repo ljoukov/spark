@@ -12,7 +12,11 @@ import { z } from "zod";
 import {
   configureSparkLlmTelemetryFromEnv,
   createSparkAgentRunTelemetryConfig,
+  publishSparkAgentProcessMetricsFromEnv,
+  publishSparkToolLoopStepMetricsFromEnv,
+  resolveSparkMetricProviderLabel,
 } from "../utils/gcp/monitoring";
+import { AgentProcessUsageMonitor } from "./agentProcessUsageMonitor";
 import {
   SPARK_GRADER_SHEET_PATH,
   SPARK_GRADER_SUMMARY_PATH,
@@ -175,7 +179,11 @@ export function buildSparkGraderBrief(options: {
   if (options.input.notes) {
     lines.push("", "## User grading focus", options.input.notes.trim());
   }
-  lines.push("", "## Reference source policy", `- ${referenceSourcePolicyText}`);
+  lines.push(
+    "",
+    "## Reference source policy",
+    `- ${referenceSourcePolicyText}`,
+  );
   if (options.attachments.length > 0) {
     lines.push("", "## Uploaded work");
     let index = 0;
@@ -191,7 +199,11 @@ export function buildSparkGraderBrief(options: {
       );
     }
   } else {
-    lines.push("", "## Uploaded work", "- No attachments were included for this run.");
+    lines.push(
+      "",
+      "## Uploaded work",
+      "- No attachments were included for this run.",
+    );
   }
   lines.push(
     "",
@@ -364,19 +376,70 @@ export async function runSparkChatAgentLoop(options: {
   onEvent?: RunAgentLoopOptions["onEvent"];
 }) {
   configureSparkLlmTelemetryFromEnv();
-  return await runAgentLoop({
-    model: SPARK_CHAT_MODEL_ID,
-    input: options.input,
-    instructions: options.instructions,
-    tools: options.tools,
-    maxSteps: SPARK_CHAT_MAX_TOOL_STEPS,
-    thinkingLevel: SPARK_CHAT_THINKING_LEVEL,
-    telemetry: createSparkAgentRunTelemetryConfig({
+  const processUsageMonitor = new AgentProcessUsageMonitor();
+  const metricTaskIdPrefix = `spark-chat-${Date.now().toString()}`;
+  let metricStatus: "ok" | "error" = "error";
+
+  processUsageMonitor.start();
+  try {
+    const result = await runAgentLoop({
+      model: SPARK_CHAT_MODEL_ID,
+      input: options.input,
+      instructions: options.instructions,
+      tools: options.tools,
+      maxSteps: SPARK_CHAT_MAX_TOOL_STEPS,
+      thinkingLevel: SPARK_CHAT_THINKING_LEVEL,
+      telemetry: createSparkAgentRunTelemetryConfig({
+        agentType: "chat",
+        job: "spark-chat",
+        taskIdPrefix: "spark-chat",
+      }),
+      ...(options.logging ? { logging: options.logging } : {}),
+      ...(options.onEvent ? { onEvent: options.onEvent } : {}),
+    });
+
+    await Promise.all(
+      result.steps.map(async (step) => {
+        if (!step.timing) {
+          return;
+        }
+        await publishSparkToolLoopStepMetricsFromEnv({
+          operation: "agent_run_tool_loop",
+          model: SPARK_CHAT_MODEL_ID,
+          provider: resolveSparkMetricProviderLabel(SPARK_CHAT_MODEL_ID),
+          status: "ok",
+          agentType: "chat",
+          timings: {
+            totalMs: step.timing.totalMs,
+            queueWaitMs: step.timing.queueWaitMs,
+            connectionSetupMs: step.timing.connectionSetupMs,
+            activeGenerationMs: step.timing.activeGenerationMs,
+            toolExecutionMs: step.timing.toolExecutionMs,
+            waitToolMs: step.timing.waitToolMs,
+            schedulerDelayMs: step.timing.schedulerDelayMs,
+            providerRetryDelayMs: step.timing.providerRetryDelayMs,
+          },
+          job: "spark-chat",
+          taskId: `${metricTaskIdPrefix}-step-${step.step.toString()}`,
+          ...(step.timing.completedAt
+            ? { timestamp: step.timing.completedAt }
+            : {}),
+        });
+      }),
+    );
+
+    metricStatus = "ok";
+    return result;
+  } finally {
+    const processUsage = processUsageMonitor.stop();
+    await publishSparkAgentProcessMetricsFromEnv({
       agentType: "chat",
+      status: metricStatus,
+      cpuUtilization: processUsage.cpuUtilization,
+      cpuTimeMs: processUsage.cpuTimeMs,
+      rssPeakBytes: processUsage.rssPeakBytes,
       job: "spark-chat",
-      taskIdPrefix: "spark-chat",
-    }),
-    ...(options.logging ? { logging: options.logging } : {}),
-    ...(options.onEvent ? { onEvent: options.onEvent } : {}),
-  });
+      taskId: `${metricTaskIdPrefix}-process`,
+    });
+  }
 }

@@ -78,11 +78,7 @@
 					{option.label}
 				</Button>
 			{/each}
-			<Button
-				href={`/admin/metrics/llm?window=${data.windowKey}`}
-				variant="secondary"
-				size="sm"
-			>
+			<Button href={`/admin/metrics/llm?window=${data.windowKey}`} variant="secondary" size="sm">
 				Open LLM Detail
 			</Button>
 		</div>
@@ -103,7 +99,9 @@
 				<p class="mt-1 text-xs text-muted-foreground">{data.dashboard.windowLabel}</p>
 			</div>
 			<div class="rounded-xl border border-border/70 bg-card/95 p-4 shadow-sm">
-				<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">P95 LLM latency</p>
+				<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+					P95 LLM latency
+				</p>
 				<p class="mt-2 text-2xl font-semibold">
 					{formatLatency(data.dashboard.overview.p95LatencyMs)}
 				</p>
@@ -112,7 +110,9 @@
 				</p>
 			</div>
 			<div class="rounded-xl border border-border/70 bg-card/95 p-4 shadow-sm">
-				<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">Total tokens</p>
+				<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+					Total tokens
+				</p>
 				<p class="mt-2 text-2xl font-semibold">
 					{formatNumber(data.dashboard.overview.totalTokens)}
 				</p>
@@ -135,7 +135,9 @@
 			<Card.Root class="border-border/70 bg-card/95 shadow-sm">
 				<Card.Header>
 					<Card.Title>Top LLM operations</Card.Title>
-					<Card.Description>Grouped over {data.dashboard.windowLabel.toLowerCase()}.</Card.Description>
+					<Card.Description
+						>Grouped over {data.dashboard.windowLabel.toLowerCase()}.</Card.Description
+					>
 				</Card.Header>
 				<Card.Content class="space-y-3">
 					{#if data.dashboard.operations.length === 0}
@@ -161,7 +163,9 @@
 			<Card.Root class="border-border/70 bg-card/95 shadow-sm">
 				<Card.Header>
 					<Card.Title>Agent workload types</Card.Title>
-					<Card.Description>Primary task-runner runs by agent category.</Card.Description>
+					<Card.Description>
+						Primary agent runs across chat and background jobs, grouped by agent category.
+					</Card.Description>
 				</Card.Header>
 				<Card.Content class="space-y-3">
 					{#if data.dashboard.agentTypes.length === 0}
