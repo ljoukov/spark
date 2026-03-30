@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
-	import { getContext } from 'svelte';
+	import { getContext, untrack } from 'svelte';
 	import { fromStore, type Readable } from 'svelte/store';
 	import {
 		collection,
@@ -11,6 +11,7 @@
 		query
 	} from 'firebase/firestore';
 	import {
+		SparkGraderRunSchema,
 		SparkAgentConversationSchema,
 		type SparkAgentConversation,
 		type SparkAgentMessage
@@ -43,6 +44,7 @@
 	type ConversationToolContext = {
 		toolNames: Set<string>;
 		lessonStarted: boolean;
+		sheetStarted: boolean;
 		graderStarted: boolean;
 	};
 
@@ -68,10 +70,11 @@
 	const userSnapshot = userStore ? fromStore(userStore) : null;
 	const user = $derived(userSnapshot?.current ?? data.user ?? null);
 	const userId = $derived(user?.uid ?? null);
+	const initialGraderRuns = untrack(() => data.graderRuns);
 
 	const graderRunByConversation = $derived.by(() => {
 		const runByConversation = new Map<string, GraderRunSummary>();
-		for (const run of data.graderRuns) {
+		for (const run of graderRuns) {
 			if (!runByConversation.has(run.conversationId)) {
 				runByConversation.set(run.conversationId, run);
 			}
@@ -79,6 +82,7 @@
 		return runByConversation;
 	});
 
+	let graderRuns = $state<GraderRunSummary[]>(initialGraderRuns);
 	let chats = $state<ChatListItem[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
@@ -192,6 +196,7 @@
 		const toolCallNameById = new Map<string, string>();
 		const toolNames = new Set<string>();
 		let lessonStarted = false;
+		let sheetStarted = false;
 		let graderStarted = false;
 
 		for (const message of conversation.messages) {
@@ -215,6 +220,9 @@
 				if (toolName === 'create_lesson') {
 					lessonStarted = true;
 				}
+				if (toolName === 'create_sheet') {
+					sheetStarted = true;
+				}
 				if (toolName === 'create_grader') {
 					graderStarted = true;
 				}
@@ -224,6 +232,7 @@
 		return {
 			toolNames,
 			lessonStarted,
+			sheetStarted,
 			graderStarted
 		};
 	}
@@ -235,7 +244,12 @@
 		graderRun: GraderRunSummary | undefined
 	): ChatKind {
 		const haystack = `${title}\n${preview}`.toLowerCase();
-		if (graderRun || toolContext.graderStarted || /\b(grade|grading|mark|grader|feedback)\b/.test(haystack)) {
+		if (
+			graderRun ||
+			toolContext.sheetStarted ||
+			toolContext.graderStarted ||
+			/\b(grade|grading|mark|grader|feedback|worksheet|sheet)\b/.test(haystack)
+		) {
 			return 'grading';
 		}
 		if (toolContext.lessonStarted || toolContext.toolNames.has('create_lesson')) {
@@ -254,10 +268,34 @@
 	}
 
 	function resolveGraderTask(run: GraderRunSummary): ChatTask {
+		if (run.status === 'done' && run.sheetPhase === 'solving') {
+			return {
+				state: 'done',
+				label: 'Sheet ready to solve'
+			};
+		}
+		if (run.sheetPhase === 'building') {
+			if (run.status === 'executing') {
+				return {
+					state: 'in_progress',
+					label: 'Preparing sheet...'
+				};
+			}
+			if (run.status === 'failed' || run.status === 'stopped') {
+				return {
+					state: 'failed',
+					label: run.status === 'stopped' ? 'Sheet prep stopped' : 'Sheet prep failed'
+				};
+			}
+			return {
+				state: 'pending',
+				label: 'Queued for sheet prep'
+			};
+		}
 		if (run.status === 'done') {
 			return {
 				state: 'done',
-				label: 'Sheet ready',
+				label: 'Sheet graded',
 				score: run.score
 			};
 		}
@@ -287,6 +325,12 @@
 		if (kind === 'grading') {
 			if (graderRun) {
 				return resolveGraderTask(graderRun);
+			}
+			if (toolContext.sheetStarted) {
+				return {
+					state: 'pending',
+					label: 'Queued for sheet prep'
+				};
 			}
 			if (toolContext.graderStarted) {
 				return {
@@ -442,6 +486,34 @@
 		return `/spark?${params.toString()}`;
 	}
 
+	function toGraderRunSummary(
+		documentId: string,
+		value: unknown
+	): GraderRunSummary | null {
+		const parsed = SparkGraderRunSchema.safeParse({
+			id: documentId,
+			...(value && typeof value === 'object' ? (value as Record<string, unknown>) : {})
+		});
+		if (!parsed.success || !parsed.data.conversationId) {
+			return null;
+		}
+		return {
+			conversationId: parsed.data.conversationId,
+			status: parsed.data.status,
+			sheetPhase:
+				parsed.data.sheetPhase ??
+				(parsed.data.totals
+					? 'graded'
+					: parsed.data.status === 'done'
+						? 'graded'
+						: null),
+			score:
+				parsed.data.totals && parsed.data.totals.maxMarks > 0
+					? `${parsed.data.totals.awardedMarks.toString()}/${parsed.data.totals.maxMarks.toString()}`
+					: null
+		};
+	}
+
 	const visibleChats = $derived.by(() => {
 		const needle = search.trim().toLowerCase();
 		return chats.filter((chat) => {
@@ -483,6 +555,7 @@
 	$effect(() => {
 		if (!browser || !userId) {
 			chats = [];
+			graderRuns = data.graderRuns;
 			loading = false;
 			error = null;
 			return;
@@ -508,6 +581,36 @@
 				console.warn('Failed to load Spark chats', snapshotError);
 				error = 'Spark could not load your chats right now.';
 				loading = false;
+			}
+		);
+
+		return () => {
+			stop();
+		};
+	});
+
+	$effect(() => {
+		if (!browser || !userId) {
+			graderRuns = data.graderRuns;
+			return;
+		}
+
+		const db = getFirestore(getFirebaseApp());
+		const graderRunsQuery = query(
+			collection(db, 'spark', userId, 'graderRuns'),
+			orderBy('createdAt', 'desc'),
+			queryLimit(CHAT_LIST_LIMIT)
+		);
+
+		const stop = onSnapshot(
+			graderRunsQuery,
+			(snapshot) => {
+				graderRuns = snapshot.docs
+					.map((document) => toGraderRunSummary(document.id, document.data()))
+					.filter((run): run is GraderRunSummary => run !== null);
+			},
+			(snapshotError) => {
+				console.warn('Failed to load Spark grader runs', snapshotError);
 			}
 		);
 

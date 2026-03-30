@@ -4,6 +4,7 @@ import {
 	findWorksheetQuestionEntry,
 	listWorksheetQuestionEntries,
 	parseGraderWorksheetReport,
+	safeParseSolveSheetDraft,
 	safeParseGraderWorksheetReport
 } from './problemReport';
 
@@ -83,5 +84,108 @@ describe('problem worksheet report parsing', () => {
 
 	it('does not accept the old markdown-style problem artifact', () => {
 		expect(safeParseGraderWorksheetReport('# Problem 1\n\nOld markdown report')).toBeNull();
+	});
+
+	it('coerces legacy worksheet draft question shapes into the current schema', () => {
+		const draft = safeParseSolveSheetDraft(
+			JSON.stringify({
+				schemaVersion: 1,
+				mode: 'draft',
+				sheet: {
+					id: 'division-of-fractions-2',
+					subject: 'Mathematics',
+					level: 'Fractions',
+					title: 'Division of fractions (2)',
+					subtitle:
+						'Learning objective: Divide an integer or a fraction by a fraction and use the notation of reciprocals.',
+					color: '#36587A',
+					accent: '#4D7AA5',
+					light: '#E8F2FB',
+					border: '#BFD0E0',
+					sections: [
+						{
+							title: 'A. Multiple choice questions',
+							instructions: 'Choose the correct answer.',
+							questions: [
+								{
+									type: 'mcq',
+									displayNumber: '1',
+									promptMarkdown: 'The correct calculation of the following is (___).',
+									options: [
+										{ id: 'A', text: '$$\\frac{1}{2}$$' },
+										{ id: 'B', text: '$$\\frac{3}{4}$$' }
+									]
+								}
+							]
+						},
+						{
+							title: 'B. Fill in the blanks',
+							questions: [
+								{
+									type: 'fill',
+									displayNumber: '5',
+									promptMarkdown: '___________ of $\\frac{1}{8}$ is 5.'
+								}
+							]
+						},
+						{
+							title: 'C. Questions that require solutions',
+							questions: [
+								{
+									type: 'calc',
+									displayNumber: '9(a)',
+									promptMarkdown: 'Calculate.\\n\\n$$3\\frac{1}{3}\\div \\frac{9}{2}$$'
+								},
+								{
+									type: 'flow',
+									displayNumber: '12',
+									promptMarkdown:
+										'Complete the flow chart of calculation. Write a suitable number in each box.',
+									boxes: [
+										{ id: 'top0', initialValue: '1', editable: false },
+										{ id: 'top1' },
+										{ id: 'top2' },
+										{ id: 'bottom1' },
+										{ id: 'bottom0' }
+									],
+									arrows: [
+										{ from: 'top0', to: 'top1', label: '$\\div\\ \\frac{2}{3}$' },
+										{ from: 'top1', to: 'top2', label: '$\\times\\ 2$' },
+										{ from: 'bottom1', to: 'bottom0', label: '$-\\ 3$' }
+									]
+								}
+							]
+						}
+					]
+				}
+			})
+		);
+
+		expect(draft).not.toBeNull();
+		expect(draft?.sheet.sections[0]).toMatchObject({
+			id: 'A',
+			label: 'Multiple choice questions'
+		});
+		expect('id' in (draft?.sheet.sections[1] ?? {})).toBe(true);
+		const secondSection = draft?.sheet.sections[1];
+		if (!secondSection || !('id' in secondSection)) {
+			throw new Error('Expected normalized content section');
+		}
+		expect(secondSection.questions?.[0]).toMatchObject({
+			type: 'cloze',
+			displayNumber: '5'
+		});
+		const thirdSection = draft?.sheet.sections[2];
+		if (!thirdSection || !('id' in thirdSection)) {
+			throw new Error('Expected normalized third section');
+		}
+		expect(thirdSection.questions?.[0]).toMatchObject({
+			type: 'lines',
+			displayNumber: '9(a)'
+		});
+		expect(thirdSection.questions?.[1]).toMatchObject({
+			type: 'flow',
+			displayNumber: '12'
+		});
 	});
 });

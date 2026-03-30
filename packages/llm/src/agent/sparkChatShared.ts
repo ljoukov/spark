@@ -4,6 +4,7 @@ import {
   runAgentLoop,
   tool,
   type LlmInputMessage,
+  type LlmTextModelId,
   type LlmToolConfig,
   type LlmToolSet,
 } from "@ljoukov/llm";
@@ -23,6 +24,12 @@ import {
   SPARK_GRADER_UPLOADS_MANIFEST_PATH,
   buildSparkGraderAgentPrompt,
 } from "./graderAgentPrompt";
+import {
+  SPARK_SHEET_DRAFT_ANSWERS_PATH,
+  SPARK_SHEET_DRAFT_PATH,
+  SPARK_SHEET_DRAFT_SUMMARY_PATH,
+  buildSparkSheetDraftAgentPrompt,
+} from "./sheetDraftAgentPrompt";
 import { HANDWRITING_TRANSCRIPTION_SKILL_TEXT } from "./skills/handwritingTranscription";
 
 const trimmedString = z.string().trim().min(1);
@@ -61,6 +68,68 @@ export const SparkChatAttachmentInputSchema = z.object({
 export type SparkChatAttachmentInput = z.infer<
   typeof SparkChatAttachmentInputSchema
 >;
+
+export const DEFAULT_SPARK_SHEET_RUN_LABEL = "Student worksheet" as const;
+
+export const SparkChatCreateSheetInputSchema = z
+  .object({
+    title: nullableOptionalString().describe(
+      "Optional short worksheet title override. Set this only when the uploaded material already makes a concise student-facing title clear.",
+    ),
+    notes: nullableOptionalString().describe(
+      "Optional worksheet-generation focus or constraint (for example: keep the worksheet strictly faithful to the uploaded exam layout).",
+    ),
+  })
+  .strict();
+
+export type SparkChatCreateSheetInput = z.infer<
+  typeof SparkChatCreateSheetInputSchema
+>;
+
+export const SparkSheetDraftRequestPayloadSchema = z
+  .object({
+    createdAt: z.string().trim().min(1),
+    sourceText: z.string().trim().min(1).nullable(),
+    input: SparkChatCreateSheetInputSchema.default({}),
+    attachments: z.array(SparkChatAttachmentInputSchema).default([]),
+  })
+  .strict();
+
+export type SparkSheetDraftRequestPayload = z.infer<
+  typeof SparkSheetDraftRequestPayloadSchema
+>;
+
+export type SparkSheetDraftLaunchPlan = {
+  runId: string;
+  agentId: string;
+  workspaceId: string;
+  launchTitle: string;
+  launchTitleKey: string;
+  summaryPath: string;
+  sheetPath: string;
+  answersPath: string;
+  prompt: string;
+  brief: string;
+  sheetTask: string;
+  requestPayload: SparkSheetDraftRequestPayload;
+  runAttachments: SparkChatAttachmentInput[];
+  runWorkspaceAttachments: SparkGraderWorkspaceAttachment[];
+  sourceText?: string;
+  conversationId?: string;
+  createdAt: Date;
+};
+
+export const SPARK_CHAT_CREATE_SHEET_TOOL_DESCRIPTION = [
+  "Create a student worksheet from the learner's uploaded material.",
+  "Creates a worksheet workspace, seeds sheet/task.md, and launches a background agent that publishes a solveable sheet under /spark/sheets.",
+  "Use this when the learner asks Spark to turn uploads into a worksheet or sheet to solve.",
+  "If the current user turn clearly asks for a worksheet from uploaded material, call this tool instead of answering directly in chat.",
+  "If the request refers to an earlier upload in the same conversation, those earlier uploads still define the worksheet source unless the learner replaced them.",
+  "If the uploaded material is already a worksheet or exam paper, treat it as the canonical source and preserve the question wording, numbering, marks, and structure as closely as possible.",
+  "Do not simplify, reorder, paraphrase, or redesign an uploaded question sheet into a nicer worksheet format.",
+  "If the uploaded material is notes or teaching content, synthesize a worksheet grounded only in those uploads.",
+  "If uploads are present, they are attached to the sheet-draft agent context automatically.",
+].join("\n");
 
 export const SparkChatCreateGraderInputSchema = z
   .object({
@@ -127,6 +196,7 @@ export const SPARK_CHAT_CREATE_GRADER_TOOL_DESCRIPTION = [
   "Start a grading run from the learner's uploaded work.",
   "Creates a grader workspace, seeds grader/task.md, and launches a background agent.",
   "Use this when the learner asks to mark or grade uploaded answers, submissions, scripts, or related reference documents.",
+  "If the current user turn clearly asks to grade uploaded work, call this tool instead of answering with grading feedback directly in chat.",
   "Uploads can include student handwriting, problem statements, answer booklets, rubrics, and optional official solutions/mark schemes.",
   "Set referenceSourcePolicy based on learner confirmation: uploaded-only by default; allow online search only when the learner explicitly approves and problems are missing.",
   "If the uploaded or pasted materials already make a concise run title clear, pass it via title; otherwise omit it and let the grader derive the final title from the content.",
@@ -154,6 +224,145 @@ export function resolveSparkGraderAttachmentWorkspacePath(attachment: {
     .replace(/[/\\]+/gu, "-");
   const filename = raw.length > 0 ? raw : attachment.id;
   return `grader/uploads/${filename}`;
+}
+
+export function buildSparkSheetDraftBrief(options: {
+  sourceText?: string;
+  input: SparkChatCreateSheetInput;
+  attachments: SparkChatAttachmentInput[];
+}): string {
+  const lines: string[] = ["# Worksheet draft request"];
+  const rawSource = options.sourceText?.trim();
+  if (rawSource && rawSource.length > 0) {
+    lines.push("", "## Original user message", "```", rawSource, "```");
+  }
+  const titleOverride = options.input.title?.trim();
+  if (titleOverride && titleOverride.length > 0) {
+    lines.push("", "## Requested title override", `- ${titleOverride}`);
+  }
+  if (options.input.notes) {
+    lines.push(
+      "",
+      "## User worksheet focus",
+      options.input.notes.trim(),
+    );
+  }
+  if (options.attachments.length > 0) {
+    lines.push("", "## Uploaded source material");
+    let index = 0;
+    for (const attachment of options.attachments) {
+      index += 1;
+      const label = attachment.filename?.trim() || attachment.id;
+      const pages =
+        typeof attachment.pageCount === "number" && attachment.pageCount > 0
+          ? `, pages=${attachment.pageCount.toString()}`
+          : "";
+      lines.push(
+        `- ${index}. ${label} (${attachment.contentType}, size=${attachment.sizeBytes.toString()}${pages})`,
+      );
+    }
+  } else {
+    lines.push(
+      "",
+      "## Uploaded source material",
+      "- No attachments were included for this run.",
+    );
+  }
+  lines.push(
+    "",
+    "## Objectives",
+    "- Identify whether the uploads are already a worksheet / exam sheet or whether Spark must synthesize a new worksheet from teaching material.",
+    "- If the uploads are already a worksheet / exam sheet, preserve numbering, structure, blanks, options, tables, and flow-chart style layouts as closely as possible.",
+    "- Treat uploaded question sheets as canonical source material: do not simplify, reorder, paraphrase, or rewrite them into a nicer worksheet format.",
+    "- Default to source-faithful transcription when the uploads are already printed worksheet pages; do not merge or drop questions, marks, labels, blanks, or answer cues.",
+    "- Keep formulas, labels, and wording faithful to the source except for light OCR cleanup where meaning is unchanged.",
+    "- Use Markdown and LaTeX for prompts so the worksheet surface can render tables, formulas, and structured statements cleanly.",
+    "- If the uploads are notes rather than a ready-made sheet, build a concise worksheet grounded only in the uploaded material.",
+    "- Keep the run summary student-facing: concise title + summary, no IDs, file paths, or process narration.",
+  );
+  return lines.join("\n").trim().concat("\n");
+}
+
+export function renderSparkSheetDraftTask(taskTemplate: string): string {
+  const baseTask = taskTemplate.trim();
+  const extractionWorkflowSection = [
+    "",
+    "## Extraction workflow",
+    "Use an extraction-first workflow before drafting the worksheet JSON.",
+    "",
+    "- Start with one `extract_text` call that covers every uploaded worksheet, question sheet, or source note.",
+    "- If the upload is already a printed worksheet or exam page, always run `pdf_to_images` and inspect every relevant page or crop with `view_image` before drafting.",
+    "- For non-worksheet uploads, if page layout matters, run `pdf_to_images` and inspect the relevant pages with `view_image` before drafting.",
+    "- Keep question sheets and exam pages faithful to the source structure.",
+    "- Never synthesize a new worksheet format when the upload is already a printed worksheet or exam page.",
+    "- Do not merge questions, normalize numbering, or omit marks / labels / answer lines from an uploaded question sheet.",
+    "- Mark uncertainty explicitly instead of guessing missing words, symbols, or labels.",
+    "- Never invent placeholder copy for blanks or empty boxes unless the source prints it.",
+    "- `publish_sheet_draft` only validates schema/persistence; before the first publish attempt, compare the draft against extracted text and viewed source pages and fix any paraphrase, omission, reorder, or guessed OCR.",
+    "- Supported worksheet question types are: fill, cloze, mcq, lines, calc, match, spelling, flow.",
+    "- Use `displayNumber` when a source question has subparts such as `9(a)` or `10(b)`.",
+    "- Use `flow` when the source question uses a box-and-arrow calculation structure that should stay visible to the student.",
+    "- For `flow.rows[].items`, keep the array in printed left-to-right order; use `direction` only to describe arrow direction.",
+  ].join("\n");
+  return `${baseTask}${extractionWorkflowSection}`.trim().concat("\n");
+}
+
+export function buildSparkSheetDraftLaunchPlan(options: {
+  sourceText?: string;
+  conversationId?: string;
+  input: SparkChatCreateSheetInput;
+  attachments: SparkChatAttachmentInput[];
+  sheetTaskTemplate: string;
+  now?: Date;
+  createId?: () => string;
+}): SparkSheetDraftLaunchPlan {
+  const now = options.now ?? new Date();
+  const createId = options.createId ?? randomUUID;
+  const runId = createId();
+  const workspaceId = createId();
+  const agentId = createId();
+  const launchTitle =
+    options.input.title?.trim() || DEFAULT_SPARK_SHEET_RUN_LABEL;
+  const runAttachments = options.attachments.map((attachment) =>
+    SparkChatAttachmentInputSchema.parse(attachment),
+  );
+  const runWorkspaceAttachments = runAttachments.map((attachment) => ({
+    ...attachment,
+    workspacePath: resolveSparkGraderAttachmentWorkspacePath(attachment),
+  }));
+  return {
+    runId,
+    workspaceId,
+    agentId,
+    launchTitle,
+    launchTitleKey: normalizeGraderTitleKey(launchTitle),
+    summaryPath: SPARK_SHEET_DRAFT_SUMMARY_PATH,
+    sheetPath: SPARK_SHEET_DRAFT_PATH,
+    answersPath: SPARK_SHEET_DRAFT_ANSWERS_PATH,
+    prompt: buildSparkSheetDraftAgentPrompt({
+      summaryPath: SPARK_SHEET_DRAFT_SUMMARY_PATH,
+      sheetPath: SPARK_SHEET_DRAFT_PATH,
+    }),
+    brief: buildSparkSheetDraftBrief({
+      sourceText: options.sourceText,
+      input: options.input,
+      attachments: runAttachments,
+    }),
+    sheetTask: renderSparkSheetDraftTask(options.sheetTaskTemplate),
+    requestPayload: {
+      createdAt: now.toISOString(),
+      sourceText: options.sourceText ?? null,
+      input: options.input,
+      attachments: runAttachments,
+    },
+    runAttachments,
+    runWorkspaceAttachments,
+    ...(options.sourceText ? { sourceText: options.sourceText } : {}),
+    ...(options.conversationId
+      ? { conversationId: options.conversationId }
+      : {}),
+    createdAt: now,
+  };
 }
 
 export function buildSparkGraderBrief(options: {
@@ -259,7 +468,7 @@ export function renderSparkGraderTask(taskTemplate: string): string {
     "- Worksheet review notes should be empathetic and specific: acknowledge what makes sense in a near-miss or almost-correct structure before naming the gap.",
     "- Prefer a next-step cue, contrast, or rule of thumb before giving the answer outright, and do not accept loose synonyms when the task asked for a definition/explanation.",
     "- When official solutions are missing, derived solutions should stay at the student's level and reuse their terminology/method style where reasonable.",
-    "- Use only supported worksheet question types: fill, mcq, lines, calc, match, spelling. If a task does not fit cleanly, use `lines`.",
+    "- Use only supported worksheet question types: fill, cloze, mcq, lines, calc, match, spelling, flow. If a task does not fit cleanly, use `lines`.",
     "",
     "Run-mode constraints for grader runs:",
     "- Keep transcription and source gathering on the main agent only.",
@@ -332,6 +541,44 @@ type CreateGraderLaunchResult = {
   status: "started";
 };
 
+type CreateSheetLaunchResult = {
+  status: "started";
+};
+
+export function createSparkChatCreateSheetTool(options: {
+  sourceText?: string;
+  conversationId?: string;
+  attachmentsForMessage: SparkChatAttachmentInput[];
+  sheetTaskTemplate: string;
+  onStructuredCall?: (payload: {
+    input: SparkChatCreateSheetInput;
+    plan: SparkSheetDraftLaunchPlan;
+  }) => Promise<void> | void;
+  launch: (payload: {
+    input: SparkChatCreateSheetInput;
+    plan: SparkSheetDraftLaunchPlan;
+  }) => Promise<CreateSheetLaunchResult>;
+}) {
+  return tool({
+    description: SPARK_CHAT_CREATE_SHEET_TOOL_DESCRIPTION,
+    inputSchema: SparkChatCreateSheetInputSchema,
+    execute: async (input) => {
+      const plan = buildSparkSheetDraftLaunchPlan({
+        sourceText: options.sourceText,
+        conversationId: options.conversationId,
+        input,
+        attachments: options.attachmentsForMessage,
+        sheetTaskTemplate: options.sheetTaskTemplate,
+      });
+      await options.onStructuredCall?.({ input, plan });
+      const result = await options.launch({ input, plan });
+      return {
+        status: result.status,
+      };
+    },
+  });
+}
+
 export function createSparkChatCreateGraderTool(options: {
   sourceText?: string;
   conversationId?: string;
@@ -372,18 +619,21 @@ export async function runSparkChatAgentLoop(options: {
   input: string | LlmInputMessage[];
   instructions: string;
   tools: LlmToolSet;
+  modelId?: LlmTextModelId;
   logging?: RunAgentLoopOptions["logging"];
   onEvent?: RunAgentLoopOptions["onEvent"];
 }) {
   configureSparkLlmTelemetryFromEnv();
   const processUsageMonitor = new AgentProcessUsageMonitor();
   const metricTaskIdPrefix = `spark-chat-${Date.now().toString()}`;
+  const modelId: LlmTextModelId = options.modelId ?? SPARK_CHAT_MODEL_ID;
+  const toolLoopModel = modelId as RunAgentLoopOptions["model"];
   let metricStatus: "ok" | "error" = "error";
 
   processUsageMonitor.start();
   try {
     const result = await runAgentLoop({
-      model: SPARK_CHAT_MODEL_ID,
+      model: toolLoopModel,
       input: options.input,
       instructions: options.instructions,
       tools: options.tools,
@@ -405,8 +655,8 @@ export async function runSparkChatAgentLoop(options: {
         }
         await publishSparkToolLoopStepMetricsFromEnv({
           operation: "agent_run_tool_loop",
-          model: SPARK_CHAT_MODEL_ID,
-          provider: resolveSparkMetricProviderLabel(SPARK_CHAT_MODEL_ID),
+          model: modelId,
+          provider: resolveSparkMetricProviderLabel(modelId),
           status: "ok",
           agentType: "chat",
           timings: {

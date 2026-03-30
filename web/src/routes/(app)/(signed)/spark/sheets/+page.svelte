@@ -62,19 +62,44 @@
 		].join('; ');
 	}
 
-	function resolveStatusLabel(status: PageData['sheets'][number]['status']): string {
-		switch (status) {
-			case 'created':
-				return 'Queued';
-			case 'executing':
-				return 'Grading';
-			case 'done':
-				return 'Ready';
-			case 'failed':
-				return 'Failed';
-			case 'stopped':
-				return 'Stopped';
+	function resolveStatusLabel(sheet: PageData['sheets'][number]): string {
+		if (sheet.status === 'failed') {
+			return 'Failed';
 		}
+		if (sheet.status === 'stopped') {
+			return 'Stopped';
+		}
+		if (sheet.sheetPhase === 'building') {
+			return sheet.status === 'created' ? 'Queued' : 'Preparing';
+		}
+		if (sheet.sheetPhase === 'solving') {
+			return 'Ready to Solve';
+		}
+		if (sheet.sheetPhase === 'grading') {
+			return sheet.status === 'created' ? 'Queued' : 'Grading';
+		}
+		return 'Graded';
+	}
+
+	function resolveStatusTone(
+		sheet: PageData['sheets'][number]
+	): 'queued' | 'building' | 'solving' | 'grading' | 'graded' | 'failed' | 'stopped' {
+		if (sheet.status === 'failed') {
+			return 'failed';
+		}
+		if (sheet.status === 'stopped') {
+			return 'stopped';
+		}
+		if (sheet.sheetPhase === 'building') {
+			return sheet.status === 'created' ? 'queued' : 'building';
+		}
+		if (sheet.sheetPhase === 'solving') {
+			return 'solving';
+		}
+		if (sheet.sheetPhase === 'grading') {
+			return sheet.status === 'created' ? 'queued' : 'grading';
+		}
+		return 'graded';
 	}
 </script>
 
@@ -85,10 +110,10 @@
 <section class="sheets-page">
 	<header class="sheets-header">
 		<div>
-			<p class="eyebrow">Worksheet feedback</p>
+			<p class="eyebrow">Worksheet workspace</p>
 			<h1>Sheets</h1>
 			<p class="subtitle">
-				Open any sheet to review marks, see feedback, and continue the interactive revision flow.
+				Open generated worksheets to solve them, then return here for grading, marks, and feedback.
 			</p>
 		</div>
 		<a class="back-button" href="/spark">Back to chat</a>
@@ -97,7 +122,7 @@
 	{#if data.sheets.length === 0}
 		<section class="empty-card">
 			<h2>No sheets yet</h2>
-			<p>Start from chat by uploading work and asking Spark to grade it.</p>
+			<p>Start from chat by uploading material and asking Spark to make or grade a sheet.</p>
 		</section>
 	{:else}
 		<div class="sheet-grid">
@@ -128,7 +153,9 @@
 
 						<div class="sheet-preview__body">
 							<div class="sheet-preview__meta">
-								<span class="status-pill" data-status={sheet.status}>{resolveStatusLabel(sheet.status)}</span>
+								<span class="status-pill" data-status={resolveStatusTone(sheet)}>
+									{resolveStatusLabel(sheet)}
+								</span>
 								<span>Updated {formatDate(sheet.updatedAt)}</span>
 							</div>
 
@@ -345,19 +372,31 @@
 		color: color-mix(in srgb, var(--foreground) 74%, transparent);
 	}
 
-	.status-pill[data-status='done'] {
+	.status-pill[data-status='solving'],
+	.status-pill[data-status='graded'] {
 		background: color-mix(in srgb, #16a34a 16%, transparent);
 		color: color-mix(in srgb, #166534 90%, black 6%);
 	}
 
-	.status-pill[data-status='executing'] {
+	.status-pill[data-status='building'],
+	.status-pill[data-status='grading'] {
 		background: color-mix(in srgb, #0ea5e9 16%, transparent);
 		color: color-mix(in srgb, #075985 90%, black 6%);
+	}
+
+	.status-pill[data-status='queued'] {
+		background: color-mix(in srgb, #f59e0b 16%, transparent);
+		color: color-mix(in srgb, #92400e 90%, black 6%);
 	}
 
 	.status-pill[data-status='failed'] {
 		background: color-mix(in srgb, var(--destructive) 14%, transparent);
 		color: color-mix(in srgb, var(--destructive) 82%, black 8%);
+	}
+
+	.status-pill[data-status='stopped'] {
+		background: color-mix(in srgb, #64748b 16%, transparent);
+		color: color-mix(in srgb, #334155 90%, black 6%);
 	}
 
 	.sheet-preview__summary {

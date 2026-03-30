@@ -11,6 +11,7 @@ type GraderRunPresentationInput = {
 
 type GraderRunDisplayInput = {
 	status: 'created' | 'executing' | 'stopped' | 'failed' | 'done';
+	sheetPhase?: 'building' | 'solving' | 'grading' | 'graded' | null;
 	paper?: GraderRunPaperInput | null;
 	presentation?: GraderRunPresentationInput | null;
 	resultSummary?: string | null;
@@ -64,8 +65,32 @@ function buildMetaLine(options: {
 
 function buildFallbackSummary(options: {
 	status: GraderRunDisplayInput['status'];
+	sheetPhase?: GraderRunDisplayInput['sheetPhase'];
 	paper?: GraderRunPaperInput | null;
 }): string | null {
+	if (options.sheetPhase === 'building') {
+		if (options.status === 'executing') {
+			return 'This sheet is still being prepared.';
+		}
+		if (options.status === 'created') {
+			return 'Waiting for sheet generation to start.';
+		}
+		if (options.status === 'stopped') {
+			return 'This sheet was stopped before generation finished.';
+		}
+		return 'The worksheet draft could not be prepared from the uploaded material.';
+	}
+	if (options.sheetPhase === 'solving') {
+		return 'This sheet is ready to solve.';
+	}
+	if (options.sheetPhase === 'grading') {
+		if (options.status === 'stopped') {
+			return 'This sheet was stopped before grading finished.';
+		}
+		return options.status === 'created'
+			? 'Waiting for grading to start.'
+			: 'This sheet is still being graded.';
+	}
 	if (options.status === 'executing') {
 		return 'This sheet is still being graded.';
 	}
@@ -115,6 +140,7 @@ export function buildGraderRunDisplay(input: GraderRunDisplayInput): GraderRunDi
 		}) ??
 		buildFallbackSummary({
 			status: input.status,
+			sheetPhase: input.sheetPhase,
 			paper: input.paper
 		});
 	return {

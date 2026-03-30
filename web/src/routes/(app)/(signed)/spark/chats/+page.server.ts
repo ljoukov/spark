@@ -18,6 +18,13 @@ export const load: PageServerLoad = async ({ locals }) => {
 			.map((run) => ({
 				conversationId: run.conversationId ?? '',
 				status: run.status,
+				sheetPhase:
+					run.sheetPhase ??
+					(run.totals
+						? 'graded'
+						: run.status === 'done'
+							? 'graded'
+							: null),
 				score:
 					run.totals && run.totals.maxMarks > 0
 						? `${run.totals.awardedMarks.toString()}/${run.totals.maxMarks.toString()}`

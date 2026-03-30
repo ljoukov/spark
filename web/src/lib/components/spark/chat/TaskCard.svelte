@@ -11,7 +11,8 @@
 		type SessionState,
 		type SessionStatus,
 		type SparkAgentRunCard,
-		type SparkGraderRun
+		type SparkGraderRun,
+		type SparkSheetPhase
 	} from '@spark/schemas';
 	import { formatRelativeAge } from '$lib/utils/relativeAge';
 	import type { TaskCardPreview } from './taskCardPreview';
@@ -117,6 +118,22 @@
 			: null
 	);
 
+	const graderSheetPhase = $derived.by((): SparkSheetPhase | null => {
+		if (runCard.kind !== 'grader') {
+			return null;
+		}
+		if (previewState?.kind === 'grader') {
+			return previewState.sheetPhase ?? null;
+		}
+		if (graderRun?.sheetPhase) {
+			return graderRun.sheetPhase;
+		}
+		if (graderRun?.status === 'done' && graderRun?.totals) {
+			return 'graded';
+		}
+		return null;
+	});
+
 	const statusLabel = $derived.by(() => {
 		if (runCard.kind === 'lesson') {
 			switch (lessonStatus) {
@@ -134,6 +151,21 @@
 					return 'Creating lesson';
 			}
 		}
+		if (graderStatus === 'failed') {
+			return 'Failed';
+		}
+		if (graderStatus === 'stopped') {
+			return 'Stopped';
+		}
+		if (graderSheetPhase === 'building') {
+			return graderStatus === 'created' ? 'Queued' : 'Preparing sheet';
+		}
+		if (graderSheetPhase === 'solving') {
+			return 'Ready to solve';
+		}
+		if (graderSheetPhase === 'graded') {
+			return 'Graded';
+		}
 		switch (graderStatus) {
 			case 'created':
 				return 'Queued';
@@ -141,10 +173,6 @@
 				return 'Grading';
 			case 'done':
 				return 'Ready';
-			case 'failed':
-				return 'Failed';
-			case 'stopped':
-				return 'Stopped';
 			case null:
 				return 'Queued';
 		}
@@ -265,18 +293,36 @@
 		}
 		switch (graderStatus) {
 			case 'created':
-				return 'Preparing the sheet workspace.';
+				return graderSheetPhase === 'building'
+					? 'Preparing the sheet workspace.'
+					: 'Preparing the grading workspace.';
 			case 'executing':
-				return 'Reviewing the upload and building the worksheet sheet view.';
+				if (graderSheetPhase === 'building') {
+					return 'Reviewing the upload and building the worksheet sheet view.';
+				}
+				return 'Reviewing the upload and building the graded worksheet view.';
 			case 'done':
+				if (graderSheetPhase === 'solving') {
+					return graderRun?.resultSummary?.trim() || 'Worksheet draft ready to open and solve.';
+				}
 				if (graderRun?.totals) {
 					return `${formatMarks(graderRun.totals.awardedMarks, graderRun.totals.maxMarks)} across ${graderRun.totals.problemCount.toString()} ${pluralise('question', graderRun.totals.problemCount)}.`;
 				}
 				return graderRun?.resultSummary?.trim() || 'Sheet ready.';
 			case 'failed':
-				return graderRun?.error?.trim() || 'Sheet generation failed. Open the sheet for details.';
+				return (
+					graderRun?.error?.trim() ||
+					(graderSheetPhase === 'building'
+						? 'Sheet generation failed. Open the sheet for details.'
+						: 'Sheet grading failed. Open the sheet for details.')
+				);
 			case 'stopped':
-				return graderRun?.resultSummary?.trim() || 'Sheet generation stopped.';
+				return (
+					graderRun?.resultSummary?.trim() ||
+					(graderSheetPhase === 'building'
+						? 'Sheet generation stopped.'
+						: 'Sheet grading stopped.')
+				);
 			case null:
 				return 'Preparing the sheet workspace.';
 		}
@@ -298,6 +344,9 @@
 				return `${lessonProgress.completed.toString()}/${lessonProgress.total.toString()} steps`;
 			}
 			return null;
+		}
+		if (graderSheetPhase === 'solving') {
+			return 'Ready to solve';
 		}
 		if (graderRun?.totals) {
 			return `${formatPercent(graderRun.totals.percentage)} scored`;

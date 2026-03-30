@@ -1,6 +1,12 @@
 import { z } from "zod";
 
 import { FirestoreTimestampSchema } from "./firestore";
+import {
+  PaperSheetAnswersSchema,
+  SparkGraderWorksheetReportSchema,
+  SparkSolveSheetDraftSchema,
+} from "./paperSheet";
+import { SparkTutorReviewStateSchema } from "./sparkTutorSession";
 
 const trimmedString = z.string().trim().min(1);
 
@@ -13,6 +19,15 @@ export const SparkGraderRunStatusSchema = z.enum([
 ]);
 
 export type SparkGraderRunStatus = z.infer<typeof SparkGraderRunStatusSchema>;
+
+export const SparkSheetPhaseSchema = z.enum([
+  "building",
+  "solving",
+  "grading",
+  "graded",
+]);
+
+export type SparkSheetPhase = z.infer<typeof SparkSheetPhaseSchema>;
 
 export const SparkGraderProblemVerdictSchema = z.enum([
   "correct",
@@ -83,6 +98,16 @@ export type SparkGraderPresentation = z.infer<
   typeof SparkGraderPresentationSchema
 >;
 
+export const SparkGraderRunDisplaySchema = z.object({
+  title: trimmedString,
+  metaLine: z.string().trim().min(1).nullable(),
+  summaryMarkdown: z.string().trim().min(1).nullable(),
+});
+
+export type SparkGraderRunDisplay = z.infer<
+  typeof SparkGraderRunDisplaySchema
+>;
+
 export const SparkGraderRunSchema = z.object({
   id: trimmedString,
   agentId: trimmedString,
@@ -94,9 +119,11 @@ export const SparkGraderRunSchema = z.object({
   summaryPath: trimmedString,
   problemsDir: trimmedString.optional(),
   sheetPath: trimmedString,
+  draftAnswersPath: trimmedString.optional(),
   sourceAttachmentIds: z.array(trimmedString).optional(),
   sourceAttachmentCount: z.number().int().min(0).optional(),
   status: SparkGraderRunStatusSchema,
+  sheetPhase: SparkSheetPhaseSchema.optional(),
   paper: SparkGraderPaperSchema.optional(),
   presentation: SparkGraderPresentationSchema.optional(),
   totals: SparkGraderTotalsSchema.optional(),
@@ -110,3 +137,59 @@ export const SparkGraderRunSchema = z.object({
 });
 
 export type SparkGraderRun = z.infer<typeof SparkGraderRunSchema>;
+
+export const SparkSheetPageRunSchema = z.object({
+  id: trimmedString,
+  workspaceId: trimmedString,
+  status: SparkGraderRunStatusSchema,
+  sheetPhase: SparkSheetPhaseSchema,
+  display: SparkGraderRunDisplaySchema,
+  totals: z
+    .object({
+      awardedMarks: z.number().min(0),
+      maxMarks: z.number().min(0),
+      percentage: z.number().min(0).max(100).nullable(),
+    })
+    .nullable(),
+  error: z.string().trim().min(1).nullable(),
+  createdAt: z.string().trim().min(1),
+  updatedAt: z.string().trim().min(1),
+});
+
+export type SparkSheetPageRun = z.infer<typeof SparkSheetPageRunSchema>;
+
+export const SparkSheetPageArtifactPathsSchema = z.object({
+  draft: trimmedString,
+  report: trimmedString,
+  draftAnswers: trimmedString,
+});
+
+export type SparkSheetPageArtifactPaths = z.infer<
+  typeof SparkSheetPageArtifactPathsSchema
+>;
+
+export const SparkSheetPageInteractionSchema = z.object({
+  id: trimmedString,
+  workspaceId: trimmedString,
+  status: z.string().trim().min(1),
+  reviewState: SparkTutorReviewStateSchema,
+  activeTurnAgentId: z.string().trim().min(1).nullable(),
+  activeTurnQuestionId: z.string().trim().min(1).nullable(),
+  error: z.string().trim().min(1).nullable(),
+});
+
+export type SparkSheetPageInteraction = z.infer<
+  typeof SparkSheetPageInteractionSchema
+>;
+
+export const SparkSheetPageStateSchema = z.object({
+  run: SparkSheetPageRunSchema,
+  artifactPaths: SparkSheetPageArtifactPathsSchema,
+  draft: SparkSolveSheetDraftSchema.nullable(),
+  draftAnswers: PaperSheetAnswersSchema,
+  report: SparkGraderWorksheetReportSchema.nullable(),
+  initialReviewState: SparkTutorReviewStateSchema.nullable(),
+  interaction: SparkSheetPageInteractionSchema.nullable(),
+});
+
+export type SparkSheetPageState = z.infer<typeof SparkSheetPageStateSchema>;

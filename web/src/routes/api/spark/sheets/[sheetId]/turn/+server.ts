@@ -151,6 +151,15 @@ function formatQuestionShape(question: PaperSheetQuestion): string {
 				...(question.conjunction ? [`Text between blanks: ${question.conjunction}`] : []),
 				`Text after blank(s): ${question.after}`
 			].join('\n');
+		case 'cloze':
+			return [
+				'Question type: multi-blank cloze.',
+				`Segment count: ${question.segments.length.toString()}`,
+				`Blank count: ${question.blanks.length.toString()}`,
+				...(question.wordBank && question.wordBank.length > 0
+					? [`Word bank: ${question.wordBank.join(' | ')}`]
+					: [])
+			].join('\n');
 		case 'mcq':
 			return [
 				'Question type: multiple choice.',
@@ -182,6 +191,30 @@ function formatQuestionShape(question: PaperSheetQuestion): string {
 				'Question type: spelling correction.',
 				`Prompt: ${question.prompt}`,
 				`Words shown on worksheet: ${question.words.map((word) => word.wrong).join(' | ')}`
+			].join('\n');
+		case 'flow':
+			return [
+				'Question type: flow chart.',
+				`Prompt: ${question.prompt}`,
+				`Rows: ${question.rows
+					.map((row) =>
+						row.items
+							.map((item) =>
+								item.type === 'box' ? `[box:${item.boxId}]` : `[op:${item.label}]`
+							)
+							.join(' ')
+					)
+					.join(' || ')}`,
+				...(question.connectors && question.connectors.length > 0
+					? [
+							`Vertical connectors: ${question.connectors
+								.map(
+									(connector) =>
+										`${connector.fromBoxId} ${connector.direction} ${connector.toBoxId} (${connector.label})`
+								)
+								.join(' | ')}`
+						]
+					: [])
 			].join('\n');
 	}
 }

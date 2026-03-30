@@ -7,6 +7,7 @@ import {
 	SparkTutorReviewStateSchema,
 	SparkTutorScreenStateSchema,
 	type SparkGraderWorksheetReport,
+	type PaperSheetQuestion,
 	type SparkTutorComposerState,
 	type SparkTutorHistoryEntry,
 	type SparkTutorReviewState,
@@ -66,6 +67,31 @@ const EMPTY_REPORT: SparkGraderWorksheetReport = SparkGraderWorksheetReportSchem
 
 function stringifyJson(value: unknown): string {
 	return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+function formatTutorQuestionPrompt(question: PaperSheetQuestion): string {
+	switch (question.type) {
+		case 'fill':
+			return [question.prompt, ...question.blanks.map(() => '_____'), question.after]
+				.filter((part) => part.trim().length > 0)
+				.join(question.conjunction ? ` ${question.conjunction} ` : ' ');
+		case 'cloze': {
+			const parts: string[] = [];
+			for (let index = 0; index < question.blanks.length; index += 1) {
+				parts.push(question.segments[index] ?? '');
+				parts.push('_____');
+			}
+			parts.push(question.segments[question.segments.length - 1] ?? '');
+			return parts.join('');
+		}
+		case 'mcq':
+		case 'lines':
+		case 'calc':
+		case 'match':
+		case 'spelling':
+		case 'flow':
+			return question.prompt;
+	}
 }
 
 export function buildTutorQuestionDirectoryPath(questionId: string): string {
@@ -320,7 +346,7 @@ export async function seedTutorWorkspace(options: {
 					questionNumber: entry.number,
 					sectionId: entry.section.id,
 					sectionLabel: entry.section.label,
-					prompt: entry.question.prompt,
+					prompt: formatTutorQuestionPrompt(entry.question),
 					initialStatus: initialReviewState.threads[entry.question.id]?.status ?? 'open',
 					initialNote: initialReviewState.review.questions[entry.question.id]?.note ?? ''
 				}),

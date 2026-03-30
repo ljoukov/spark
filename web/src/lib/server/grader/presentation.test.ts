@@ -59,4 +59,14 @@ describe('buildGraderRunDisplay', () => {
 		expect(display.metaLine).toBeNull();
 		expect(display.summaryMarkdown).toBe('Waiting for grading to start.');
 	});
+
+	it('describes a ready-to-solve draft sheet separately from graded output', () => {
+		const display = buildGraderRunDisplay({
+			status: 'done',
+			sheetPhase: 'solving'
+		});
+
+		expect(display.title).toBe('Uploaded worksheet');
+		expect(display.summaryMarkdown).toBe('This sheet is ready to solve.');
+	});
 });

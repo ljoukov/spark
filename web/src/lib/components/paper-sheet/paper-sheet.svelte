@@ -29,7 +29,8 @@
 		PaperSheetQuestionReviewStatus,
 		PaperSheetLinesQuestion,
 		PaperSheetReview,
-		PaperSheetScore
+		PaperSheetScore,
+		PaperSheetFlowQuestion
 	} from './types';
 
 	type PaperSheetQuestionEntry = {
@@ -87,11 +88,12 @@
 		return total;
 	}
 
-	function buildQuestionNumbers(sheet: PaperSheetData): Record<string, number> {
-		const numbers: Record<string, number> = {};
+	function buildQuestionNumbers(sheet: PaperSheetData): Record<string, string> {
+		const numbers: Record<string, string> = {};
 		let counter = 1;
 		for (const entry of getQuestionEntries(sheet)) {
-			numbers[buildQuestionKey(entry.sectionId, entry.question.id)] = counter;
+			numbers[buildQuestionKey(entry.sectionId, entry.question.id)] =
+				entry.question.displayNumber ?? counter.toString();
 			counter += 1;
 		}
 		return numbers;
@@ -186,6 +188,12 @@
 		return question.type === 'lines' && shouldRenderLinesAnswerAsMarkdown(question);
 	}
 
+	function isFlowRowItemBox(
+		item: PaperSheetFlowQuestion['rows'][number]['items'][number]
+	): item is Extract<PaperSheetFlowQuestion['rows'][number]['items'][number], { type: 'box' }> {
+		return item.type === 'box';
+	}
+
 	function createScoreTone(score: PaperSheetScore): {
 		background: string;
 		border: string;
@@ -232,6 +240,7 @@
 		if (status === 'correct') {
 			switch (question.type) {
 				case 'fill':
+				case 'cloze':
 					return {
 						status,
 						label: 'Strong move',
@@ -291,11 +300,22 @@
 						followUp:
 							'When you refine it, keep your explanation tight and include one concrete piece of evidence from the sheet.'
 					};
+				case 'flow':
+					return {
+						status,
+						label: 'Strong move',
+						statusLabel: 'optional reply',
+						note: 'You tracked the calculation flow accurately here. If you reply, the next note can suggest a quicker way to check each box without redoing the whole chain.',
+						replyPlaceholder: 'Optional reply...',
+						followUp:
+							'Good approach. On flow questions, checking one step at a time is usually faster than working back from the end.'
+					};
 			}
 		}
 
 		switch (question.type) {
 			case 'fill':
+			case 'cloze':
 				return {
 					status,
 					label: 'Quick note',
@@ -354,6 +374,16 @@
 					replyPlaceholder: 'Write your reply here...',
 					followUp:
 						'Useful reflection. On the redraft, keep one clear idea per sentence and tie it back to the theory text.'
+				};
+			case 'flow':
+				return {
+					status,
+					label: 'Quick note',
+					statusLabel: 'response needed',
+					note: 'One step in the flow has drifted. Re-check each operation in order and write the running value in the next box before moving on.',
+					replyPlaceholder: 'Write your reply here...',
+					followUp:
+						'That is closer. If you get stuck, compare adjacent boxes only and check whether the operation between them really matches the change.'
 				};
 		}
 	}
@@ -504,12 +534,27 @@
 		);
 	}
 
+	function resolveStudentInputPlaceholder(value: string | undefined): string | undefined {
+		if (!value) {
+			return undefined;
+		}
+		const normalized = value.trim().toLowerCase();
+		if (normalized === 'answer' || normalized === '...') {
+			return undefined;
+		}
+		return value;
+	}
+
 	function readInputValue(event: Event): string {
 		const target = event.currentTarget;
 		if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
 			return target.value;
 		}
 		return '';
+	}
+
+	function buildAnswersSignature(answers: PaperSheetAnswers): string {
+		return JSON.stringify(answers);
 	}
 
 	let {
@@ -525,6 +570,10 @@
 		editable = true,
 		allowFeedbackReplies = false,
 		showFooter = true,
+		gradeLabel = 'Grade',
+		grading = false,
+		onAnswersChange = undefined,
+		onGrade = undefined,
 		onReplyToTutor = undefined
 	}: {
 		sheet: PaperSheetData;
@@ -539,6 +588,10 @@
 		editable?: boolean;
 		allowFeedbackReplies?: boolean;
 		showFooter?: boolean;
+		gradeLabel?: string;
+		grading?: boolean;
+		onAnswersChange?: ((answers: PaperSheetAnswers) => void | Promise<void>) | undefined;
+		onGrade?: ((answers: PaperSheetAnswers) => boolean | Promise<boolean> | void | Promise<void>) | undefined;
 		onReplyToTutor?:
 			| ((
 					questionId: string,
@@ -548,7 +601,17 @@
 			| undefined;
 	} = $props();
 
-	let localAnswers = $state<PaperSheetAnswers>({});
+	function getSeedAnswers(): PaperSheetAnswers {
+		if (Object.keys(initialAnswers).length > 0) {
+			return initialAnswers;
+		}
+		return sheet.initialAnswers ?? {};
+	}
+	const initialSeedAnswers = (() => cloneAnswers(getSeedAnswers()))();
+	const initialOpenSections = (() => createOpenSections(sheet))();
+	const initialSheetSignature = (() => buildSheetSignature(sheet))();
+
+	let localAnswers = $state<PaperSheetAnswers>(initialSeedAnswers);
 	let checked = $state(false);
 	let mockReview = $state<PaperSheetMockReview | null>(null);
 	let feedbackDrafts = $state<Record<string, string>>({});
@@ -559,18 +622,12 @@
 	let feedbackRequestTokens = $state<Record<string, number>>({});
 	let openFeedbackCards = $state<Record<string, boolean>>({});
 	let followUpComposerQuestions = $state<Record<string, boolean>>({});
-	let openSections = $state<Record<string, boolean>>({});
+	let openSections = $state<Record<string, boolean>>(initialOpenSections);
 	let activeMatchTerms = $state<Record<string, string | null>>({});
 	let previousFeedbackThreadStatuses: Record<string, PaperSheetFeedbackThread['status'] | undefined> =
 		{};
-	let previousSheetSignature = $state<string | null>(null);
-
-	function getSeedAnswers(): PaperSheetAnswers {
-		if (Object.keys(initialAnswers).length > 0) {
-			return initialAnswers;
-		}
-		return sheet.initialAnswers ?? {};
-	}
+	let previousSheetSignature = $state<string | null>(initialSheetSignature);
+	let lastPropagatedAnswersSignature = $state(buildAnswersSignature(initialSeedAnswers));
 
 	$effect(() => {
 		const nextSheetSignature = buildSheetSignature(sheet);
@@ -581,7 +638,9 @@
 			cleanupDraftAttachments(entries);
 		}
 		cleanupThreadAttachmentUrls(mockFeedbackThreads);
-		localAnswers = cloneAnswers(getSeedAnswers());
+		const nextSeedAnswers = cloneAnswers(getSeedAnswers());
+		localAnswers = nextSeedAnswers;
+		lastPropagatedAnswersSignature = buildAnswersSignature(nextSeedAnswers);
 		checked = false;
 		mockReview = null;
 		feedbackDrafts = {};
@@ -621,7 +680,7 @@
 	const totalSheetMarks = $derived(totalMarks(sheet));
 	const paperStyle = $derived(buildPaperThemeStyle(sheet));
 	const currentAnswers = $derived.by(() =>
-		reviewMode === 'mock' || editable ? localAnswers : getSeedAnswers()
+		reviewMode === 'live' ? getSeedAnswers() : localAnswers
 	);
 	const currentReview = $derived.by(() => (reviewMode === 'mock' ? mockReview : initialReview));
 	const currentFeedbackThreads = $derived.by(() =>
@@ -641,10 +700,32 @@
 	);
 	const scoreTone = $derived(currentReview ? createScoreTone(currentReview.score) : null);
 	const feedbackRepliesEnabled = $derived(allowFeedbackReplies || reviewMode === 'mock');
+	const showGradeAction = $derived(
+		reviewMode === 'none' && editable && currentReview === null && onGrade !== undefined
+	);
 
 	function areInputsLocked(): boolean {
 		return !editable || checked || reviewMode === 'live';
 	}
+
+	async function handleGrade(): Promise<void> {
+		if (!showGradeAction || grading || !onGrade) {
+			return;
+		}
+		await onGrade(cloneAnswers(localAnswers));
+	}
+
+	$effect(() => {
+		if (!editable || reviewMode !== 'none' || !onAnswersChange) {
+			return;
+		}
+		const signature = buildAnswersSignature(localAnswers);
+		if (signature === lastPropagatedAnswersSignature) {
+			return;
+		}
+		lastPropagatedAnswersSignature = signature;
+		void onAnswersChange(cloneAnswers(localAnswers));
+	});
 
 	function handleCheck(): void {
 		if (reviewMode !== 'mock') {
@@ -1016,11 +1097,27 @@
 		});
 	}
 
+	function updateClozeAnswer(questionKey: string, index: number, value: string): void {
+		const current = getObjectAnswer(questionKey);
+		updateObjectAnswer(questionKey, {
+			...current,
+			[String(index)]: value
+		});
+	}
+
 	function updateSpellingAnswer(questionKey: string, index: number, value: string): void {
 		const current = getObjectAnswer(questionKey);
 		updateObjectAnswer(questionKey, {
 			...current,
 			[String(index)]: value
+		});
+	}
+
+	function updateFlowAnswer(questionKey: string, boxId: string, value: string): void {
+		const current = getObjectAnswer(questionKey);
+		updateObjectAnswer(questionKey, {
+			...current,
+			[boxId]: value
 		});
 	}
 
@@ -1069,6 +1166,31 @@
 
 	function getQuestionReview(questionKey: string): PaperSheetQuestionReview | null {
 		return currentReview?.questions[questionKey] ?? null;
+	}
+
+	function getFlowBox(question: PaperSheetFlowQuestion, boxId: string) {
+		return question.boxes.find((box) => box.id === boxId) ?? null;
+	}
+
+	function getFlowBoxValue(questionKey: string, box: PaperSheetFlowQuestion['boxes'][number]): string {
+		if (typeof box.initialValue === 'string') {
+			return box.initialValue;
+		}
+		return getObjectAnswer(questionKey)[box.id] ?? '';
+	}
+
+	function isFlowBoxLocked(box: PaperSheetFlowQuestion['boxes'][number]): boolean {
+		return areInputsLocked() || box.readonly === true || typeof box.initialValue === 'string';
+	}
+
+	function resolveFlowRowArrow(direction: PaperSheetFlowQuestion['rows'][number]['direction']): string {
+		return direction === 'ltr' ? '→' : '←';
+	}
+
+	function resolveFlowConnectorArrow(
+		direction: NonNullable<PaperSheetFlowQuestion['connectors']>[number]['direction']
+	): string {
+		return direction === 'down' ? '↓' : '↑';
 	}
 
 	function buildSheetSignature(value: PaperSheetData): string {
@@ -1247,7 +1369,7 @@
 												oninput={(event) => {
 													updateFillAnswer(questionKey, 0, readInputValue(event));
 												}}
-												placeholder={blank0?.placeholder ?? '...'}
+												placeholder={resolveStudentInputPlaceholder(blank0?.placeholder)}
 												readonly={areInputsLocked()}
 											/>
 
@@ -1264,7 +1386,7 @@
 													oninput={(event) => {
 														updateFillAnswer(questionKey, 1, readInputValue(event));
 													}}
-													placeholder={blank1.placeholder ?? '...'}
+													placeholder={resolveStudentInputPlaceholder(blank1.placeholder)}
 													readonly={areInputsLocked()}
 												/>
 											{/if}
@@ -1275,6 +1397,46 @@
 												class="paper-sheet__inline-markdown"
 											/>
 										</div>
+									{:else if question.type === 'cloze'}
+										{@const clozeAnswers = getObjectAnswer(questionKey)}
+
+										<div class="paper-sheet__cloze-row">
+											{#each question.segments as segment, segmentIndex (`${question.id}-segment-${segmentIndex}`)}
+												{#if segment.trim().length > 0}
+													<MarkdownContent
+														inline
+														markdown={segment}
+														class="paper-sheet__inline-markdown"
+													/>
+												{/if}
+												{#if segmentIndex < question.blanks.length}
+													{@const blank = question.blanks[segmentIndex]}
+													<input
+														class="paper-sheet__inline-input"
+														style={buildTextInputStyle(reviewStatus, blank?.minWidth ?? 100)}
+														value={clozeAnswers[String(segmentIndex)] ?? ''}
+														oninput={(event) => {
+															updateClozeAnswer(
+																questionKey,
+																segmentIndex,
+																readInputValue(event)
+															);
+														}}
+														placeholder={resolveStudentInputPlaceholder(blank?.placeholder)}
+														readonly={areInputsLocked()}
+													/>
+												{/if}
+											{/each}
+										</div>
+										{#if question.wordBank && question.wordBank.length > 0}
+											<div class="paper-sheet__word-bank" aria-label="Word bank">
+												{#each question.wordBank as option, optionIndex (`${question.id}-word-${optionIndex}`)}
+													<span class="paper-sheet__word-bank-chip">
+														<MarkdownContent inline markdown={option} />
+													</span>
+												{/each}
+											</div>
+										{/if}
 									{:else if question.type === 'mcq'}
 										{@const selected = getTextAnswer(questionKey)}
 
@@ -1346,14 +1508,16 @@
 												oninput={(event) => {
 													updateTextAnswer(questionKey, readInputValue(event));
 												}}
-												placeholder="..."
+												placeholder={resolveStudentInputPlaceholder('...')}
 												readonly={areInputsLocked()}
 											/>
-											<MarkdownContent
-												inline
-												markdown={question.unit}
-												class="paper-sheet__inline-markdown"
-											/>
+											{#if question.unit.trim().length > 0}
+												<MarkdownContent
+													inline
+													markdown={question.unit}
+													class="paper-sheet__inline-markdown"
+												/>
+											{/if}
 										</div>
 									{:else if question.type === 'match'}
 										{@const selections = getObjectAnswer(questionKey)}
@@ -1441,6 +1605,69 @@
 												</div>
 											{/each}
 										</div>
+									{:else if question.type === 'flow'}
+										{@const flowAnswers = getObjectAnswer(questionKey)}
+
+										<MarkdownContent markdown={question.prompt} class="paper-sheet__prompt" />
+										<div class="paper-sheet__flow-chart">
+											{#each question.rows as row, rowIndex (`${question.id}-row-${rowIndex}`)}
+												<div class={`paper-sheet__flow-row ${row.direction === 'rtl' ? 'is-rtl' : ''}`}>
+													{#each row.items as item, itemIndex (`${question.id}-row-${rowIndex}-${itemIndex}`)}
+														{#if isFlowRowItemBox(item)}
+															{@const box = getFlowBox(question, item.boxId)}
+															{#if box}
+																{#if typeof box.initialValue === 'string' || box.readonly === true}
+																	<div
+																		class={`paper-sheet__flow-box ${typeof box.initialValue === 'string' ? 'is-fixed' : ''}`}
+																		style={`min-width:${box.minWidth ?? 74}px;`}
+																	>
+																		{getFlowBoxValue(questionKey, box)}
+																	</div>
+																{:else}
+																	<input
+																		class="paper-sheet__flow-box paper-sheet__flow-box-input"
+																		style={`min-width:${box.minWidth ?? 74}px;`}
+																		value={flowAnswers[box.id] ?? ''}
+																		oninput={(event) => {
+																			updateFlowAnswer(questionKey, box.id, readInputValue(event));
+																		}}
+																		placeholder={resolveStudentInputPlaceholder(box.placeholder)}
+																		readonly={isFlowBoxLocked(box)}
+																	/>
+																{/if}
+															{/if}
+														{:else}
+															<div class="paper-sheet__flow-operation">
+																<span class="paper-sheet__flow-arrow">{resolveFlowRowArrow(row.direction)}</span>
+																<MarkdownContent
+																	inline
+																	markdown={item.label}
+																	class="paper-sheet__flow-operation-label"
+																/>
+															</div>
+														{/if}
+													{/each}
+												</div>
+												{#if question.connectors && question.connectors.length > 0 && rowIndex < question.rows.length - 1}
+													<div class="paper-sheet__flow-connectors">
+														{#each question.connectors as connector, connectorIndex (`${question.id}-connector-${connectorIndex}`)}
+															<div class="paper-sheet__flow-connector">
+																<span class="paper-sheet__flow-arrow">
+																	{resolveFlowConnectorArrow(connector.direction)}
+																</span>
+																{#if connector.label.trim().length > 0}
+																	<MarkdownContent
+																		inline
+																		markdown={connector.label}
+																		class="paper-sheet__flow-operation-label"
+																	/>
+																{/if}
+															</div>
+														{/each}
+													</div>
+												{/if}
+											{/each}
+										</div>
 									{/if}
 								</div>
 							</div>
@@ -1514,23 +1741,36 @@
 			</section>
 		{/each}
 
-		{#if reviewMode === 'mock'}
+		{#if reviewMode === 'mock' || showGradeAction}
 			<div class="paper-sheet__actions">
-				{#if checked}
-					<button
-						type="button"
-						class="paper-sheet__action paper-sheet__action--secondary"
-						onclick={handleReset}
-					>
-						Reset Demo
-					</button>
+				{#if reviewMode === 'mock'}
+					{#if checked}
+						<button
+							type="button"
+							class="paper-sheet__action paper-sheet__action--secondary"
+							onclick={handleReset}
+						>
+							Reset Demo
+						</button>
+					{:else}
+						<button
+							type="button"
+							class="paper-sheet__action paper-sheet__action--primary"
+							onclick={handleCheck}
+						>
+							Show Mock Review
+						</button>
+					{/if}
 				{:else}
 					<button
 						type="button"
 						class="paper-sheet__action paper-sheet__action--primary"
-						onclick={handleCheck}
+						onclick={() => {
+							void handleGrade();
+						}}
+						disabled={grading}
 					>
-						Show Mock Review
+						{grading ? 'Grading...' : gradeLabel}
 					</button>
 				{/if}
 			</div>
@@ -2011,6 +2251,7 @@
 	}
 
 	.paper-sheet__fill-row,
+	.paper-sheet__cloze-row,
 	.paper-sheet__calc-row {
 		display: flex;
 		flex-wrap: wrap;
@@ -2018,6 +2259,24 @@
 		align-items: center;
 		font-size: var(--paper-reading-size);
 		line-height: var(--paper-reading-line-height);
+	}
+
+	.paper-sheet__word-bank {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin-top: 10px;
+	}
+
+	.paper-sheet__word-bank-chip {
+		display: inline-flex;
+		align-items: center;
+		border: 1px dashed var(--paper-border);
+		border-radius: 999px;
+		background: var(--paper-surface-soft);
+		padding: 5px 10px;
+		font-size: calc(var(--paper-reading-size) * 0.95);
+		color: var(--paper-text-soft);
 	}
 
 	.paper-sheet__inline-input {
@@ -2223,6 +2482,72 @@
 		font-size: var(--paper-reading-size);
 	}
 
+	.paper-sheet__flow-chart {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+
+	.paper-sheet__flow-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 10px;
+	}
+
+	.paper-sheet__flow-row.is-rtl {
+		justify-content: flex-end;
+	}
+
+	.paper-sheet__flow-box {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 2.8rem;
+		border: 1.5px solid var(--paper-border);
+		border-radius: 6px;
+		background: var(--paper-surface-elevated);
+		padding: 6px 10px;
+		font-family: inherit;
+		font-size: var(--paper-reading-size);
+		line-height: 1.2;
+		color: var(--paper-text-strong);
+	}
+
+	.paper-sheet__flow-box.is-fixed {
+		font-weight: 700;
+		background: var(--paper-accent-softest-bg);
+	}
+
+	.paper-sheet__flow-box-input {
+		outline: none;
+		text-align: center;
+	}
+
+	.paper-sheet__flow-operation,
+	.paper-sheet__flow-connector {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-size: calc(var(--paper-reading-size) * 0.96);
+		color: var(--paper-text-soft);
+	}
+
+	.paper-sheet__flow-connectors {
+		display: flex;
+		justify-content: center;
+	}
+
+	.paper-sheet__flow-arrow {
+		font-weight: 700;
+		color: var(--paper-accent-text);
+	}
+
+	.paper-sheet__flow-operation-label {
+		font-size: inherit;
+		line-height: inherit;
+	}
+
 	.paper-sheet__score-card {
 		width: 100%;
 		margin: 0 0 24px;
@@ -2296,6 +2621,11 @@
 		font-size: var(--paper-reading-size);
 		font-weight: 700;
 		cursor: pointer;
+	}
+
+	.paper-sheet__action:disabled {
+		cursor: wait;
+		opacity: 0.72;
 	}
 
 	.paper-sheet__action--primary {

@@ -131,23 +131,27 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
 ```
 
 7. Worksheet-report rules:
-   - the worksheet UI only supports these question types: `fill`, `mcq`, `lines`, `calc`, `match`, `spelling`.
+   - the worksheet UI supports these question types: `fill`, `cloze`, `mcq`, `lines`, `calc`, `match`, `spelling`, `flow`.
    - choose the most natural supported worksheet type for each student-facing prompt:
      - `fill` for literal blanks / short phrase completions,
+     - `cloze` for short inline multi-blank text where the original printed sentence should stay visible,
      - `mcq` for multiple choice,
      - `calc` for short numeric / formula answers with a unit,
      - `match` for matching prompts,
      - `spelling` for spelling-correction prompts,
+     - `flow` for printed box-and-arrow calculations or step chains that the student saw on the worksheet,
      - `lines` for any longer explanation, proof, justification, or working that does not cleanly fit the other types.
    - when in doubt, use `lines`; do not invent unsupported question types.
    - every worksheet question must include `marks`.
    - `lines` questions must include `lines` as a positive integer.
+   - `cloze` questions must preserve the surrounding sentence in `segments[]` and the blank count in `blanks[]`.
    - `fill` questions must use the real schema shape:
      - `prompt`: text before the first blank,
      - `blanks`: an array of 1 or 2 blank objects like `{ "placeholder": "..." }`,
      - `conjunction`: optional text between blank 1 and blank 2,
      - `after`: text after the final blank.
    - `fill` supports only 1 or 2 blanks. If the worksheet has 3 or more blanks in one printed sentence, either split that work into multiple supported questions or use `lines`. Do NOT emit a 3-blank `fill` question.
+   - `flow` questions must keep the printed box order, row order, and connector direction faithful to the source layout where possible.
    - `lines` questions may optionally set `renderMode: "markdown"` when the prompt or the student's written answer should render with Markdown/LaTeX formatting in the sheet UI; use this for maths-heavy working, aligned equations, proofs, or structured multiline responses.
    - question ids must be unique across the whole worksheet, not just within a section.
    - the worksheet should reflect the real student-facing task text as closely as possible.
@@ -157,8 +161,10 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
    - answer-shape rules:
      - `mcq`, `lines`, and `calc` answers are strings.
      - `fill` answers are objects keyed by blank index (`"0"`, `"1"`).
+     - `cloze` answers are objects keyed by blank index (`"0"`, `"1"`, ...).
      - `match` answers are objects keyed by the shown term.
      - `spelling` answers are objects keyed by word index (`"0"`, `"1"`, ...).
+     - `flow` answers are objects keyed by flow-box id.
    - preserve the student's wording, variables, formulas, method, and mistakes in `answers` wherever possible.
    - when the worksheet page mixed prompt text and student writing, the stored answer should contain only the student's contributed words, not the full printed prompt repeated back.
    - `review.score.total` must equal the total worksheet marks; `review.score.got` is the awarded mark total for the whole sheet.

@@ -1,0 +1,41 @@
+import { describe, expect, it } from "vitest";
+
+import { buildSparkSheetDraftAgentPrompt } from "../src/agent/sheetDraftAgentPrompt";
+import {
+  renderSparkSheetDraftTask,
+  SPARK_CHAT_CREATE_SHEET_TOOL_DESCRIPTION,
+} from "../src/agent/sparkChatShared";
+
+describe("sheet draft prompt", () => {
+  it("requires source-fidelity checks before publish", () => {
+    const prompt = buildSparkSheetDraftAgentPrompt();
+
+    expect(prompt).toContain(
+      "Before publish, compare the worksheet draft against extracted text and viewed source pages.",
+    );
+    expect(prompt).toContain(
+      "publish_sheet_draft({}) to validate and publish the worksheet draft; this only validates the artifact contract/persistence",
+    );
+    expect(prompt).toContain("Mark uncertainty explicitly instead of guessing");
+  });
+
+  it("keeps the extraction workflow visual-first for printed worksheets", () => {
+    const task = renderSparkSheetDraftTask("# Task");
+
+    expect(task).toContain(
+      "always run `pdf_to_images` and inspect every relevant page or crop with `view_image` before drafting",
+    );
+    expect(task).toContain(
+      "Never invent placeholder copy for blanks or empty boxes unless the source prints it.",
+    );
+    expect(task).toContain(
+      "`publish_sheet_draft` only validates schema/persistence",
+    );
+  });
+
+  it("tells the chat tool to reuse earlier uploads for worksheet requests", () => {
+    expect(SPARK_CHAT_CREATE_SHEET_TOOL_DESCRIPTION).toContain(
+      "If the request refers to an earlier upload in the same conversation",
+    );
+  });
+});

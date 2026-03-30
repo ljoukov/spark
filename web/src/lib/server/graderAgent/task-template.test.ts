@@ -20,4 +20,12 @@ describe('grader task template', () => {
 			'do not include `items` for workspace files or uploads'
 		);
 	});
+
+	it('allows cloze and flow worksheet questions in graded sheets', () => {
+		expect(graderTaskTemplate).toContain(
+			'the worksheet UI supports these question types: `fill`, `cloze`, `mcq`, `lines`, `calc`, `match`, `spelling`, `flow`'
+		);
+		expect(graderTaskTemplate).toContain('`cloze` for short inline multi-blank text');
+		expect(graderTaskTemplate).toContain('`flow` for printed box-and-arrow calculations');
+	});
 });

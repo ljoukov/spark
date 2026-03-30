@@ -1,4 +1,4 @@
-import type { SessionStatus, SparkGraderRunStatus } from '@spark/schemas';
+import type { SessionStatus, SparkGraderRunStatus, SparkSheetPhase } from '@spark/schemas';
 
 type TaskCardPreviewBase = {
 	title?: string;
@@ -21,6 +21,7 @@ export type TaskCardLessonPreview = TaskCardPreviewBase & {
 export type TaskCardGraderPreview = TaskCardPreviewBase & {
 	kind: 'grader';
 	status: SparkGraderRunStatus;
+	sheetPhase?: SparkSheetPhase | null;
 	totals?: {
 		awardedMarks: number;
 		maxMarks: number;

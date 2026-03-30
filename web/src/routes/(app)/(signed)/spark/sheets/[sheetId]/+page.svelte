@@ -1,18 +1,27 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
+	import { invalidateAll } from '$app/navigation';
 	import { PaperSheet } from '$lib/components/paper-sheet/index.js';
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
 	import type {
+		PaperSheetAnswers,
 		PaperSheetFeedbackAttachment,
-		SparkAgentRunStream,
 		PaperSheetFeedbackThread,
+		SparkAgentRunStream,
 		SparkGraderWorksheetReport,
+		SparkSheetPageState,
+		SparkSolveSheetDraft,
+		SparkSolveSheetAnswers,
 		SparkTutorReviewState
 	} from '@spark/schemas';
 	import {
 		SparkAgentRunStreamSchema,
+		SparkGraderRunSchema,
+		SparkSheetPageStateSchema,
 		SparkAgentWorkspaceFileSchema,
 		SparkGraderWorksheetReportSchema,
+		SparkSolveSheetAnswersSchema,
+		SparkSolveSheetDraftSchema,
 		SparkTutorReviewStateSchema,
 		SparkTutorSessionSchema
 	} from '@spark/schemas';
@@ -36,6 +45,9 @@
 	const userSnapshot = userStore ? fromStore(userStore) : null;
 	const user = $derived(userSnapshot?.current ?? data.user ?? null);
 	const userId = $derived(user?.uid ?? null);
+	const initialRun = untrack(() => data.run);
+	const initialDraft = untrack(() => data.draft);
+	const initialDraftAnswers = untrack(() => data.draftAnswers);
 	const initialReport = untrack(() => data.report);
 	const initialReviewState = untrack(
 		() => data.interaction?.reviewState ?? data.initialReviewState ?? null
@@ -46,6 +58,10 @@
 	const initialActiveTurnQuestionId = untrack(() => data.interaction?.activeTurnQuestionId ?? null);
 
 	let authReady = $state(false);
+	let run = $state<PageData['run']>(initialRun);
+	let lastSyncedDataRun = $state<PageData['run']>(initialRun);
+	let draft = $state<SparkSolveSheetDraft | null>(initialDraft);
+	let draftAnswers = $state<PaperSheetAnswers>(initialDraftAnswers);
 	let report = $state<SparkGraderWorksheetReport | null>(initialReport);
 	let reviewState = $state<SparkTutorReviewState | null>(initialReviewState);
 	let interactionSessionId = $state<string | null>(initialInteractionSessionId);
@@ -54,8 +70,38 @@
 	let activeTurnQuestionId = $state<string | null>(initialActiveTurnQuestionId);
 	let activeAgentStream = $state<SparkAgentRunStream | null>(null);
 	let requestError = $state<string | null>(null);
+	let draftSaveError = $state<string | null>(null);
+	let savingDraft = $state(false);
+	let gradingDraft = $state(false);
 	let submittingQuestionIds = $state<Record<string, boolean>>({});
 	let pendingReplies = $state<Record<string, PendingReply>>({});
+	let draftSaveTimer = $state<ReturnType<typeof setTimeout> | null>(null);
+	let lastSavedDraftSignature = $state(JSON.stringify(initialDraftAnswers));
+	let artifactRefreshInFlight = $state(false);
+	let artifactRefreshAttempts = $state(0);
+
+	const ARTIFACT_REFRESH_MAX_ATTEMPTS = 120;
+	const ARTIFACT_REFRESH_MAX_DELAY_MS = 5000;
+	const ARTIFACT_REFRESH_REQUEST_TIMEOUT_MS = 4000;
+
+	function resolveSnapshotSheetPhase(
+		status: PageData['run']['status'],
+		explicitPhase: PageData['run']['sheetPhase'] | undefined
+	): PageData['run']['sheetPhase'] {
+		if (explicitPhase) {
+			return explicitPhase;
+		}
+		if (report) {
+			return 'graded';
+		}
+		if (draft) {
+			return 'solving';
+		}
+		if (status === 'done') {
+			return 'graded';
+		}
+		return 'grading';
+	}
 
 	function encodeWorkspaceFileId(filePath: string): string {
 		return encodeURIComponent(filePath);
@@ -82,7 +128,7 @@
 			path: filePath,
 			filename
 		});
-		return `/api/spark/sheets/${data.run.id}/attachment?${params.toString()}`;
+		return `/api/spark/sheets/${run.id}/attachment?${params.toString()}`;
 	}
 
 	function buildAttachmentSignature(attachment: {
@@ -131,8 +177,238 @@
 		}
 	}
 
+	function isDraftGradingInProgress(): boolean {
+		if (gradingDraft) {
+			return true;
+		}
+		if (run.sheetPhase !== 'grading') {
+			return false;
+		}
+		return run.status !== 'failed' && run.status !== 'stopped';
+	}
+
+	function canEditDraftSheet(): boolean {
+		if (!draft) {
+			return false;
+		}
+		if (run.sheetPhase !== 'grading') {
+			return true;
+		}
+		return run.status === 'failed' || run.status === 'stopped';
+	}
+
+	function applySheetPageState(next: SparkSheetPageState): void {
+		run = next.run;
+		if (next.draft) {
+			draft = next.draft;
+		}
+		draftAnswers = next.draftAnswers;
+		lastSavedDraftSignature = JSON.stringify(next.draftAnswers);
+		draftSaveError = null;
+		if (next.report) {
+			report = next.report;
+		}
+		const nextReviewState = next.interaction?.reviewState ?? next.initialReviewState ?? null;
+		if (nextReviewState) {
+			reviewState = nextReviewState;
+		}
+		if (next.interaction?.id) {
+			interactionSessionId = next.interaction.id;
+		}
+		if (next.interaction?.workspaceId) {
+			interactionWorkspaceId = next.interaction.workspaceId;
+		}
+		if (next.interaction) {
+			activeTurnAgentId = next.interaction.activeTurnAgentId;
+			activeTurnQuestionId = next.interaction.activeTurnQuestionId;
+		}
+		if (next.run.status !== 'executing') {
+			gradingDraft = false;
+		}
+	}
+
+	async function refreshSheetArtifacts(): Promise<void> {
+		if (artifactRefreshInFlight) {
+			return;
+		}
+		artifactRefreshInFlight = true;
+		const controller = new AbortController();
+		const timeout = setTimeout(() => {
+			controller.abort();
+		}, ARTIFACT_REFRESH_REQUEST_TIMEOUT_MS);
+		try {
+			const response = await window.fetch(`/api/spark/sheets/${run.id}/state`, {
+				headers: {
+					accept: 'application/json'
+				},
+				signal: controller.signal
+			});
+			if (!response.ok) {
+				await invalidateAll();
+				return;
+			}
+			const payload = SparkSheetPageStateSchema.parse(await response.json());
+			applySheetPageState(payload);
+			if (payload.draft === null && payload.report === null && payload.run.status === 'done') {
+				await invalidateAll();
+			}
+		} catch (error) {
+			if (!(error instanceof DOMException && error.name === 'AbortError')) {
+				console.warn('Failed to refresh sheet artifacts', error);
+			}
+			await invalidateAll();
+		} finally {
+			clearTimeout(timeout);
+			artifactRefreshInFlight = false;
+		}
+	}
+
+	function sameRunTotals(
+		left: PageData['run']['totals'],
+		right: PageData['run']['totals']
+	): boolean {
+		if (left === right) {
+			return true;
+		}
+		if (left === null || right === null) {
+			return false;
+		}
+		return (
+			left.awardedMarks === right.awardedMarks &&
+			left.maxMarks === right.maxMarks &&
+			left.percentage === right.percentage
+		);
+	}
+
+	function sameRunDisplay(
+		left: PageData['run']['display'],
+		right: PageData['run']['display']
+	): boolean {
+		return (
+			left.title === right.title &&
+			left.metaLine === right.metaLine &&
+			left.summaryMarkdown === right.summaryMarkdown
+		);
+	}
+
+	function sameRunState(
+		left: PageData['run'],
+		right: PageData['run']
+	): boolean {
+		return (
+			left.id === right.id &&
+			left.workspaceId === right.workspaceId &&
+			left.status === right.status &&
+			left.sheetPhase === right.sheetPhase &&
+			left.error === right.error &&
+			left.createdAt === right.createdAt &&
+			left.updatedAt === right.updatedAt &&
+			sameRunDisplay(left.display, right.display) &&
+			sameRunTotals(left.totals, right.totals)
+		);
+	}
+
+	async function persistDraftAnswers(
+		answers: PaperSheetAnswers,
+		signature: string
+	): Promise<boolean> {
+		draftAnswers = answers;
+		if (signature === lastSavedDraftSignature) {
+			draftSaveError = null;
+			return true;
+		}
+		savingDraft = true;
+		draftSaveError = null;
+		try {
+			const response = await fetch(`/api/spark/sheets/${run.id}/draft`, {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json'
+				},
+				body: JSON.stringify({ answers })
+			});
+			const payload = (await response.json().catch(() => null)) as
+				| { error?: string; issues?: Array<{ message?: string }> }
+				| null;
+			if (!response.ok) {
+				draftSaveError =
+					payload?.issues?.[0]?.message ??
+					payload?.error ??
+					'Unable to save your worksheet answers.';
+				return false;
+			}
+			lastSavedDraftSignature = signature;
+			return true;
+		} catch {
+			draftSaveError = 'Unable to save your worksheet answers.';
+			return false;
+		} finally {
+			savingDraft = false;
+		}
+	}
+
+	function queueDraftSave(answers: PaperSheetAnswers): void {
+		draftAnswers = answers;
+		const signature = JSON.stringify(answers);
+		if (draftSaveTimer) {
+			clearTimeout(draftSaveTimer);
+		}
+		draftSaveTimer = setTimeout(() => {
+			void persistDraftAnswers(answers, signature);
+		}, 500);
+	}
+
+	async function submitSheetForGrading(answers: PaperSheetAnswers): Promise<boolean> {
+		if (!draft) {
+			return false;
+		}
+		if (draftSaveTimer) {
+			clearTimeout(draftSaveTimer);
+			draftSaveTimer = null;
+		}
+		const signature = JSON.stringify(answers);
+		const saved = await persistDraftAnswers(answers, signature);
+		if (!saved) {
+			return false;
+		}
+		gradingDraft = true;
+		requestError = null;
+		try {
+			const response = await fetch(`/api/spark/sheets/${run.id}/grade`, {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json'
+				},
+				body: JSON.stringify({ answers })
+			});
+			const payload = (await response.json().catch(() => null)) as
+				| { error?: string; issues?: Array<{ message?: string }> }
+				| null;
+			if (!response.ok) {
+				requestError =
+					payload?.issues?.[0]?.message ??
+					payload?.error ??
+					'Unable to start grading for this sheet.';
+				gradingDraft = false;
+				return false;
+			}
+			run = {
+				...run,
+				status: 'executing',
+				sheetPhase: 'grading',
+				error: null,
+				updatedAt: new Date().toISOString()
+			};
+			return true;
+		} catch {
+			requestError = 'Unable to start grading for this sheet.';
+			gradingDraft = false;
+			return false;
+		}
+	}
+
 	async function submitQuestionReply(questionId: string, draft: string, attachments: File[]): Promise<boolean> {
-		if (submittingQuestionIds[questionId] || data.run.status !== 'done') {
+		if (submittingQuestionIds[questionId] || run.status !== 'done') {
 			return false;
 		}
 		const pendingReply: PendingReply = {
@@ -168,7 +444,7 @@
 			for (const attachment of attachments) {
 				formData.append('file', attachment);
 			}
-			const response = await fetch(`/api/spark/sheets/${data.run.id}/turn`, {
+			const response = await fetch(`/api/spark/sheets/${run.id}/turn`, {
 				method: 'POST',
 				body: formData
 			});
@@ -228,6 +504,221 @@
 		} catch (error) {
 			console.warn('Failed to initialize sheet auth guard', error);
 		}
+	});
+
+	$effect(() => {
+		if (sameRunState(lastSyncedDataRun, data.run)) {
+			return;
+		}
+		lastSyncedDataRun = data.run;
+		run = data.run;
+	});
+
+	$effect(() => {
+		if (draft !== null) {
+			return;
+		}
+		if (!data.draft) {
+			return;
+		}
+		draft = data.draft;
+		draftAnswers = data.draftAnswers;
+		lastSavedDraftSignature = JSON.stringify(data.draftAnswers);
+		draftSaveError = null;
+	});
+
+	$effect(() => {
+		if (report !== null) {
+			return;
+		}
+		if (!data.report) {
+			return;
+		}
+		report = data.report;
+	});
+
+	$effect(() => {
+		if (reviewState !== null) {
+			return;
+		}
+		const nextReviewState = data.interaction?.reviewState ?? data.initialReviewState ?? null;
+		if (nextReviewState) {
+			reviewState = nextReviewState;
+		}
+	});
+
+	$effect(() => {
+		if (!interactionSessionId && data.interaction?.id) {
+			interactionSessionId = data.interaction.id;
+		}
+		if (!interactionWorkspaceId && data.interaction?.workspaceId) {
+			interactionWorkspaceId = data.interaction.workspaceId;
+		}
+		if (!activeTurnAgentId && data.interaction?.activeTurnAgentId) {
+			activeTurnAgentId = data.interaction.activeTurnAgentId;
+		}
+		if (!activeTurnQuestionId && data.interaction?.activeTurnQuestionId) {
+			activeTurnQuestionId = data.interaction.activeTurnQuestionId;
+		}
+	});
+
+	$effect(() => {
+		if (!browser) {
+			return;
+		}
+		const shouldRefreshPendingArtifacts =
+			report === null &&
+			run.status !== 'failed' &&
+			run.status !== 'stopped' &&
+			(draft === null || run.sheetPhase === 'grading');
+		if (!shouldRefreshPendingArtifacts) {
+			artifactRefreshAttempts = 0;
+			return;
+		}
+		if (artifactRefreshAttempts >= ARTIFACT_REFRESH_MAX_ATTEMPTS) {
+			return;
+		}
+		const delayMs =
+			artifactRefreshAttempts === 0
+				? 0
+				: Math.min(ARTIFACT_REFRESH_MAX_DELAY_MS, artifactRefreshAttempts * 500);
+		const timer = setTimeout(() => {
+			artifactRefreshAttempts += 1;
+			void refreshSheetArtifacts();
+		}, delayMs);
+		return () => {
+			clearTimeout(timer);
+		};
+	});
+
+	$effect(() => {
+		if (!browser || !authReady || !userId) {
+			return;
+		}
+		const db = getFirestore(getFirebaseApp());
+		const uid = userId;
+		const runRef = doc(db, 'spark', uid, 'graderRuns', run.id);
+		return onSnapshot(
+			runRef,
+			(snapshot) => {
+				if (!snapshot.exists()) {
+					return;
+				}
+				const parsed = SparkGraderRunSchema.safeParse({
+					id: run.id,
+					...snapshot.data()
+				});
+				if (!parsed.success) {
+					return;
+				}
+				const nextSheetPhase = resolveSnapshotSheetPhase(parsed.data.status, parsed.data.sheetPhase);
+				run = {
+					...run,
+					status: parsed.data.status,
+					sheetPhase: nextSheetPhase,
+					error: parsed.data.error ?? null,
+					updatedAt: parsed.data.updatedAt.toISOString()
+				};
+				if (parsed.data.status !== 'executing') {
+					gradingDraft = false;
+				}
+				const shouldReloadForDraft =
+					draft === null &&
+					report === null &&
+					parsed.data.status === 'done' &&
+					nextSheetPhase === 'solving';
+				const shouldReloadForReport =
+					report === null &&
+					parsed.data.status === 'done' &&
+					nextSheetPhase === 'graded';
+				if (shouldReloadForDraft || shouldReloadForReport) {
+					void refreshSheetArtifacts();
+				}
+			},
+			(error) => {
+				console.warn('Sheet run subscription failed', error);
+			}
+		);
+	});
+
+	$effect(() => {
+		if (!browser || !authReady || !userId) {
+			return;
+		}
+		const db = getFirestore(getFirebaseApp());
+		const uid = userId;
+		const workspaceId = run.workspaceId;
+		const stops: Unsubscribe[] = [];
+		const subscribeWorkspaceFile = (
+			filePath: string,
+			apply: (raw: Record<string, unknown> | undefined) => void
+		) => {
+			const fileRef = doc(
+				db,
+				'users',
+				uid,
+				'workspace',
+				workspaceId,
+				'files',
+				encodeWorkspaceFileId(filePath)
+			);
+			stops.push(
+				onSnapshot(
+					fileRef,
+					(snapshot) => {
+						apply(snapshot.exists() ? (snapshot.data() as Record<string, unknown>) : undefined);
+					},
+					(error) => {
+						console.warn(`Sheet artifact subscription failed (${filePath})`, error);
+					}
+				)
+			);
+		};
+		subscribeWorkspaceFile(data.artifactPaths.draft, (raw) => {
+			applyWorkspaceJson(
+				data.artifactPaths.draft,
+				raw,
+				(value) => SparkSolveSheetDraftSchema.parse(value),
+				(value) => {
+					draft = value;
+					if (run.sheetPhase === 'building') {
+						run = {
+							...run,
+							sheetPhase: 'solving'
+						};
+					}
+				}
+			);
+		});
+		subscribeWorkspaceFile(data.artifactPaths.draftAnswers, (raw) => {
+			applyWorkspaceJson(
+				data.artifactPaths.draftAnswers,
+				raw,
+				(value) => SparkSolveSheetAnswersSchema.parse(value),
+				(value: SparkSolveSheetAnswers) => {
+					draftAnswers = value.answers;
+					lastSavedDraftSignature = JSON.stringify(value.answers);
+					draftSaveError = null;
+				}
+			);
+		});
+		subscribeWorkspaceFile(data.artifactPaths.report, (raw) => {
+			applyWorkspaceJson(
+				data.artifactPaths.report,
+				raw,
+				(value) => SparkGraderWorksheetReportSchema.parse(value),
+				(_value) => {
+					if (report === null) {
+						void refreshSheetArtifacts();
+					}
+				}
+			);
+		});
+		return () => {
+			for (const stop of stops) {
+				stop();
+			}
+		};
 	});
 
 	$effect(() => {
@@ -479,40 +970,21 @@
 			: {}
 	);
 
-	$effect(() => {
-		if (!browser || !activeRuntimeQuestionId) {
-			return;
-		}
-		const questionId = activeRuntimeQuestionId;
-		const thread = feedbackThreads[questionId] ?? null;
-		const lastTurn = thread?.turns.at(-1) ?? null;
-		console.log('[sheet-feedback-debug] runtime snapshot', {
-			sheetId: data.run.id,
-			questionId,
-			activeTurnQuestionId,
-			activeTurnAgentId,
-			runtimeStatus: feedbackRuntimeStatuses[questionId] ?? null,
-			streamThoughtLength: activeAgentStream?.thoughts?.trim().length ?? 0,
-			streamAssistantLength: activeAgentStream?.assistant?.trim().length ?? 0,
-			thinkingTextLength: feedbackThinking[questionId]?.trim().length ?? 0,
-			assistantDraftLength: feedbackAssistantDrafts[questionId]?.trim().length ?? 0,
-			threadStatus: thread?.status ?? null,
-			lastTurnSpeaker: lastTurn?.speaker ?? null,
-			lastTurnPreview: lastTurn?.text.slice(0, 160) ?? null,
-			isSubmitting: Boolean(submittingQuestionIds[questionId]),
-			hasPendingReply: pendingReplies[questionId] !== undefined
-		});
-	});
-
 </script>
 
 <svelte:head>
-	<title>Spark · {data.run.display.title}</title>
+	<title>Spark · {run.display.title}</title>
 </svelte:head>
 
 <section class="sheet-page">
 	{#if requestError}
 		<p class="action-error" role="alert">{requestError}</p>
+	{/if}
+	{#if draftSaveError}
+		<p class="action-error" role="alert">{draftSaveError}</p>
+	{/if}
+	{#if savingDraft && !draftSaveError}
+		<p class="status-note">Saving answers…</p>
 	{/if}
 
 	{#if report && reviewState}
@@ -523,7 +995,7 @@
 				review={reviewState.review}
 				reviewMode="live"
 				editable={false}
-				allowFeedbackReplies={data.run.status === 'done'}
+				allowFeedbackReplies={run.status === 'done'}
 				feedbackThreads={feedbackThreads}
 				feedbackSending={feedbackSending}
 				feedbackRuntimeStatuses={feedbackRuntimeStatuses}
@@ -534,22 +1006,51 @@
 				}}
 			/>
 		</div>
+	{:else if draft}
+		<div class="sheet-shell">
+			<PaperSheet
+				sheet={draft.sheet}
+				answers={draftAnswers}
+				reviewMode="none"
+				editable={canEditDraftSheet()}
+				grading={isDraftGradingInProgress()}
+				gradeLabel={run.status === 'failed' || run.status === 'stopped' ? 'Grade Again' : 'Grade'}
+				onAnswersChange={(answers) => {
+					queueDraftSave(answers);
+				}}
+				onGrade={(answers) => {
+					return submitSheetForGrading(answers);
+				}}
+			/>
+		</div>
 	{:else}
 		<section class="pending-card">
 			<h2>
-				{data.run.status === 'failed'
-					? 'This sheet failed to grade'
-					: data.run.status === 'stopped'
-						? 'This sheet was stopped before grading finished'
-						: data.run.status === 'created'
-							? 'This sheet is queued for grading'
-							: 'This sheet is still being graded'}
+				{run.status === 'failed'
+					? run.sheetPhase === 'building'
+						? 'This sheet failed to generate'
+						: 'This sheet failed to grade'
+					: run.status === 'stopped'
+						? run.sheetPhase === 'building'
+							? 'This sheet was stopped before generation finished'
+							: 'This sheet was stopped before grading finished'
+						: run.sheetPhase === 'building'
+							? run.status === 'created'
+								? 'This sheet is queued for generation'
+								: 'This sheet is still being prepared'
+							: run.status === 'created'
+								? 'This sheet is queued for grading'
+								: 'This sheet is still being graded'}
 			</h2>
 			<p>
-				{data.run.error ??
-					(data.run.status === 'created'
-						? 'Spark has queued this worksheet and will publish the paper-sheet view once grading starts.'
-						: 'The worksheet artifact has not been published yet. Refresh this page once the grading step finishes.')}
+				{run.error ??
+					(run.sheetPhase === 'building'
+						? run.status === 'created'
+							? 'Spark has queued this worksheet and will publish the sheet once generation starts.'
+							: 'The worksheet draft has not been published yet. This page will refresh once it is ready.'
+						: run.status === 'created'
+							? 'Spark has queued this worksheet for grading and will switch into feedback mode once the report is ready.'
+							: 'The graded worksheet artifact has not been published yet. This page will refresh once grading finishes.')}
 			</p>
 		</section>
 	{/if}
@@ -579,6 +1080,12 @@
 	.action-error {
 		margin: 0;
 		color: var(--destructive);
+		font-weight: 600;
+	}
+
+	.status-note {
+		margin: 0;
+		color: color-mix(in srgb, var(--foreground) 72%, transparent);
 		font-weight: 600;
 	}
 

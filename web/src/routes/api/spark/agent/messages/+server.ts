@@ -2,10 +2,12 @@ import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { createSseStream, sseResponse } from '$lib/server/utils/sse';
 import {
 	createTask,
+	createSparkChatCreateSheetTool,
 	createSparkChatCreateGraderTool,
 	resolveSparkAgentLogsDir,
 	resolveSparkAgentWorkspaceRoot,
 	runSparkChatAgentLoop,
+	SPARK_CHAT_MODEL_ID,
 	SPARK_GRADER_UPLOADS_MANIFEST_PATH,
 	isNodeRuntime,
 	resolveWorkspacePathContentType,
@@ -56,6 +58,13 @@ import {
 } from '$lib/server/session/repo';
 import { getSessionState } from '$lib/server/sessionState/repo';
 import sparkChatSystemPrompt from '$lib/server/agent/spark-chat-system-prompt.md?raw';
+import {
+	AMBIGUOUS_ATTACHMENT_CLARIFYING_QUESTION,
+	buildForcedSparkChatStartedReply,
+	buildForcedSparkChatToolInstruction,
+	resolveForcedSparkChatToolForTurn,
+	shouldAskClarifyingQuestionForAttachmentTurn
+} from '$lib/server/agent/turnRouting';
 import lessonTaskTemplate from '$lib/server/lessonAgent/task-template.md?raw';
 import lessonSchemaReadme from '$lib/server/lessonAgent/schema/README.md?raw';
 import lessonSessionSchemaJson from '$lib/server/lessonAgent/schema/session.schema.json?raw';
@@ -72,6 +81,7 @@ import lessonPromptCodeDraft from '$lib/server/lessonAgent/prompts/code-draft.md
 import lessonPromptCodeGrade from '$lib/server/lessonAgent/prompts/code-grade.md?raw';
 import lessonPromptCodeRevise from '$lib/server/lessonAgent/prompts/code-revise.md?raw';
 import graderTaskTemplate from '$lib/server/graderAgent/task-template.md?raw';
+import sheetTaskTemplate from '$lib/server/sheetAgent/task-template.md?raw';
 
 const MIN_UPDATE_INTERVAL_MS = 500;
 const MAX_HISTORY_MESSAGES = 20;
@@ -150,11 +160,44 @@ type SparkChatDelta = {
 	textDelta?: string;
 };
 
+type SparkChatExecutableTool = {
+	execute: (input: Record<string, never>) => Promise<{ status?: string }>;
+};
+
 const ROLE_TO_LLM: Record<Exclude<SparkAgentMessage['role'], 'tool'>, LlmInputMessage['role']> = {
 	user: 'user',
 	assistant: 'assistant',
 	system: 'system'
 };
+
+function isSparkChatExecutableTool(value: unknown): value is SparkChatExecutableTool {
+	return (
+		typeof value === 'object' &&
+		value !== null &&
+		'execute' in value &&
+		typeof (value as { execute?: unknown }).execute === 'function'
+	);
+}
+
+async function maybeExecuteForcedSparkChatTool(options: {
+	requiredTool: 'create_sheet' | 'create_grader' | null;
+	tools: LlmToolSet;
+}): Promise<string | null> {
+	if (!options.requiredTool) {
+		return null;
+	}
+	const candidate = (options.tools as Record<string, unknown>)[options.requiredTool];
+	if (!isSparkChatExecutableTool(candidate)) {
+		throw new Error(`Forced Spark chat tool "${options.requiredTool}" is unavailable.`);
+	}
+	const result = await candidate.execute({});
+	if (result.status !== 'started') {
+		throw new Error(
+			`Forced Spark chat tool "${options.requiredTool}" returned unexpected status "${result.status ?? 'unknown'}".`
+		);
+	}
+	return buildForcedSparkChatStartedReply(options.requiredTool);
+}
 
 function serializeErrorContext(value: unknown, depth: number, seen: WeakSet<object>): unknown {
 	if (depth <= 0) {
@@ -625,6 +668,26 @@ function resolveAttachmentPromptFilename(
 	return `${normalizedBaseName}.${extension}`;
 }
 
+function canUseCanonicalFileUploads(): boolean {
+	const bucket = env.LLM_FILES_GCS_BUCKET ?? env.VERTEX_GCS_BUCKET ?? '';
+	return bucket.trim().length > 0;
+}
+
+function shouldUseGeminiForChatAttachments(
+	attachments: z.infer<typeof attachmentSchema>[]
+): boolean {
+	if (canUseCanonicalFileUploads()) {
+		return false;
+	}
+	for (const attachment of attachments) {
+		const normalizedMimeType = normalizeSparkAttachmentMimeType(attachment.contentType);
+		if (normalizedMimeType && isSparkDocumentAttachmentMimeType(normalizedMimeType)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 async function downloadAttachmentParts(
 	options: { userId: string; bucketName: string; serviceAccountJson: string },
 	attachments: z.infer<typeof attachmentSchema>[]
@@ -657,19 +720,34 @@ async function downloadAttachmentParts(
 			throw new Error(`Attachment ${attachment.id} exceeds 25 MB limit`);
 		}
 		if (isSparkDocumentAttachmentMimeType(normalizedMimeType)) {
-			const filename = resolveAttachmentPromptFilename({
-				...attachment,
-				contentType: normalizedMimeType
-			});
-			const stored = await files.create({
-				data: bytes,
-				filename,
-				mimeType: normalizedMimeType
-			});
+			if (canUseCanonicalFileUploads()) {
+				const filename = resolveAttachmentPromptFilename({
+					...attachment,
+					contentType: normalizedMimeType
+				});
+				try {
+					const stored = await files.create({
+						data: bytes,
+						filename,
+						mimeType: normalizedMimeType
+					});
+					return {
+						type: 'input_file',
+						file_id: stored.id,
+						filename: stored.filename ?? filename
+					} satisfies LlmContentPart;
+				} catch (error) {
+					console.warn('Canonical document upload failed; falling back to inline attachment', {
+						attachmentId: attachment.id,
+						filename,
+						error: serializeErrorForLog(error)
+					});
+				}
+			}
 			return {
-				type: 'input_file',
-				file_id: stored.id,
-				filename: stored.filename ?? filename
+				type: 'inlineData',
+				data: encodeBytesToBase64(bytes),
+				mimeType: normalizedMimeType
 			} satisfies LlmContentPart;
 		}
 		return {
@@ -1574,6 +1652,183 @@ function buildSparkChatTools(options: {
 				}
 			}
 		}),
+		create_sheet: createSparkChatCreateSheetTool({
+			sourceText,
+			conversationId,
+			attachmentsForMessage: graderAttachmentsForMessage,
+			sheetTaskTemplate: sheetTaskTemplate,
+			launch: async ({ input, plan }) => {
+				const tasksEnv = requireTasksEnv();
+				let runCreated = false;
+				try {
+					await createGraderRun(userId, {
+						id: plan.runId,
+						agentId: plan.agentId,
+						workspaceId: plan.workspaceId,
+						conversationId,
+						userPrompt: sourceText?.trim() || input.notes || undefined,
+						olympiadKey: plan.launchTitleKey,
+						olympiadLabel: plan.launchTitle,
+						summaryPath: plan.summaryPath,
+						sheetPath: plan.sheetPath,
+						draftAnswersPath: plan.answersPath,
+						sourceAttachmentIds: plan.runAttachments.map((attachment) => attachment.id),
+						sourceAttachmentCount: plan.runAttachments.length,
+						status: 'created',
+						sheetPhase: 'building',
+						createdAt: plan.createdAt,
+						updatedAt: plan.createdAt
+					});
+					runCreated = true;
+					await setFirestoreDocument({
+						serviceAccountJson,
+						documentPath: `users/${userId}/workspace/${plan.workspaceId}`,
+						data: {
+							id: plan.workspaceId,
+							agentId: plan.agentId,
+							createdAt: plan.createdAt,
+							updatedAt: plan.createdAt
+						}
+					});
+					await Promise.all([
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId: plan.workspaceId,
+							path: 'brief.md',
+							content: plan.brief,
+							now: plan.createdAt
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId: plan.workspaceId,
+							path: 'request.json',
+							content: JSON.stringify(plan.requestPayload, null, 2),
+							now: plan.createdAt
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId: plan.workspaceId,
+							path: 'sheet/task.md',
+							content: plan.sheetTask,
+							now: plan.createdAt
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId: plan.workspaceId,
+							path: plan.answersPath,
+							content: JSON.stringify(
+								{
+									schemaVersion: 1,
+									mode: 'draft_answers',
+									answers: {}
+								},
+								null,
+								2
+							),
+							now: plan.createdAt
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId: plan.workspaceId,
+							path: SPARK_GRADER_UPLOADS_MANIFEST_PATH,
+							content: JSON.stringify(
+								{
+									attachments: plan.runWorkspaceAttachments
+								},
+								null,
+								2
+							),
+							now: plan.createdAt
+						}),
+						...plan.runWorkspaceAttachments.map((attachment) =>
+							writeWorkspaceStorageLinkFile({
+								serviceAccountJson,
+								userId,
+								workspaceId: plan.workspaceId,
+								path: attachment.workspacePath,
+								storagePath: attachment.storagePath ?? '',
+								contentType: attachment.contentType,
+								sizeBytes: attachment.sizeBytes,
+								now: plan.createdAt
+							})
+						)
+					]);
+					await setFirestoreDocument({
+						serviceAccountJson,
+						documentPath: `users/${userId}/agents/${plan.agentId}`,
+						data: {
+							id: plan.agentId,
+							prompt: plan.prompt,
+							status: 'created',
+							workspaceId: plan.workspaceId,
+							sheetRunId: plan.runId,
+							sheetSummaryPath: plan.summaryPath,
+							sheetDraftPath: plan.sheetPath,
+							sheetDraftAnswersPath: plan.answersPath,
+							inputAttachments: plan.runAttachments,
+							createdAt: plan.createdAt,
+							updatedAt: plan.createdAt,
+							statesTimeline: [{ state: 'created', timestamp: plan.createdAt }]
+						}
+					});
+					await createTask(
+						{
+							type: 'runAgent',
+							runAgent: { userId, agentId: plan.agentId, workspaceId: plan.workspaceId }
+						},
+						{
+							serviceUrl: tasksEnv.serviceUrl,
+							apiKey: tasksEnv.apiKey,
+							serviceAccountJson
+						}
+					);
+
+					const runCard: SparkAgentRunCard = {
+						kind: 'grader',
+						runId: plan.runId,
+						title: plan.launchTitle,
+						sourceAttachmentCount: plan.runAttachments.length,
+						href: `/spark/sheets/${plan.runId}`,
+						listHref: '/spark/sheets'
+					};
+					if (onRunCard) {
+						try {
+							await onRunCard(runCard);
+						} catch (error) {
+							console.warn('Unable to append sheet run card to chat conversation', {
+								userId,
+								runId: plan.runId,
+								error: serializeErrorForLog(error)
+							});
+						}
+					}
+
+					return {
+						status: 'started'
+					};
+				} catch (error) {
+					console.error('Spark sheet creation tool failed', {
+						userId,
+						conversationId,
+						error: serializeErrorForLog(error)
+					});
+					if (runCreated) {
+						await patchGraderRun(userId, plan.runId, {
+							status: 'failed',
+							updatedAt: new Date(),
+							completedAt: new Date(),
+							error: 'Sheet creation failed.'
+						}).catch(() => undefined);
+					}
+					throw error;
+				}
+			}
+		}),
 		create_grader: createSparkChatCreateGraderTool({
 			sourceText,
 			conversationId,
@@ -1749,18 +2004,6 @@ async function generateAssistantResponse(
 	},
 	handlers: StreamHandlers
 ): Promise<string> {
-	const attachmentParts = await downloadAttachmentParts(
-		{
-			userId: options.userId,
-			bucketName: options.bucketName,
-			serviceAccountJson: options.serviceAccountJson
-		},
-		options.attachments
-	);
-	const input = buildLlmInputMessages(conversation.messages, {
-		attachmentMessageId: options.messageId,
-		attachmentParts
-	});
 	const sourceText = (() => {
 		const message = conversation.messages.find(
 			(entry) => entry && entry.id === options.messageId && entry.role === 'user'
@@ -1771,6 +2014,14 @@ async function generateAssistantResponse(
 		const text = extractTextParts(message.content);
 		return text.length > 0 ? text : undefined;
 	})();
+	if (
+		shouldAskClarifyingQuestionForAttachmentTurn({
+			text: sourceText,
+			currentMessageHasAttachments: options.attachments.length > 0
+		})
+	) {
+		return AMBIGUOUS_ATTACHMENT_CLARIFYING_QUESTION;
+	}
 	const attachmentsForTools = resolveAttachmentsForToolCall({
 		conversation,
 		currentMessageId: options.messageId,
@@ -1783,8 +2034,8 @@ async function generateAssistantResponse(
 		sourceText,
 		conversationId: options.conversationId,
 		attachmentsForMessage: attachmentsForTools,
-		requiresAttachmentContext: options.attachments.length > 0,
-		attachmentLabels: options.attachments.map((attachment) => {
+		requiresAttachmentContext: attachmentsForTools.length > 0,
+		attachmentLabels: attachmentsForTools.map((attachment) => {
 			const filename = attachment.filename?.trim();
 			if (filename && filename.length > 0) {
 				return filename;
@@ -1797,15 +2048,46 @@ async function generateAssistantResponse(
 		}),
 		onRunCard: handlers.onRunCard
 	});
+	const forcedTool = resolveForcedSparkChatToolForTurn({
+		text: sourceText,
+		hasAttachmentContext: attachmentsForTools.length > 0
+	});
+	const forcedToolReply = await maybeExecuteForcedSparkChatTool({
+		requiredTool: forcedTool,
+		tools
+	});
+	if (forcedToolReply) {
+		return forcedToolReply;
+	}
+	const attachmentParts = await downloadAttachmentParts(
+		{
+			userId: options.userId,
+			bucketName: options.bucketName,
+			serviceAccountJson: options.serviceAccountJson
+		},
+		attachmentsForTools
+	);
+	const input = buildLlmInputMessages(conversation.messages, {
+		attachmentMessageId: options.messageId,
+		attachmentParts
+	});
+	const instructions =
+		forcedTool === null
+			? SYSTEM_PROMPT
+			: `${SYSTEM_PROMPT}\n\n${buildForcedSparkChatToolInstruction(forcedTool)}`;
 	const logWorkspace = resolveSparkChatLogWorkspace({
 		conversationId: options.conversationId,
 		messageId: options.messageId
 	});
 	const canUseFilesystemLogging = isNodeRuntime();
+	const modelId = shouldUseGeminiForChatAttachments(options.attachments)
+		? 'gemini-2.5-pro'
+		: SPARK_CHAT_MODEL_ID;
 	try {
 		const result = await runSparkChatAgentLoop({
 			input,
-			instructions: SYSTEM_PROMPT,
+			modelId,
+			instructions,
 			tools,
 			...(canUseFilesystemLogging
 				? {

@@ -55,12 +55,14 @@ import {
   SessionMediaDocSchema,
   SparkAgentStateTimelineSchema,
   SparkGraderWorksheetReportSchema,
+  SparkSolveSheetDraftSchema,
   SparkTutorComposerStateSchema,
   SparkTutorHistoryEntrySchema,
   SparkTutorReviewStateSchema,
   SparkTutorReviewThreadSchema,
   SparkTutorScreenStateSchema,
   SparkAgentWorkspaceFileSchema,
+  coerceSparkSolveSheetDraft,
   normalizeTutorMarkdown,
   type CodeProblem,
   type QuizDefinition,
@@ -990,6 +992,17 @@ type GraderPublishConfig =
       href?: string;
     };
 
+type SheetDraftPublishConfig =
+  | {
+      mode: "live";
+      runId: string;
+    }
+  | {
+      mode: "mock";
+      runId?: string;
+      href?: string;
+    };
+
 const GraderSummarySheetSchema = z.object({
   title: z.string().trim().min(1).optional(),
   filePath: z.string().trim().min(1),
@@ -1054,6 +1067,21 @@ type PublishedGraderSheetArtifacts = {
     filePath: string;
   };
   resultSummary?: string;
+};
+
+type PublishedSheetDraftArtifacts = {
+  summaryPath: string;
+  sheetPath: string;
+  summarySha256: string;
+  sheetSha256: string;
+  presentation: {
+    title: string;
+    summaryMarkdown: string;
+  };
+  sheet: {
+    title?: string;
+    filePath: string;
+  };
 };
 
 function selectGraderResultSummary(options: {
@@ -1178,6 +1206,12 @@ type SparkAgentMetricType = "chat" | "lesson" | "grader" | "tutor";
 function resolveSparkAgentMetricType(
   agentData: Record<string, unknown>,
 ): SparkAgentMetricType {
+  if (
+    typeof agentData.sheetRunId === "string" &&
+    agentData.sheetRunId.trim().length > 0
+  ) {
+    return "grader";
+  }
   if (
     typeof agentData.graderRunId === "string" &&
     agentData.graderRunId.trim().length > 0
@@ -1442,6 +1476,13 @@ async function loadAttachmentParts(options: {
         downloaded.contentType && downloaded.contentType.trim().length > 0
           ? downloaded.contentType
           : attachment.contentType;
+      if (!mimeType.startsWith("image/")) {
+        const note = `[${index.toString()}] omitted ${label} from inline prompt: document uploads stay available through workspace tools`;
+        return {
+          note,
+          logLine: `info: ${note}`,
+        };
+      }
       const data = Buffer.from(bytes).toString("base64");
       return {
         part: {
@@ -1760,6 +1801,121 @@ async function validateGraderWorkspaceForPublish(options: {
     resultSummary: selectGraderResultSummary({
       runSummary: summary,
     }),
+  };
+}
+
+async function validateSheetDraftWorkspaceForPublish(options: {
+  rootDir: string;
+  summaryPath: string;
+  sheetPath: string;
+}): Promise<PublishedSheetDraftArtifacts> {
+  const normalizeWorkspacePath = (value: string): string =>
+    value.replace(/\\/gu, "/").trim();
+
+  const resolvedSummaryPath = normalizeWorkspacePath(options.summaryPath);
+  const resolvedSheetPath = normalizeWorkspacePath(options.sheetPath);
+
+  const summaryRaw = await readFile(
+    resolveWorkspacePath(options.rootDir, resolvedSummaryPath),
+    {
+      encoding: "utf8",
+    },
+  ).catch((error) => {
+    throw new Error(
+      `Missing required worksheet draft summary "${resolvedSummaryPath}": ${errorAsString(error)}`,
+    );
+  });
+  let summaryJson: unknown;
+  try {
+    summaryJson = JSON.parse(summaryRaw);
+  } catch (error) {
+    throw new Error(
+      `Worksheet draft summary "${resolvedSummaryPath}" is invalid JSON: ${errorAsString(error)}`,
+    );
+  }
+  const parsedSummary = GraderRunSummarySchema.safeParse(summaryJson);
+  if (!parsedSummary.success) {
+    throw new Error(
+      `Worksheet draft summary "${resolvedSummaryPath}" failed schema validation: ${formatZodIssueSummary(parsedSummary.error)}`,
+    );
+  }
+  const summary = parsedSummary.data;
+
+  if (normalizeWorkspacePath(summary.sheet.filePath) !== resolvedSheetPath) {
+    throw new Error(
+      `Worksheet draft summary sheet.filePath must be "${resolvedSheetPath}" before publish.`,
+    );
+  }
+
+  const presentationTitle = summary.presentation?.title?.trim();
+  if (!presentationTitle) {
+    throw new Error(
+      `Worksheet draft summary "${resolvedSummaryPath}" is missing presentation.title.`,
+    );
+  }
+  const presentationSummary = summary.presentation?.summaryMarkdown?.trim();
+  if (!presentationSummary) {
+    throw new Error(
+      `Worksheet draft summary "${resolvedSummaryPath}" is missing presentation.summaryMarkdown.`,
+    );
+  }
+
+  const sheetRaw = await readFile(
+    resolveWorkspacePath(options.rootDir, resolvedSheetPath),
+    {
+      encoding: "utf8",
+    },
+  ).catch((error) => {
+    throw new Error(
+      `Missing required worksheet draft "${resolvedSheetPath}": ${errorAsString(error)}`,
+    );
+  });
+  let sheetJson: unknown;
+  try {
+    sheetJson = JSON.parse(sheetRaw);
+  } catch (error) {
+    throw new Error(
+      `Worksheet draft "${resolvedSheetPath}" is invalid JSON: ${errorAsString(error)}`,
+    );
+  }
+  const parsedSheet = SparkSolveSheetDraftSchema.safeParse(sheetJson);
+  const draft = parsedSheet.success
+    ? parsedSheet.data
+    : coerceSparkSolveSheetDraft(sheetJson);
+  if (!draft) {
+    const validationSummary = parsedSheet.success
+      ? "Worksheet draft could not be normalized."
+      : formatZodIssueSummary(parsedSheet.error);
+    throw new Error(
+      `Worksheet draft "${resolvedSheetPath}" failed schema validation: ${validationSummary}`,
+    );
+  }
+  const normalizedSheetRaw = parsedSheet.success
+    ? sheetRaw
+    : `${JSON.stringify(draft, null, 2)}\n`;
+  if (!parsedSheet.success) {
+    await writeFile(
+      resolveWorkspacePath(options.rootDir, resolvedSheetPath),
+      normalizedSheetRaw,
+      {
+        encoding: "utf8",
+      },
+    );
+  }
+
+  return {
+    summaryPath: resolvedSummaryPath,
+    sheetPath: resolvedSheetPath,
+    summarySha256: createHash("sha256").update(summaryRaw).digest("hex"),
+    sheetSha256: createHash("sha256").update(normalizedSheetRaw).digest("hex"),
+    presentation: {
+      title: presentationTitle,
+      summaryMarkdown: presentationSummary,
+    },
+    sheet: {
+      filePath: resolvedSheetPath,
+      title: summary.sheet.title?.trim() || draft.sheet.title,
+    },
   };
 }
 
@@ -4394,9 +4550,14 @@ function buildAgentTools(options: {
   enforceLessonPipeline?: boolean;
   allowPythonExec?: boolean;
   graderPublish?: GraderPublishConfig;
+  sheetDraftPublish?: SheetDraftPublishConfig;
   beforePublishSheet?: () => Promise<void>;
   onPublishSheet?: (
     publication: PublishedGraderSheetArtifacts,
+  ) => Promise<void> | void;
+  beforePublishSheetDraft?: () => Promise<void>;
+  onPublishSheetDraft?: (
+    publication: PublishedSheetDraftArtifacts,
   ) => Promise<void> | void;
   debug?: LlmDebugOptions;
   extractTextDebugRootDir?: string;
@@ -4411,8 +4572,11 @@ function buildAgentTools(options: {
     enforceLessonPipeline,
     allowPythonExec,
     graderPublish,
+    sheetDraftPublish,
     beforePublishSheet,
     onPublishSheet,
+    beforePublishSheetDraft,
+    onPublishSheetDraft,
     debug,
     extractTextDebugRootDir,
   } = options;
@@ -7555,6 +7719,66 @@ function buildAgentTools(options: {
     });
     tools.publish_sheet = publish_sheet;
   }
+  if (sheetDraftPublish) {
+    const publish_sheet_draft = tool({
+      description:
+        "Validate and publish the worksheet draft artifact for /spark/sheets. Requires a valid sheet/output/run-summary.json plus sheet/output/draft.json. Fix any validation errors and retry until status='published'.",
+      inputSchema: z
+        .object({
+          summaryPath: z.string().trim().min(1).optional(),
+          sheetPath: z.string().trim().min(1).optional(),
+        })
+        .strict(),
+      execute: async ({ summaryPath, sheetPath }) => {
+        const publication = await validateSheetDraftWorkspaceForPublish({
+          rootDir,
+          summaryPath: summaryPath ?? "sheet/output/run-summary.json",
+          sheetPath: sheetPath ?? "sheet/output/draft.json",
+        });
+        await beforePublishSheetDraft?.();
+
+        const href = (() => {
+          if (sheetDraftPublish.mode === "live") {
+            return `/spark/sheets/${sheetDraftPublish.runId}`;
+          }
+          if (sheetDraftPublish.href) {
+            return sheetDraftPublish.href;
+          }
+          if (sheetDraftPublish.runId) {
+            return `/spark/sheets/${sheetDraftPublish.runId}`;
+          }
+          return "/spark/sheets";
+        })();
+
+        if (sheetDraftPublish.mode === "live") {
+          await patchGraderRunStatus({
+            serviceAccountJson,
+            userId,
+            runId: sheetDraftPublish.runId,
+            updates: {
+              status: "done",
+              sheetPhase: "solving",
+              updatedAt: new Date(),
+              presentation: publication.presentation,
+              sheet: publication.sheet,
+              summaryPath: publication.summaryPath,
+              sheetPath: publication.sheetPath,
+            },
+          });
+        }
+
+        await onPublishSheetDraft?.(publication);
+
+        return {
+          status: "published" as const,
+          mode: sheetDraftPublish.mode,
+          href,
+          presentationTitle: publication.presentation.title,
+        };
+      },
+    });
+    tools.publish_sheet_draft = publish_sheet_draft;
+  }
   if (!shouldAllowPythonExec) {
     delete (tools as Record<string, unknown>).python_exec;
   }
@@ -7571,9 +7795,14 @@ export function buildSparkAgentTools(options: {
   enforceLessonPipeline?: boolean;
   allowPythonExec?: boolean;
   graderPublish?: GraderPublishConfig;
+  sheetDraftPublish?: SheetDraftPublishConfig;
   beforePublishSheet?: () => Promise<void>;
   onPublishSheet?: (
     publication: PublishedGraderSheetArtifacts,
+  ) => Promise<void> | void;
+  beforePublishSheetDraft?: () => Promise<void>;
+  onPublishSheetDraft?: (
+    publication: PublishedSheetDraftArtifacts,
   ) => Promise<void> | void;
   debug?: LlmDebugOptions;
   extractTextDebugRootDir?: string;
@@ -7817,6 +8046,10 @@ export async function runSparkAgentTask(
   let workspaceRoot: string | undefined;
   let cleanupWorkspaceRoot = true;
   let workspaceSync: WorkspaceSync | undefined;
+  let sheetRunId: string | null = null;
+  let sheetSummaryPath = "sheet/output/run-summary.json";
+  let sheetDraftPath = "sheet/output/draft.json";
+  let sheetDraftAnswersPath = "sheet/state/answers.json";
   let graderRunId: string | null = null;
   let graderSummaryPath = "grader/output/run-summary.json";
   let graderSheetPath = "grader/output/sheet.json";
@@ -7831,6 +8064,7 @@ export async function runSparkAgentTask(
   let tutorSourceLabel = "graded problem";
   let tutorFocusLabel: string | null = null;
   let tutorSnapshot: TutorWorkspaceSnapshot | null = null;
+  let publishedSheetDraft: PublishedSheetDraftArtifacts | null = null;
   let publishedGraderSheet: PublishedGraderSheetArtifacts | null = null;
   let agentMetricType: SparkAgentMetricType = "chat";
   let agentMetricStatus: "ok" | "error" | "stopped" = "error";
@@ -7873,6 +8107,34 @@ export async function runSparkAgentTask(
 
     const agentData = agentSnap.data ?? {};
     agentMetricType = resolveSparkAgentMetricType(agentData);
+    const rawSheetRunId =
+      typeof agentData.sheetRunId === "string"
+        ? agentData.sheetRunId.trim()
+        : "";
+    if (rawSheetRunId.length > 0) {
+      sheetRunId = rawSheetRunId;
+    }
+    const rawSheetSummaryPath =
+      typeof agentData.sheetSummaryPath === "string"
+        ? agentData.sheetSummaryPath.trim()
+        : "";
+    if (rawSheetSummaryPath.length > 0) {
+      sheetSummaryPath = rawSheetSummaryPath;
+    }
+    const rawSheetDraftPath =
+      typeof agentData.sheetDraftPath === "string"
+        ? agentData.sheetDraftPath.trim()
+        : "";
+    if (rawSheetDraftPath.length > 0) {
+      sheetDraftPath = rawSheetDraftPath;
+    }
+    const rawSheetDraftAnswersPath =
+      typeof agentData.sheetDraftAnswersPath === "string"
+        ? agentData.sheetDraftAnswersPath.trim()
+        : "";
+    if (rawSheetDraftAnswersPath.length > 0) {
+      sheetDraftAnswersPath = rawSheetDraftAnswersPath;
+    }
     const rawGraderRunId =
       typeof agentData.graderRunId === "string"
         ? agentData.graderRunId.trim()
@@ -7958,6 +8220,19 @@ export async function runSparkAgentTask(
         status: "stopped",
         resultSummary: "Stopped by user.",
       });
+      if (sheetRunId) {
+        await patchGraderRunStatus({
+          serviceAccountJson,
+          userId: options.userId,
+          runId: sheetRunId,
+          updates: {
+            status: "stopped",
+            updatedAt: new Date(),
+            completedAt: new Date(),
+            resultSummary: "Stopped by user before execution.",
+          },
+        }).catch(() => undefined);
+      }
       if (graderRunId) {
         await patchGraderRunStatus({
           serviceAccountJson,
@@ -7985,6 +8260,19 @@ export async function runSparkAgentTask(
         status: "failed",
         error: "Agent prompt is missing.",
       });
+      if (sheetRunId) {
+        await patchGraderRunStatus({
+          serviceAccountJson,
+          userId: options.userId,
+          runId: sheetRunId,
+          updates: {
+            status: "failed",
+            updatedAt: new Date(),
+            completedAt: new Date(),
+            error: "Agent prompt is missing.",
+          },
+        }).catch(() => undefined);
+      }
       if (graderRunId) {
         await patchGraderRunStatus({
           serviceAccountJson,
@@ -8006,6 +8294,17 @@ export async function runSparkAgentTask(
       agentDocPath,
       status: "executing",
     });
+    if (sheetRunId) {
+      await patchGraderRunStatus({
+        serviceAccountJson,
+        userId: options.userId,
+        runId: sheetRunId,
+        updates: {
+          status: "executing",
+          updatedAt: new Date(),
+        },
+      }).catch(() => undefined);
+    }
     if (graderRunId) {
       await patchGraderRunStatus({
         serviceAccountJson,
@@ -8247,6 +8546,31 @@ export async function runSparkAgentTask(
         logSync?.setStats(statsTracker.snapshot());
         await workspaceSync?.flushAll();
         await logSync?.flushAll();
+        if (sheetRunId && !publishedSheetDraft) {
+          throw new Error(
+            "Worksheet draft is not published yet. Call publish_sheet_draft and fix any validation errors before done().",
+          );
+        }
+        if (sheetRunId && workspaceRoot && publishedSheetDraft) {
+          const [currentSummarySha256, currentSheetSha256] = await Promise.all([
+            computeWorkspaceFileSha256({
+              rootDir: workspaceRoot,
+              filePath: publishedSheetDraft.summaryPath,
+            }),
+            computeWorkspaceFileSha256({
+              rootDir: workspaceRoot,
+              filePath: publishedSheetDraft.sheetPath,
+            }),
+          ]);
+          if (
+            currentSummarySha256 !== publishedSheetDraft.summarySha256 ||
+            currentSheetSha256 !== publishedSheetDraft.sheetSha256
+          ) {
+            throw new Error(
+              "Published worksheet draft artifacts changed after publish_sheet_draft. Call publish_sheet_draft again before done().",
+            );
+          }
+        }
         if (graderRunId && !publishedGraderSheet) {
           throw new Error(
             "Grader sheet is not published yet. Call publish_sheet and fix any validation errors before done().",
@@ -8284,6 +8608,7 @@ export async function runSparkAgentTask(
             : null;
         const resultSummary =
           publishedGraderSheet?.resultSummary ??
+          publishedSheetDraft?.presentation.summaryMarkdown ??
           selectGraderResultSummary({
             doneSummary: summary,
             runSummary,
@@ -8321,6 +8646,36 @@ export async function runSparkAgentTask(
           }).catch((error) => {
             logSync?.append(
               `warn: failed to patch grader run summary: ${errorAsString(error)}`,
+            );
+          });
+        }
+        if (sheetRunId && workspaceRoot) {
+          const now = new Date();
+          const publication = publishedSheetDraft;
+          if (!publication) {
+            throw new Error(
+              "Worksheet draft publish metadata is missing at completion time.",
+            );
+          }
+          await patchGraderRunStatus({
+            serviceAccountJson,
+            userId: options.userId,
+            runId: sheetRunId,
+            updates: {
+              status: "done",
+              sheetPhase: "solving",
+              updatedAt: now,
+              completedAt: now,
+              ...(resultSummary ? { resultSummary } : {}),
+              presentation: publication.presentation,
+              sheet: publication.sheet,
+              summaryPath: publication.summaryPath,
+              sheetPath: publication.sheetPath,
+              draftAnswersPath: sheetDraftAnswersPath,
+            },
+          }).catch((error) => {
+            logSync?.append(
+              `warn: failed to patch worksheet draft summary: ${errorAsString(error)}`,
             );
           });
         }
@@ -8714,7 +9069,27 @@ export async function runSparkAgentTask(
                   pdfToolCostUsd += costUsd;
                 },
                 enforceLessonPipeline: isLessonRun,
-                allowPythonExec: graderRunId === null,
+                allowPythonExec:
+                  graderRunId === null && sheetRunId === null,
+                ...(sheetRunId
+                  ? {
+                      sheetDraftPublish: {
+                        mode: "live" as const,
+                        runId: sheetRunId,
+                      },
+                      beforePublishSheetDraft: async () => {
+                        await workspaceSync?.flushAll();
+                        await logSync?.flushAll();
+                      },
+                      onPublishSheetDraft: async (
+                        publication: PublishedSheetDraftArtifacts,
+                      ) => {
+                        publishedSheetDraft = publication;
+                        sheetSummaryPath = publication.summaryPath;
+                        sheetDraftPath = publication.sheetPath;
+                      },
+                    }
+                  : {}),
                 ...(graderRunId
                   ? {
                       graderPublish: {
@@ -9108,6 +9483,19 @@ export async function runSparkAgentTask(
         status: "stopped",
         resultSummary: "Stopped by user.",
       }).catch(() => undefined);
+      if (sheetRunId) {
+        await patchGraderRunStatus({
+          serviceAccountJson,
+          userId: options.userId,
+          runId: sheetRunId,
+          updates: {
+            status: "stopped",
+            updatedAt: new Date(),
+            completedAt: new Date(),
+            resultSummary: "Stopped by user.",
+          },
+        }).catch(() => undefined);
+      }
       if (graderRunId) {
         await patchGraderRunStatus({
           serviceAccountJson,
@@ -9157,6 +9545,19 @@ export async function runSparkAgentTask(
       });
     if (!statusUpdated) {
       throw error;
+    }
+    if (sheetRunId) {
+      await patchGraderRunStatus({
+        serviceAccountJson,
+        userId: options.userId,
+        runId: sheetRunId,
+        updates: {
+          status: "failed",
+          updatedAt: new Date(),
+          completedAt: new Date(),
+          error: message,
+        },
+      }).catch(() => undefined);
     }
     if (graderRunId) {
       await patchGraderRunStatus({
