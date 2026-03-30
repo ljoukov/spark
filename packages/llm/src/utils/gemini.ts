@@ -1,3 +1,5 @@
+import { Buffer } from "node:buffer";
+
 import { GoogleGenAI } from "@google/genai/node";
 import type {
   Content,
@@ -24,7 +26,7 @@ const RATE_LIMIT_REASONS = new Set([
 ]);
 
 export const GEMINI_MODEL_IDS = [
-  "gemini-3-pro-preview",
+  "gemini-3.1-pro-preview",
   "gemini-2.5-pro",
   "gemini-flash-latest",
   "gemini-flash-lite-latest",
@@ -96,7 +98,10 @@ export function getGeminiProPreviewPricing(
   if (modelId.includes("gemini-2.5-pro")) {
     return GEMINI_2_5_PRO_PRICING;
   }
-  if (modelId.includes("gemini-3-pro")) {
+  if (
+    modelId.includes("gemini-3-pro") ||
+    modelId.includes("gemini-3.1-pro")
+  ) {
     return GEMINI_PRO_PREVIEW_PRICING;
   }
   return undefined;
@@ -554,5 +559,100 @@ export async function streamGeminiTextResponse({
   return {
     text: finalText,
     modelVersion: resolvedModelVersion,
+  };
+}
+
+export type GeminiInlineImage = {
+  readonly mimeType?: string;
+  readonly data: Buffer;
+};
+
+function toBuffer(value: unknown): Buffer | undefined {
+  if (Buffer.isBuffer(value)) {
+    return value;
+  }
+  if (value instanceof Uint8Array) {
+    return Buffer.from(value);
+  }
+  if (value instanceof ArrayBuffer) {
+    return Buffer.from(new Uint8Array(value));
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      return Buffer.alloc(0);
+    }
+    return Buffer.from(trimmed, "base64");
+  }
+  return undefined;
+}
+
+function collectInlineImages(
+  response: GenerateContentResponse,
+): GeminiInlineImage[] {
+  const images: GeminiInlineImage[] = [];
+  const candidates = response.candidates ?? [];
+  for (const candidate of candidates) {
+    const parts = candidate.content?.parts ?? [];
+    for (const part of parts) {
+      const inlineData = (
+        part as { inlineData?: { data?: unknown; mimeType?: unknown } }
+      ).inlineData;
+      if (!inlineData) {
+        continue;
+      }
+      const mimeType =
+        typeof inlineData.mimeType === "string" ? inlineData.mimeType : undefined;
+      if (!mimeType?.startsWith("image/")) {
+        continue;
+      }
+      const data = toBuffer(inlineData.data);
+      if (!data) {
+        continue;
+      }
+      images.push({
+        mimeType,
+        data,
+      });
+    }
+  }
+  return images;
+}
+
+export async function generateGeminiTextAndImages({
+  model,
+  parts,
+  contents,
+  config,
+  trimOutput = true,
+}: {
+  readonly model: string;
+  readonly parts?: Part[];
+  readonly contents?: Content[];
+  readonly config?: Record<string, unknown>;
+  readonly trimOutput?: boolean;
+}): Promise<{
+  readonly text: string;
+  readonly images: GeminiInlineImage[];
+  readonly modelVersion: string;
+}> {
+  const effectiveContents = contents ?? [
+    {
+      role: "user",
+      parts: parts ?? [],
+    },
+  ];
+  const response = await runGeminiCall((client) =>
+    client.models.generateContent({
+      model,
+      contents: effectiveContents,
+      config,
+    }),
+  );
+  const finalText = trimOutput ? collectTextChunk(response).trim() : collectTextChunk(response);
+  return {
+    text: finalText,
+    images: collectInlineImages(response),
+    modelVersion: response.modelVersion ?? model,
   };
 }

@@ -41,6 +41,7 @@ import { z } from "zod";
 
 import type { OpenAiReasoningEffort } from "./openai-llm";
 import { loadLocalEnv } from "./env";
+import { generateGeminiTextAndImages } from "./gemini";
 import type { JobProgressReporter, LlmUsageChunk, ModelCallHandle } from "./concurrency";
 import {
   configureSparkLlmTelemetryFromEnv,
@@ -203,6 +204,81 @@ export type LlmGenerateImagesOptions = Omit<LlmCallBaseOptions, "contents"> & {
   readonly imagePrompts: readonly string[];
   readonly maxAttempts?: number;
 };
+
+function shouldUseDirectGeminiImageGeneration(modelId: string): boolean {
+  return modelId === "gemini-3-pro-image-preview";
+}
+
+async function generateImagesWithDirectGemini(
+  options: LlmGenerateImagesOptions,
+): Promise<LlmImageData[]> {
+  const maxAttempts = Math.max(1, Math.floor(options.maxAttempts ?? 1));
+  const stylePrompt = options.stylePrompt.trim();
+  const gradingPrompt = options.imageGradingPrompt.trim();
+  const generatedImages: LlmImageData[] = [];
+
+  for (const rawPrompt of options.imagePrompts) {
+    const prompt = rawPrompt.trim();
+    if (prompt.length === 0) {
+      continue;
+    }
+    let imageForPrompt: LlmImageData | undefined;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const promptParts: GooglePart[] = [
+        {
+          text: [
+            "Generate exactly one final image for this request.",
+            "",
+            "Follow this style guidance:",
+            stylePrompt,
+            "",
+            "Quality bar:",
+            gradingPrompt,
+            "",
+            "Image request:",
+            prompt,
+            "",
+            "Return an image. Text is optional.",
+          ].join("\n"),
+        },
+      ];
+      for (const styleImage of options.styleImages ?? []) {
+        promptParts.push({
+          inlineData: {
+            data: styleImage.data.toString("base64"),
+            mimeType: styleImage.mimeType,
+          },
+        });
+      }
+      const response = await generateGeminiTextAndImages({
+        model: options.modelId,
+        parts: promptParts,
+        config: {
+          responseModalities: ["TEXT", "IMAGE"],
+          ...(options.imageAspectRatio || options.imageSize
+            ? {
+                imageConfig: {
+                  ...(options.imageAspectRatio
+                    ? { aspectRatio: options.imageAspectRatio }
+                    : {}),
+                  ...(options.imageSize ? { imageSize: options.imageSize } : {}),
+                },
+              }
+            : {}),
+        },
+      });
+      if (response.images.length > 0) {
+        imageForPrompt = response.images[0];
+        break;
+      }
+    }
+    if (imageForPrompt) {
+      generatedImages.push(imageForPrompt);
+    }
+  }
+
+  return generatedImages;
+}
 
 export type LlmToolCallResult = {
   readonly toolName: string;
@@ -693,17 +769,19 @@ export async function generateImages(options: LlmGenerateImagesOptions): Promise
   void options.debug;
   const startedAtMs = Date.now();
   try {
-    const result = await generateImagesV2({
-      model: resolveLlmImageModelId(options.modelId),
-      stylePrompt: options.stylePrompt,
-      styleImages: options.styleImages,
-      imagePrompts: options.imagePrompts,
-      imageGradingPrompt: options.imageGradingPrompt,
-      maxAttempts: options.maxAttempts,
-      imageAspectRatio: options.imageAspectRatio,
-      imageSize: options.imageSize,
-      telemetry: false,
-    });
+    const result = shouldUseDirectGeminiImageGeneration(options.modelId)
+      ? await generateImagesWithDirectGemini(options)
+      : await generateImagesV2({
+          model: resolveLlmImageModelId(options.modelId),
+          stylePrompt: options.stylePrompt,
+          styleImages: options.styleImages,
+          imagePrompts: options.imagePrompts,
+          imageGradingPrompt: options.imageGradingPrompt,
+          maxAttempts: options.maxAttempts,
+          imageAspectRatio: options.imageAspectRatio,
+          imageSize: options.imageSize,
+          telemetry: false,
+        });
     await publishSparkLlmCallMetricsFromEnv({
       operation: "generate_images",
       model: options.modelId,

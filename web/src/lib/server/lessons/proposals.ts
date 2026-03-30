@@ -2,7 +2,7 @@ import { LessonProposalSchema, type LessonProposal, type Session } from '@spark/
 import { streamGeminiTextResponse, type GeminiModelId } from '@spark/llm';
 import { z } from 'zod';
 
-const NEXT_LESSON_MODEL: GeminiModelId = 'gemini-3-pro-preview';
+const NEXT_LESSON_MODEL: GeminiModelId = 'gemini-3.1-pro-preview';
 
 const GeminiProposalSchema = z.object({
 	proposals: z

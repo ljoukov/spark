@@ -128,7 +128,7 @@ The wrappers report per-call usage to a `JobProgressReporter`:
 
 The default reporter aggregates across all calls and renders a single line that lists active stages plus any non-zero totals (prompt/res/thinking stats, images and bytes, tokens, cost, and the unique models seen). Example:
 
-`[label] stages: narration, frames | prompt: 8,400 chars, 6 imgs (1.2MB), 9,200 tok | thinking: 2,500 chars, 2,700 tok | response: 7,100 chars, 10 imgs (3.5MB), 6,800 tok | cost: $0.34 | models: gemini-3-pro-preview, gemini-3-pro-image-preview`
+`[label] stages: narration, frames | prompt: 8,400 chars, 6 imgs (1.2MB), 9,200 tok | thinking: 2,500 chars, 2,700 tok | response: 7,100 chars, 10 imgs (3.5MB), 6,800 tok | cost: $0.34 | models: gemini-3.1-pro-preview, gemini-3-pro-image-preview`
 
 Notes:
 - Thinking tokens are reported separately (text and tokens) and are included in the final cost calculation. Visible response text still determines the returned value from `generateText`.
