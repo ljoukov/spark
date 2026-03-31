@@ -1,3 +1,7 @@
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+import pdfiumWasmAsset from "@hyzyla/pdfium/pdfium.wasm?url";
 import { PDFiumLibrary } from "@hyzyla/pdfium";
 import { PNG } from "pngjs";
 
@@ -13,6 +17,40 @@ export type PdfiumNormBBox = {
   width: number;
   height: number;
 };
+
+export function resolvePdfiumWasmAssetUrl(options: {
+  assetUrl: string;
+  moduleUrl?: string;
+}): string {
+  const moduleUrl = options.moduleUrl ?? import.meta.url;
+  const { assetUrl } = options;
+
+  if (
+    assetUrl.startsWith("file:") ||
+    assetUrl.startsWith("http:") ||
+    assetUrl.startsWith("https:")
+  ) {
+    return assetUrl;
+  }
+
+  if (assetUrl.startsWith("/_app/")) {
+    return new URL(`..${assetUrl}`, moduleUrl).href;
+  }
+
+  if (path.isAbsolute(assetUrl)) {
+    return pathToFileURL(assetUrl).href;
+  }
+
+  return new URL(assetUrl, moduleUrl).href;
+}
+
+function getPdfiumWasmUrl(): string {
+  return resolvePdfiumWasmAssetUrl({ assetUrl: pdfiumWasmAsset });
+}
+
+async function initPdfiumLibrary(): Promise<PDFiumLibrary> {
+  return PDFiumLibrary.init({ wasmUrl: getPdfiumWasmUrl() });
+}
 
 function assertPositiveInteger(value: number, label: string): void {
   if (!Number.isInteger(value) || value <= 0) {
@@ -51,7 +89,7 @@ export async function renderPdfPagesBgra(options: {
       ? options.scale
       : 3;
 
-  const library = await PDFiumLibrary.init();
+  const library = await initPdfiumLibrary();
   try {
     const document = await library.loadDocument(options.pdfBytes);
     try {
@@ -87,7 +125,7 @@ export async function renderPdfPagesBgra(options: {
 export async function getPdfPageCount(options: {
   pdfBytes: Uint8Array;
 }): Promise<number> {
-  const library = await PDFiumLibrary.init();
+  const library = await initPdfiumLibrary();
   try {
     const document = await library.loadDocument(options.pdfBytes);
     try {

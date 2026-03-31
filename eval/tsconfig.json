@@ -16,5 +16,5 @@
 			"@spark/schemas/*": ["../packages/schemas/src/*"]
 		}
 		},
-	"include": ["src/**/*", "tests/**/*"]
+	"include": ["src/**/*", "tests/**/*", "../packages/llm/src/types/**/*.d.ts"]
 }

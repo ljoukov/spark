@@ -1,0 +1,34 @@
+import { describe, expect, it } from "vitest";
+
+import { resolvePdfiumWasmAssetUrl } from "../src/utils/pdfium";
+
+describe("resolvePdfiumWasmAssetUrl", () => {
+  it("maps Vite SSR public asset URLs back into the server build tree", () => {
+    expect(
+      resolvePdfiumWasmAssetUrl({
+        assetUrl: "/_app/immutable/assets/pdfium.test.wasm",
+        moduleUrl: "file:///usr/src/app/build/server/chunks/sparkAgentRunner.js",
+      }),
+    ).toBe(
+      "file:///usr/src/app/build/server/_app/immutable/assets/pdfium.test.wasm",
+    );
+  });
+
+  it("converts absolute filesystem paths to file URLs", () => {
+    expect(
+      resolvePdfiumWasmAssetUrl({
+        assetUrl: "/tmp/pdfium.wasm",
+        moduleUrl: "file:///usr/src/app/build/server/chunks/sparkAgentRunner.js",
+      }),
+    ).toBe("file:///tmp/pdfium.wasm");
+  });
+
+  it("passes through file URLs unchanged", () => {
+    expect(
+      resolvePdfiumWasmAssetUrl({
+        assetUrl: "file:///tmp/pdfium.wasm",
+        moduleUrl: "file:///usr/src/app/build/server/chunks/sparkAgentRunner.js",
+      }),
+    ).toBe("file:///tmp/pdfium.wasm");
+  });
+});

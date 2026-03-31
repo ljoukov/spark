@@ -52,6 +52,7 @@ COPY --from=build /workspace/packages/schemas/node_modules ./packages/schemas/no
 COPY --from=build /workspace/packages/proto/node_modules ./packages/proto/node_modules
 COPY --from=build /workspace/packages/llm/node_modules ./packages/llm/node_modules
 COPY --from=build /workspace/package.json ./package.json
+COPY --from=build /workspace/web/scripts/start-with-env-inventory.mjs ./start-with-env-inventory.mjs
 
 COPY --from=build /workspace/web/build ./build
 COPY --from=build /workspace/web/.env.local ./build/.env.local
@@ -59,4 +60,4 @@ COPY --from=build /workspace/packages ./packages
 
 WORKDIR /usr/src/app/build
 
-CMD ["bun", "./index.js"]
+CMD ["bun", "/usr/src/app/start-with-env-inventory.mjs"]
