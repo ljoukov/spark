@@ -3,6 +3,7 @@ import { z } from "zod";
 const trimmedString = z.string().trim().min(1);
 const trimmedMaybeEmptyString = z.string().trim();
 const optionalDisplayNumber = trimmedString.optional();
+const optionalBadgeLabel = trimmedString.optional();
 
 export const PaperSheetHookSectionSchema = z.object({
   type: z.literal("hook"),
@@ -32,6 +33,7 @@ export const PaperSheetFillQuestionSchema = z.object({
   id: trimmedString,
   type: z.literal("fill"),
   displayNumber: optionalDisplayNumber,
+  badgeLabel: optionalBadgeLabel,
   marks: z.number().min(0),
   prompt: trimmedMaybeEmptyString,
   blanks: z.union([
@@ -50,6 +52,7 @@ export const PaperSheetMcqQuestionSchema = z.object({
   id: trimmedString,
   type: z.literal("mcq"),
   displayNumber: optionalDisplayNumber,
+  badgeLabel: optionalBadgeLabel,
   marks: z.number().min(0),
   prompt: trimmedString,
   options: z.array(trimmedString).min(2),
@@ -61,6 +64,7 @@ export const PaperSheetLinesQuestionSchema = z.object({
   id: trimmedString,
   type: z.literal("lines"),
   displayNumber: optionalDisplayNumber,
+  badgeLabel: optionalBadgeLabel,
   marks: z.number().min(0),
   prompt: trimmedString,
   lines: z.number().int().min(1),
@@ -75,6 +79,7 @@ export const PaperSheetCalcQuestionSchema = z.object({
   id: trimmedString,
   type: z.literal("calc"),
   displayNumber: optionalDisplayNumber,
+  badgeLabel: optionalBadgeLabel,
   marks: z.number().min(0),
   prompt: trimmedString,
   hint: z.string().optional(),
@@ -88,6 +93,7 @@ export const PaperSheetMatchQuestionSchema = z.object({
   id: trimmedString,
   type: z.literal("match"),
   displayNumber: optionalDisplayNumber,
+  badgeLabel: optionalBadgeLabel,
   marks: z.number().min(0),
   prompt: trimmedString,
   pairs: z
@@ -108,6 +114,7 @@ export const PaperSheetSpellingQuestionSchema = z.object({
   id: trimmedString,
   type: z.literal("spelling"),
   displayNumber: optionalDisplayNumber,
+  badgeLabel: optionalBadgeLabel,
   marks: z.number().min(0),
   prompt: trimmedString,
   words: z
@@ -128,6 +135,7 @@ export const PaperSheetClozeQuestionSchema = z
     id: trimmedString,
     type: z.literal("cloze"),
     displayNumber: optionalDisplayNumber,
+    badgeLabel: optionalBadgeLabel,
     marks: z.number().min(0),
     segments: z.array(z.string()).min(2),
     blanks: z.array(PaperSheetBlankSchema).min(1),
@@ -220,6 +228,7 @@ export const PaperSheetFlowQuestionSchema = z
     id: trimmedString,
     type: z.literal("flow"),
     displayNumber: optionalDisplayNumber,
+    badgeLabel: optionalBadgeLabel,
     marks: z.number().min(0),
     prompt: trimmedString,
     boxes: z.array(PaperSheetFlowBoxSchema).min(1),
@@ -290,12 +299,41 @@ export const PaperSheetQuestionSchema = z.discriminatedUnion("type", [
 
 export type PaperSheetQuestion = z.infer<typeof PaperSheetQuestionSchema>;
 
+export const PaperSheetQuestionGroupSchema = z.object({
+  id: trimmedString,
+  type: z.literal("group"),
+  displayNumber: optionalDisplayNumber,
+  badgeLabel: optionalBadgeLabel,
+  prompt: trimmedString,
+  questions: z.array(PaperSheetQuestionSchema).min(1),
+});
+
+export type PaperSheetQuestionGroup = z.infer<
+  typeof PaperSheetQuestionGroupSchema
+>;
+
+export const PaperSheetQuestionEntrySchema = z.discriminatedUnion("type", [
+  PaperSheetQuestionGroupSchema,
+  PaperSheetFillQuestionSchema,
+  PaperSheetMcqQuestionSchema,
+  PaperSheetLinesQuestionSchema,
+  PaperSheetCalcQuestionSchema,
+  PaperSheetMatchQuestionSchema,
+  PaperSheetSpellingQuestionSchema,
+  PaperSheetClozeQuestionSchema,
+  PaperSheetFlowQuestionSchema,
+]);
+
+export type PaperSheetQuestionEntry = z.infer<
+  typeof PaperSheetQuestionEntrySchema
+>;
+
 export const PaperSheetContentSectionSchema = z.object({
   id: trimmedString,
   label: trimmedString,
   theory: z.string().optional(),
   infoBox: PaperSheetInfoBoxSchema.optional(),
-  questions: z.array(PaperSheetQuestionSchema).optional(),
+  questions: z.array(PaperSheetQuestionEntrySchema).optional(),
 }).superRefine((section, ctx) => {
   const hasTheory =
     typeof section.theory === "string" && section.theory.trim().length > 0;
@@ -337,7 +375,31 @@ export const PaperSheetDataSchema = z
   })
   .superRefine((sheet, ctx) => {
     const sectionIds = new Set<string>();
-    const questionIds = new Set<string>();
+    const entryIds = new Set<string>();
+
+    const validateEntries = (
+      entries: readonly PaperSheetQuestionEntry[] | undefined,
+      path: (string | number)[],
+    ): void => {
+      for (let entryIndex = 0; entryIndex < (entries?.length ?? 0); entryIndex += 1) {
+        const entry = entries?.[entryIndex];
+        if (!entry) {
+          continue;
+        }
+        if (entryIds.has(entry.id)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [...path, entryIndex, "id"],
+            message: `Duplicate worksheet question or group id "${entry.id}".`,
+          });
+        } else {
+          entryIds.add(entry.id);
+        }
+        if (entry.type === "group") {
+          validateEntries(entry.questions, [...path, entryIndex, "questions"]);
+        }
+      }
+    };
 
     for (let sectionIndex = 0; sectionIndex < sheet.sections.length; sectionIndex += 1) {
       const section = sheet.sections[sectionIndex];
@@ -354,26 +416,7 @@ export const PaperSheetDataSchema = z
       } else {
         sectionIds.add(section.id);
       }
-
-      for (
-        let questionIndex = 0;
-        questionIndex < (section.questions?.length ?? 0);
-        questionIndex += 1
-      ) {
-        const question = section.questions?.[questionIndex];
-        if (!question) {
-          continue;
-        }
-        if (questionIds.has(question.id)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ["sections", sectionIndex, "questions", questionIndex, "id"],
-            message: `Duplicate worksheet question id "${question.id}".`,
-          });
-          continue;
-        }
-        questionIds.add(question.id);
-      }
+      validateEntries(section.questions, ["sections", sectionIndex, "questions"]);
     }
   });
 
@@ -500,6 +543,52 @@ export const SparkSolveSheetDraftSchema = z.object({
 
 export type SparkSolveSheetDraft = z.infer<typeof SparkSolveSheetDraftSchema>;
 
+export function isPaperSheetQuestionGroup(
+  entry: PaperSheetQuestionEntry,
+): entry is PaperSheetQuestionGroup {
+  return entry.type === "group";
+}
+
+export function visitPaperSheetQuestions(
+  entries: readonly PaperSheetQuestionEntry[] | undefined,
+  visitor: (question: PaperSheetQuestion, parentGroup: PaperSheetQuestionGroup | null) => void,
+): void {
+  const visitEntries = (
+    currentEntries: readonly PaperSheetQuestionEntry[] | undefined,
+    parentGroup: PaperSheetQuestionGroup | null,
+  ): void => {
+    for (const entry of currentEntries ?? []) {
+      if (isPaperSheetQuestionGroup(entry)) {
+        visitEntries(entry.questions, entry);
+        continue;
+      }
+      visitor(entry, parentGroup);
+    }
+  };
+
+  visitEntries(entries, null);
+}
+
+export function countPaperSheetQuestions(
+  entries: readonly PaperSheetQuestionEntry[] | undefined,
+): number {
+  let count = 0;
+  visitPaperSheetQuestions(entries, () => {
+    count += 1;
+  });
+  return count;
+}
+
+export function sumPaperSheetMarks(
+  entries: readonly PaperSheetQuestionEntry[] | undefined,
+): number {
+  let total = 0;
+  visitPaperSheetQuestions(entries, (question) => {
+    total += question.marks;
+  });
+  return total;
+}
+
 function asObjectRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -605,6 +694,7 @@ function normalizeLegacyFlowQuestion(
   value: Record<string, unknown>,
   questionId: string,
   displayNumber: string | undefined,
+  badgeLabel: string | undefined,
   marks: number,
   prompt: string,
 ): PaperSheetFlowQuestion | null {
@@ -739,6 +829,7 @@ function normalizeLegacyFlowQuestion(
     id: questionId,
     type: "flow",
     ...(displayNumber ? { displayNumber } : {}),
+    ...(badgeLabel ? { badgeLabel } : {}),
     marks,
     prompt,
     boxes,
@@ -769,6 +860,7 @@ function normalizeLegacyQuestion(
   }
 
   const displayNumber = asTrimmedStringOrNull(record.displayNumber) ?? undefined;
+  const badgeLabel = asTrimmedStringOrNull(record.badgeLabel) ?? undefined;
   const id =
     asTrimmedStringOrNull(record.id) ??
     `${options.sectionId}-${displayNumber ? slugifyId(displayNumber) : `q${options.index + 1}`}`;
@@ -793,6 +885,7 @@ function normalizeLegacyQuestion(
         id,
         type: "mcq",
         ...(displayNumber ? { displayNumber } : {}),
+        ...(badgeLabel ? { badgeLabel } : {}),
         marks,
         prompt,
         options,
@@ -819,6 +912,7 @@ function normalizeLegacyQuestion(
             id,
             type: "fill",
             ...(displayNumber ? { displayNumber } : {}),
+            ...(badgeLabel ? { badgeLabel } : {}),
             marks,
             prompt: rawPrompt,
             blanks,
@@ -843,6 +937,7 @@ function normalizeLegacyQuestion(
         id,
         type: "cloze",
         ...(displayNumber ? { displayNumber } : {}),
+        ...(badgeLabel ? { badgeLabel } : {}),
         marks,
         segments: cloze.segments,
         blanks: cloze.blanks,
@@ -857,6 +952,7 @@ function normalizeLegacyQuestion(
         id,
         type: "lines",
         ...(displayNumber ? { displayNumber } : {}),
+        ...(badgeLabel ? { badgeLabel } : {}),
         marks,
         prompt,
         lines: Math.max(asNumberOrNull(record.lines) ?? 4, 1),
@@ -875,6 +971,7 @@ function normalizeLegacyQuestion(
           id,
           type: "calc",
           ...(displayNumber ? { displayNumber } : {}),
+          ...(badgeLabel ? { badgeLabel } : {}),
           marks,
           prompt,
           ...(asTrimmedStringOrNull(record.hint)
@@ -889,6 +986,7 @@ function normalizeLegacyQuestion(
         id,
         type: "lines",
         ...(displayNumber ? { displayNumber } : {}),
+        ...(badgeLabel ? { badgeLabel } : {}),
         marks,
         prompt,
         lines: 4,
@@ -899,10 +997,70 @@ function normalizeLegacyQuestion(
       if (!prompt) {
         return null;
       }
-      return normalizeLegacyFlowQuestion(record, id, displayNumber, marks, prompt);
+      return normalizeLegacyFlowQuestion(
+        record,
+        id,
+        displayNumber,
+        badgeLabel,
+        marks,
+        prompt,
+      );
     default:
       return null;
   }
+}
+
+function normalizeLegacyQuestionEntry(
+  value: unknown,
+  options: {
+    sectionId: string;
+    index: number;
+  },
+): PaperSheetQuestionEntry | null {
+  const direct = PaperSheetQuestionEntrySchema.safeParse(value);
+  if (direct.success) {
+    return direct.data;
+  }
+
+  const record = asObjectRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  const type = asTrimmedStringOrNull(record.type);
+  if (type !== "group") {
+    return normalizeLegacyQuestion(value, options);
+  }
+
+  const displayNumber = asTrimmedStringOrNull(record.displayNumber) ?? undefined;
+  const badgeLabel = asTrimmedStringOrNull(record.badgeLabel) ?? undefined;
+  const id =
+    asTrimmedStringOrNull(record.id) ??
+    `${options.sectionId}-${displayNumber ? slugifyId(displayNumber) : `group-${options.index + 1}`}`;
+  const prompt =
+    asTrimmedStringOrNull(record.prompt) ??
+    asTrimmedStringOrNull(record.promptMarkdown);
+  const rawQuestions = Array.isArray(record.questions) ? record.questions : null;
+  if (!prompt || !rawQuestions) {
+    return null;
+  }
+  const questions = rawQuestions
+    .map((question, questionIndex) =>
+      normalizeLegacyQuestion(question, {
+        sectionId: `${options.sectionId}-${slugifyId(id)}`,
+        index: questionIndex,
+      }),
+    )
+    .filter((entry): entry is PaperSheetQuestion => entry !== null);
+  const parsed = PaperSheetQuestionGroupSchema.safeParse({
+    id,
+    type: "group",
+    ...(displayNumber ? { displayNumber } : {}),
+    ...(badgeLabel ? { badgeLabel } : {}),
+    prompt,
+    questions,
+  });
+  return parsed.success ? parsed.data : null;
 }
 
 function normalizeLegacySection(
@@ -943,12 +1101,12 @@ function normalizeLegacySection(
   const rawQuestions = Array.isArray(record.questions) ? record.questions : [];
   const questions = rawQuestions
     .map((question, questionIndex) =>
-      normalizeLegacyQuestion(question, {
+      normalizeLegacyQuestionEntry(question, {
         sectionId: slugifyId(id),
         index: questionIndex,
       }),
     )
-    .filter((entry): entry is PaperSheetQuestion => entry !== null);
+    .filter((entry): entry is PaperSheetQuestionEntry => entry !== null);
 
   const parsed = PaperSheetContentSectionSchema.safeParse({
     id,
@@ -1024,9 +1182,9 @@ function collectSheetQuestions(
     if (!("id" in section)) {
       continue;
     }
-    for (const question of section.questions ?? []) {
+    visitPaperSheetQuestions(section.questions, (question) => {
       questions.set(question.id, question);
-    }
+    });
   }
   return questions;
 }

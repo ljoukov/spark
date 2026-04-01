@@ -19,6 +19,8 @@ export type {
 	PaperSheetMatchQuestion,
 	PaperSheetMcqQuestion,
 	PaperSheetMockReview,
+	PaperSheetQuestionEntry,
+	PaperSheetQuestionGroup,
 	PaperSheetQuestionReview,
 	PaperSheetQuestionReviewStatus,
 	PaperSheetQuestion,

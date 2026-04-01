@@ -48,6 +48,7 @@ import {
   type LlmUsageTokens,
 } from "@ljoukov/llm";
 import {
+  countPaperSheetQuestions,
   SparkAgentAvailableToolSchema,
   CodeProblemSchema,
   QuizDefinitionSchema,
@@ -64,6 +65,7 @@ import {
   SparkAgentWorkspaceFileSchema,
   coerceSparkSolveSheetDraft,
   normalizeTutorMarkdown,
+  visitPaperSheetQuestions,
   type CodeProblem,
   type QuizDefinition,
   type Session,
@@ -1909,7 +1911,7 @@ async function validateSheetDraftWorkspaceForPublish(options: {
     if (!("id" in section)) {
       continue;
     }
-    const currentSectionQuestionCount = section.questions?.length ?? 0;
+    const currentSectionQuestionCount = countPaperSheetQuestions(section.questions);
     questionCount += currentSectionQuestionCount;
     const hasTheory =
       typeof section.theory === "string" && section.theory.trim().length > 0;
@@ -2049,9 +2051,9 @@ function listWorksheetQuestionIds(
     if (!("id" in section)) {
       continue;
     }
-    for (const question of section.questions ?? []) {
+    visitPaperSheetQuestions(section.questions, (question) => {
       ids.push(question.id);
-    }
+    });
   }
   return ids;
 }
@@ -2116,11 +2118,16 @@ function buildTutorFocusLabelForQuestion(options: {
     if (!("id" in section)) {
       continue;
     }
-    for (const question of section.questions ?? []) {
+    let matchedLabel: string | null = null;
+    visitPaperSheetQuestions(section.questions, (question) => {
       if (question.id === options.questionId) {
-        return `Question ${counter.toString()}`;
+        matchedLabel = `Question ${counter.toString()}`;
+        return;
       }
       counter += 1;
+    });
+    if (matchedLabel) {
+      return matchedLabel;
     }
   }
   return null;

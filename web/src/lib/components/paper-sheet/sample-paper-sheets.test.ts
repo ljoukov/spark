@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { visitPaperSheetQuestions } from '@spark/schemas';
 
 import { samplePaperSheets } from './sample-paper-sheets';
 
@@ -8,9 +9,9 @@ function listQuestionIds(sheet: (typeof samplePaperSheets)[number]): string[] {
 		if (!('id' in section)) {
 			continue;
 		}
-		for (const question of section.questions ?? []) {
+		visitPaperSheetQuestions(section.questions, (question) => {
 			questionIds.push(question.id);
-		}
+		});
 	}
 	return questionIds;
 }

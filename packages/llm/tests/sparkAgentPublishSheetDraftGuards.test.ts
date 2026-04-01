@@ -284,4 +284,141 @@ describe("Spark agent tool: publish_sheet_draft guards", () => {
       );
     });
   });
+
+  it("accepts grouped multipart questions and counts child questions", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } = await import(
+        "../src/agent/sparkAgentRunner"
+      );
+
+      await mkdir(path.join(rootDir, "sheet/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "sheet/output/run-summary.json"),
+        JSON.stringify(
+          {
+            presentation: {
+              title: "Interest worksheet",
+              summaryMarkdown: "Student worksheet prepared from the upload.",
+            },
+            sheet: {
+              title: "Interest worksheet",
+              filePath: "sheet/output/draft.json",
+            },
+          },
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+      await writeFile(
+        path.join(rootDir, "sheet/output/draft.json"),
+        JSON.stringify(
+          {
+            schemaVersion: 1,
+            mode: "draft",
+            sheet: {
+              id: "interest-worksheet",
+              subject: "Mathematics",
+              level: "Secondary",
+              title: "Interest worksheet",
+              subtitle: "Solve the worksheet.",
+              color: "#36587A",
+              accent: "#4D7AA5",
+              light: "#E8F2FB",
+              border: "#BFD0E0",
+              sections: [
+                {
+                  id: "C",
+                  label: "Questions that require solutions",
+                  questions: [
+                    {
+                      id: "q10",
+                      type: "group",
+                      displayNumber: "10",
+                      prompt:
+                        "For Question 10, use the table below.\n\n| Duration | Before | After |\n| --- | ---: | ---: |\n| 2 years | 4.14% | 3.06% |",
+                      questions: [
+                        {
+                          id: "q10a",
+                          type: "fill",
+                          displayNumber: "10(a)",
+                          badgeLabel: "a",
+                          marks: 1,
+                          prompt: "The difference is £",
+                          blanks: [{}],
+                          after: ".",
+                        },
+                        {
+                          id: "q10b",
+                          type: "lines",
+                          displayNumber: "10(b)",
+                          badgeLabel: "b",
+                          marks: 1,
+                          prompt: "Explain which option earns more interest.",
+                          lines: 4,
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        sheetDraftPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetDraftTool = tools.publish_sheet_draft;
+      requireFunctionTool(publishSheetDraftTool);
+
+      await expect(publishSheetDraftTool.execute({})).resolves.toMatchObject({
+        status: "published",
+        mode: "mock",
+      });
+
+      const normalizedRaw = await readFile(
+        path.join(rootDir, "sheet/output/draft.json"),
+        "utf8",
+      );
+      const normalized = SparkSolveSheetDraftSchema.parse(
+        JSON.parse(normalizedRaw),
+      );
+      const section = normalized.sheet.sections[0];
+      if (!("id" in section)) {
+        throw new Error("Expected grouped content section.");
+      }
+      expect(section.questions?.[0]).toMatchObject({
+        type: "group",
+        displayNumber: "10",
+      });
+      if (section.questions?.[0]?.type !== "group") {
+        throw new Error("Expected grouped question.");
+      }
+      expect(section.questions[0].questions[0]).toMatchObject({
+        displayNumber: "10(a)",
+        badgeLabel: "a",
+      });
+      expect(section.questions[0].questions[1]).toMatchObject({
+        displayNumber: "10(b)",
+        badgeLabel: "b",
+      });
+    });
+  });
 });

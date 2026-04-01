@@ -14,6 +14,8 @@ import type {
 	PaperSheetLinesQuestion,
 	PaperSheetMatchQuestion,
 	PaperSheetMcqQuestion,
+	PaperSheetQuestionEntry as SharedPaperSheetQuestionEntry,
+	PaperSheetQuestionGroup,
 	PaperSheetQuestionReview,
 	PaperSheetQuestionReviewStatus,
 	PaperSheetReview,
@@ -22,7 +24,7 @@ import type {
 	PaperSheetFlowQuestion
 } from '@spark/schemas';
 
-export type { PaperSheetBlank, PaperSheetCalcQuestion, PaperSheetClozeQuestion, PaperSheetFeedbackAttachment, PaperSheetFeedbackThread, PaperSheetFeedbackTurn, PaperSheetFillQuestion, PaperSheetHookSection, PaperSheetInfoBox, PaperSheetLinesQuestion, PaperSheetMatchQuestion, PaperSheetMcqQuestion, PaperSheetQuestionReview, PaperSheetQuestionReviewStatus, PaperSheetReview, PaperSheetScore, PaperSheetSpellingQuestion, PaperSheetFlowQuestion };
+export type { PaperSheetBlank, PaperSheetCalcQuestion, PaperSheetClozeQuestion, PaperSheetFeedbackAttachment, PaperSheetFeedbackThread, PaperSheetFeedbackTurn, PaperSheetFillQuestion, PaperSheetHookSection, PaperSheetInfoBox, PaperSheetLinesQuestion, PaperSheetMatchQuestion, PaperSheetMcqQuestion, PaperSheetQuestionGroup, PaperSheetQuestionReview, PaperSheetQuestionReviewStatus, PaperSheetReview, PaperSheetScore, PaperSheetSpellingQuestion, PaperSheetFlowQuestion };
 
 export type PaperSheetAnswers = SharedPaperSheetAnswers;
 export type PaperSheetMockReview = PaperSheetReview;
@@ -45,8 +47,10 @@ export type PaperSheetQuestion =
 	| PaperSheetClozeQuestion
 	| PaperSheetFlowQuestion;
 
+export type PaperSheetQuestionEntry = SharedPaperSheetQuestionEntry;
+
 export type PaperSheetContentSection = Omit<SharedPaperSheetContentSection, 'questions'> & {
-	questions?: PaperSheetQuestion[];
+	questions?: PaperSheetQuestionEntry[];
 };
 
 export type PaperSheetSection = PaperSheetHookSection | PaperSheetContentSection;

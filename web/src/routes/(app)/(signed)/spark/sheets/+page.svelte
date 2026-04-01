@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { renderMarkdown } from '$lib/markdown';
-	import type { PaperSheetData } from '@spark/schemas';
+	import { sumPaperSheetMarks, type PaperSheetData } from '@spark/schemas';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -32,9 +32,7 @@
 			if (!('id' in section)) {
 				continue;
 			}
-			for (const question of section.questions ?? []) {
-				total += question.marks;
-			}
+			total += sumPaperSheetMarks(section.questions);
 		}
 		return total;
 	}

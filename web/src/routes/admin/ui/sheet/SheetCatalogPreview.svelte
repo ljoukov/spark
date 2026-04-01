@@ -157,6 +157,67 @@
 			};
 		}
 
+		if (kind === 'group') {
+			return {
+				sheet: createPreviewSheet({
+					id: 'catalog-group',
+					title: 'Interest preview',
+					subject: 'Mathematics',
+					level: 'Secondary',
+					sections: [
+						{
+							id: 'C',
+							label: 'Questions that require solutions',
+							questions: [
+								{
+									id: 'q9',
+									type: 'calc',
+									displayNumber: '9',
+									marks: 1,
+									prompt:
+										'Lily deposited £20 000 in a bank for a period of one year. The annual interest rate was 2.25% and the tax rate was 20% on the interest earned. How much is the accrued amount of money Lily received after tax at the end of one year?',
+									inputLabel: 'Answer',
+									unit: '£'
+								},
+								{
+									id: 'q10',
+									type: 'group',
+									displayNumber: '10',
+									prompt:
+										'For Question 10, use the table below.\n\n| Duration of deposit | Before | After |\n| --- | ---: | ---: |\n| 1 year | 3.60% | 2.52% |\n| 2 years | 4.14% | 3.06% |\n| 3 years | 4.77% | 3.60% |\n| 5 years | 5.13% | 3.87% |',
+									questions: [
+										{
+											id: 'q10a',
+											type: 'fill',
+											displayNumber: '10(a)',
+											badgeLabel: 'a',
+											marks: 1,
+											prompt:
+												'For a three-year fixed deposit of £10 000, the interest earned under the new interest rate will be £',
+											blanks: [{ minWidth: 120 }],
+											after:
+												' less than the interest that would be earned under the original interest rate.'
+										},
+										{
+											id: 'q10b',
+											type: 'lines',
+											displayNumber: '10(b)',
+											badgeLabel: 'b',
+											marks: 1,
+											prompt:
+												'Lee’s family would like to deposit £50 000 for a period of two years. Lee suggests opening a two-year fixed deposit account for the money. His brother suggests opening a one-year fixed deposit first and at the end of one year, withdrawing the accrued amount and then re-depositing the total amount for a second year. Whose suggestion will earn more interest? By how much is it more? (Round your answer to integers.)',
+											lines: 4
+										}
+									]
+								}
+							]
+						}
+					]
+				}),
+				heightClass: 'h-[34rem]'
+			};
+		}
+
 		if (kind === 'mcq') {
 			return {
 				sheet: createPreviewSheet({
@@ -630,6 +691,7 @@
 					scrollToBottom: true
 				};
 			case 'fill':
+			case 'group':
 			case 'mcq':
 			case 'lines':
 			case 'calc':

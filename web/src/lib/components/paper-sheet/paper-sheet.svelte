@@ -2,6 +2,11 @@
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import {
+		isPaperSheetQuestionGroup,
+		sumPaperSheetMarks,
+		visitPaperSheetQuestions
+	} from '@spark/schemas';
+	import {
 		MAX_SPARK_ATTACHMENTS_PER_REPLY,
 		MAX_SPARK_ATTACHMENT_FILE_SIZE_BYTES,
 		MAX_SPARK_ATTACHMENT_TOTAL_SIZE_BYTES,
@@ -33,9 +38,15 @@
 		PaperSheetFlowQuestion
 	} from './types';
 
-	type PaperSheetQuestionEntry = {
+	type PaperSheetFlatQuestionEntry = {
 		sectionId: string;
 		question: PaperSheetQuestion;
+	};
+
+	type PaperSheetQuestionRowRenderProps = {
+		sectionId: string;
+		question: PaperSheetQuestion;
+		nested?: boolean;
 	};
 
 	type PaperSheetReviewMode = 'none' | 'mock' | 'live';
@@ -56,18 +67,18 @@
 		return questionId;
 	}
 
-	function getQuestionEntries(sheet: PaperSheetData): PaperSheetQuestionEntry[] {
-		const questions: PaperSheetQuestionEntry[] = [];
+	function getQuestionEntries(sheet: PaperSheetData): PaperSheetFlatQuestionEntry[] {
+		const questions: PaperSheetFlatQuestionEntry[] = [];
 		for (const section of sheet.sections) {
 			if (!isContentSection(section) || !section.questions) {
 				continue;
 			}
-			for (const question of section.questions) {
+			visitPaperSheetQuestions(section.questions, (question) => {
 				questions.push({
 					sectionId: section.id,
 					question
 				});
-			}
+			});
 		}
 		return questions;
 	}
@@ -81,11 +92,7 @@
 	}
 
 	function sectionMarks(section: PaperSheetContentSection): number {
-		let total = 0;
-		for (const question of section.questions ?? []) {
-			total += question.marks;
-		}
-		return total;
+		return sumPaperSheetMarks(section.questions);
 	}
 
 	function buildQuestionNumbers(sheet: PaperSheetData): Record<string, string> {
@@ -190,6 +197,10 @@
 
 	function getDisplayedQuestionLabel(questionKey: string, question: PaperSheetQuestion): string {
 		return question.displayNumber ?? questionNumbers[questionKey]?.toString() ?? question.id;
+	}
+
+	function getQuestionBadgeLabel(questionKey: string, question: PaperSheetQuestion): string {
+		return question.badgeLabel ?? getDisplayedQuestionLabel(questionKey, question);
 	}
 
 	function isFlowRowItemBox(
@@ -1247,6 +1258,376 @@
 	});
 </script>
 
+{#snippet renderQuestionRow({ sectionId, question, nested }: PaperSheetQuestionRowRenderProps)}
+	{@const isNested = nested === true}
+	{@const questionKey = buildQuestionKey(sectionId, question.id)}
+	{@const questionReview = getQuestionReview(questionKey)}
+	{@const reviewStatus = currentReview ? (questionReview?.status ?? null) : null}
+	{@const feedbackThread = getFeedbackThread(questionKey)}
+	{@const showQuestionFeedback = questionReview && shouldShowQuestionFeedback(questionReview)}
+	{@const resolvedFeedback = feedbackThread?.status === 'resolved'}
+	{@const showLinesMarkdown = shouldShowLinesMarkdownRow(question)}
+	{@const questionLabel = getDisplayedQuestionLabel(questionKey, question)}
+	{@const questionBadgeLabel = getQuestionBadgeLabel(questionKey, question)}
+
+	<div
+		class={`paper-sheet__question ${isNested ? 'is-nested' : ''} ${showQuestionFeedback ? 'has-feedback' : ''} ${resolvedFeedback ? 'is-resolved' : ''} ${showLinesMarkdown ? 'has-lines-markdown' : ''}`}
+	>
+		<div class="paper-sheet__question-main">
+			<div class={`paper-sheet__question-number ${resolvedFeedback ? 'is-resolved' : ''}`}>
+				{questionBadgeLabel}
+			</div>
+
+			<div class={`paper-sheet__question-marks ${resolvedFeedback ? 'is-resolved' : ''}`}>
+				[{question.marks}m]
+			</div>
+
+			<div class="paper-sheet__question-body">
+				{#if question.type === 'fill'}
+					{@const fillAnswers = getObjectAnswer(questionKey)}
+					{@const value0 = fillAnswers['0'] ?? ''}
+					{@const value1 = fillAnswers['1'] ?? ''}
+					{@const blank0 = getBlankConfig(question, 0)}
+					{@const blank1 = getBlankConfig(question, 1)}
+
+					<div class="paper-sheet__fill-row">
+						<MarkdownContent inline markdown={question.prompt} class="paper-sheet__inline-markdown" />
+						<input
+							class="paper-sheet__inline-input"
+							style={buildTextInputStyle(reviewStatus, blank0?.minWidth ?? 100)}
+							value={value0}
+							oninput={(event) => {
+								updateFillAnswer(questionKey, 0, readInputValue(event));
+							}}
+							placeholder={resolveStudentInputPlaceholder(blank0?.placeholder)}
+							readonly={areInputsLocked()}
+						/>
+
+						{#if blank1}
+							<MarkdownContent
+								inline
+								markdown={question.conjunction ?? ''}
+								class="paper-sheet__inline-markdown"
+							/>
+							<input
+								class="paper-sheet__inline-input"
+								style={buildTextInputStyle(reviewStatus, blank1.minWidth ?? 100)}
+								value={value1}
+								oninput={(event) => {
+									updateFillAnswer(questionKey, 1, readInputValue(event));
+								}}
+								placeholder={resolveStudentInputPlaceholder(blank1.placeholder)}
+								readonly={areInputsLocked()}
+							/>
+						{/if}
+
+						<MarkdownContent inline markdown={question.after} class="paper-sheet__inline-markdown" />
+					</div>
+				{:else if question.type === 'cloze'}
+					{@const clozeAnswers = getObjectAnswer(questionKey)}
+
+					<div class="paper-sheet__cloze-row">
+						{#each question.segments as segment, segmentIndex (`${question.id}-segment-${segmentIndex}`)}
+							{#if segment.trim().length > 0}
+								<MarkdownContent inline markdown={segment} class="paper-sheet__inline-markdown" />
+							{/if}
+							{#if segmentIndex < question.blanks.length}
+								{@const blank = question.blanks[segmentIndex]}
+								<input
+									class="paper-sheet__inline-input"
+									style={buildTextInputStyle(reviewStatus, blank?.minWidth ?? 100)}
+									value={clozeAnswers[String(segmentIndex)] ?? ''}
+									oninput={(event) => {
+										updateClozeAnswer(questionKey, segmentIndex, readInputValue(event));
+									}}
+									placeholder={resolveStudentInputPlaceholder(blank?.placeholder)}
+									readonly={areInputsLocked()}
+								/>
+							{/if}
+						{/each}
+					</div>
+					{#if question.wordBank && question.wordBank.length > 0}
+						<div class="paper-sheet__word-bank" aria-label="Word bank">
+							{#each question.wordBank as option, optionIndex (`${question.id}-word-${optionIndex}`)}
+								<span class="paper-sheet__word-bank-chip">
+									<MarkdownContent inline markdown={option} />
+								</span>
+							{/each}
+						</div>
+					{/if}
+				{:else if question.type === 'mcq'}
+					{@const selected = getTextAnswer(questionKey)}
+
+					<MarkdownContent markdown={question.prompt} class="paper-sheet__prompt" />
+					<div class="paper-sheet__mcq-grid">
+						{#each question.options as option, optionIndex (`${question.id}-option-${optionIndex}`)}
+							{@const selectedOption = selected === option}
+
+							<button
+								type="button"
+								class={`paper-sheet__mcq-option ${selectedOption ? 'is-selected' : ''}`}
+								style={buildMcqOptionStyle(selectedOption, reviewStatus)}
+								disabled={areInputsLocked()}
+								onclick={() => {
+									updateTextAnswer(questionKey, option);
+								}}
+							>
+								<span
+									class="paper-sheet__mcq-radio"
+									style={buildMcqRadioStyle(selectedOption, reviewStatus)}
+								>
+									{#if selectedOption}
+										<span class="paper-sheet__mcq-radio-dot"></span>
+									{/if}
+								</span>
+								<MarkdownContent inline markdown={option} class="paper-sheet__mcq-label" />
+							</button>
+						{/each}
+					</div>
+				{:else if question.type === 'lines'}
+					{@const textValue = getTextAnswer(questionKey)}
+
+					<MarkdownContent markdown={question.prompt} class="paper-sheet__prompt" />
+					{#if !showLinesMarkdown}
+						<textarea
+							class="paper-sheet__lines-input"
+							value={textValue}
+							rows={question.lines}
+							oninput={(event) => {
+								updateTextAnswer(questionKey, readInputValue(event));
+							}}
+							placeholder="Write your answer here..."
+							readonly={areInputsLocked()}
+						></textarea>
+					{/if}
+				{:else if question.type === 'calc'}
+					{@const calcValue = getTextAnswer(questionKey)}
+
+					<MarkdownContent markdown={question.prompt} class="paper-sheet__prompt" />
+					{#if question.hint}
+						<div class="paper-sheet__hint">
+							<MarkdownContent inline markdown={`Hint: ${question.hint}`} />
+						</div>
+					{/if}
+					<div class="paper-sheet__calc-row">
+						<MarkdownContent inline markdown={question.inputLabel} class="paper-sheet__inline-markdown" />
+						<input
+							class="paper-sheet__inline-input paper-sheet__inline-input--compact"
+							style={buildTextInputStyle(reviewStatus)}
+							value={calcValue}
+							oninput={(event) => {
+								updateTextAnswer(questionKey, readInputValue(event));
+							}}
+							placeholder={resolveStudentInputPlaceholder('...')}
+							readonly={areInputsLocked()}
+						/>
+						{#if question.unit.trim().length > 0}
+							<MarkdownContent inline markdown={question.unit} class="paper-sheet__inline-markdown" />
+						{/if}
+					</div>
+				{:else if question.type === 'match'}
+					{@const selections = getObjectAnswer(questionKey)}
+					{@const activeTerm = activeMatchTerms[questionKey] ?? null}
+					{@const takenMatches = Object.values(selections)}
+
+					<div class="paper-sheet__prompt paper-sheet__prompt--with-note">
+						<MarkdownContent inline markdown={question.prompt} />
+						<span class="paper-sheet__prompt-note">(Click a term, then click its meaning)</span>
+					</div>
+
+					<div class="paper-sheet__match-grid">
+						<div class="paper-sheet__match-column">
+							{#each question.pairs as pair, pairIndex (`${question.id}-term-${pairIndex}`)}
+								{@const isActive = activeTerm === pair.term}
+								{@const hasMatch = Boolean(selections[pair.term])}
+
+								<button
+									type="button"
+									class="paper-sheet__match-button paper-sheet__match-button--term"
+									style={buildMatchTermStyle(isActive, hasMatch, reviewStatus)}
+									disabled={areInputsLocked()}
+									onclick={() => {
+										selectMatchTerm(questionKey, pair.term);
+									}}
+								>
+									<MarkdownContent inline markdown={pair.term} class="paper-sheet__match-label" />
+								</button>
+							{/each}
+						</div>
+
+						<div class="paper-sheet__match-column">
+							{#each question.pairs as pair, pairIndex (`${question.id}-match-${pairIndex}`)}
+								{@const taken = takenMatches.includes(pair.match)}
+
+								<button
+									type="button"
+									class="paper-sheet__match-button"
+									style={buildMatchValueStyle(taken, Boolean(activeTerm))}
+									disabled={areInputsLocked() || !activeTerm}
+									onclick={() => {
+										assignMatch(questionKey, pair.match);
+									}}
+								>
+									<MarkdownContent inline markdown={pair.match} class="paper-sheet__match-label" />
+								</button>
+							{/each}
+						</div>
+					</div>
+				{:else if question.type === 'spelling'}
+					{@const spellingAnswers = getObjectAnswer(questionKey)}
+
+					<MarkdownContent markdown={question.prompt} class="paper-sheet__prompt" />
+					<div class="paper-sheet__spelling-list">
+						{#each question.words as word, index (`${question.id}-${index}`)}
+							{@const spellingValue = spellingAnswers[String(index)] ?? ''}
+
+							<div class="paper-sheet__spelling-row">
+								<MarkdownContent inline markdown={word.wrong} class="paper-sheet__spelling-wrong" />
+								<span class="paper-sheet__spelling-arrow">→</span>
+								<input
+									class="paper-sheet__inline-input paper-sheet__inline-input--wide"
+									style={buildTextInputStyle(reviewStatus, 140)}
+									value={spellingValue}
+									oninput={(event) => {
+										updateSpellingAnswer(questionKey, index, readInputValue(event));
+									}}
+									placeholder="correct spelling..."
+									readonly={areInputsLocked()}
+								/>
+							</div>
+						{/each}
+					</div>
+				{:else if question.type === 'flow'}
+					{@const flowAnswers = getObjectAnswer(questionKey)}
+
+					<MarkdownContent markdown={question.prompt} class="paper-sheet__prompt" />
+					<div class="paper-sheet__flow-chart">
+						{#each question.rows as row, rowIndex (`${question.id}-row-${rowIndex}`)}
+							<div class={`paper-sheet__flow-row ${row.direction === 'rtl' ? 'is-rtl' : ''}`}>
+								{#each row.items as item, itemIndex (`${question.id}-row-${rowIndex}-${itemIndex}`)}
+									{#if isFlowRowItemBox(item)}
+										{@const box = getFlowBox(question, item.boxId)}
+										{#if box}
+											{#if typeof box.initialValue === 'string' || box.readonly === true}
+												<div
+													class={`paper-sheet__flow-box ${typeof box.initialValue === 'string' ? 'is-fixed' : ''}`}
+													style={`min-width:${box.minWidth ?? 74}px;`}
+												>
+													{getFlowBoxValue(questionKey, box)}
+												</div>
+											{:else}
+												<input
+													class="paper-sheet__flow-box paper-sheet__flow-box-input"
+													style={`min-width:${box.minWidth ?? 74}px;`}
+													value={flowAnswers[box.id] ?? ''}
+													oninput={(event) => {
+														updateFlowAnswer(questionKey, box.id, readInputValue(event));
+													}}
+													placeholder={resolveStudentInputPlaceholder(box.placeholder)}
+													readonly={isFlowBoxLocked(box)}
+												/>
+											{/if}
+										{/if}
+									{:else}
+										<div class="paper-sheet__flow-operation">
+											<span class="paper-sheet__flow-arrow">{resolveFlowRowArrow(row.direction)}</span>
+											<MarkdownContent
+												inline
+												markdown={item.label}
+												class="paper-sheet__flow-operation-label"
+											/>
+										</div>
+									{/if}
+								{/each}
+							</div>
+							{#if question.connectors && question.connectors.length > 0 && rowIndex < question.rows.length - 1}
+								<div class="paper-sheet__flow-connectors">
+									{#each question.connectors as connector, connectorIndex (`${question.id}-connector-${connectorIndex}`)}
+										<div class="paper-sheet__flow-connector">
+											<span class="paper-sheet__flow-arrow">
+												{resolveFlowConnectorArrow(connector.direction)}
+											</span>
+											{#if connector.label.trim().length > 0}
+												<MarkdownContent
+													inline
+													markdown={connector.label}
+													class="paper-sheet__flow-operation-label"
+												/>
+											{/if}
+										</div>
+									{/each}
+								</div>
+							{/if}
+						{/each}
+					</div>
+				{/if}
+			</div>
+		</div>
+
+		{#if showLinesMarkdown}
+			{@const answerMarkdown = getTextAnswer(questionKey)}
+			{@const hasAnswerMarkdown = answerMarkdown.trim().length > 0}
+			<div class="paper-sheet__lines-markdown">
+				{#if hasAnswerMarkdown}
+					<div class="paper-sheet__answer-markdown">
+						<MarkdownContent markdown={answerMarkdown} />
+					</div>
+				{:else}
+					<p class="paper-sheet__answer-placeholder">No answer found in the submission.</p>
+				{/if}
+			</div>
+		{/if}
+
+		{#if showQuestionFeedback}
+			<div class="paper-sheet__question-feedback">
+				<PaperSheetQuestionFeedback
+					review={questionReview}
+					questionLabel={`question ${questionLabel}`}
+					open={isFeedbackCardOpen(questionKey)}
+					draft={getFeedbackDraft(questionKey)}
+					thread={feedbackThread}
+					processing={isFeedbackSending(questionKey)}
+					runtimeStatus={getFeedbackRuntimeStatus(questionKey)}
+					thinkingText={getFeedbackThinking(questionKey)}
+					assistantDraftText={getFeedbackAssistantDraft(questionKey)}
+					showComposer={
+						feedbackRepliesEnabled &&
+						(!resolvedFeedback || isFollowUpComposerOpen(questionKey))
+					}
+					showFollowUpButton={
+						feedbackRepliesEnabled &&
+						resolvedFeedback &&
+						!isFollowUpComposerOpen(questionKey)
+					}
+					resolvedFollowUpMode={isFollowUpComposerOpen(questionKey)}
+					onToggle={() => {
+						toggleFeedbackCard(questionKey);
+					}}
+					onRequestFollowUp={() => {
+						requestResolvedFollowUp(questionKey);
+					}}
+					draftAttachments={getFeedbackDraftAttachments(questionKey)}
+					draftAttachmentError={getFeedbackAttachmentError(questionKey)}
+					allowAttachments={feedbackRepliesEnabled}
+					allowTakePhoto={false}
+					onAttachFiles={(files) => {
+						void addFeedbackDraftAttachments(questionKey, files);
+					}}
+					onRemoveDraftAttachment={(localId) => {
+						removeFeedbackDraftAttachment(questionKey, localId);
+					}}
+					onDraftChange={(value) => {
+						updateFeedbackDraft(questionKey, value);
+					}}
+					onReply={(value) => {
+						void replyToTutor(questionKey, questionReview, value);
+					}}
+				/>
+			</div>
+		{/if}
+	</div>
+{/snippet}
+
 <div class="paper-sheet" style={paperStyle}>
 	<header class="paper-sheet__header">
 		<div class="paper-sheet__header-orb paper-sheet__header-orb--large"></div>
@@ -1331,416 +1712,29 @@
 						</div>
 					{/if}
 
-					{#each section.questions ?? [] as question (`${section.id}-${question.id}`)}
-						{@const questionKey = buildQuestionKey(section.id, question.id)}
-						{@const questionReview = getQuestionReview(questionKey)}
-						{@const reviewStatus = currentReview ? (questionReview?.status ?? null) : null}
-						{@const feedbackThread = getFeedbackThread(questionKey)}
-						{@const showQuestionFeedback = questionReview && shouldShowQuestionFeedback(questionReview)}
-						{@const resolvedFeedback = feedbackThread?.status === 'resolved'}
-						{@const showLinesMarkdown = shouldShowLinesMarkdownRow(question)}
-						{@const questionLabel = getDisplayedQuestionLabel(questionKey, question)}
-
-						<div
-							class={`paper-sheet__question ${showQuestionFeedback ? 'has-feedback' : ''} ${resolvedFeedback ? 'is-resolved' : ''} ${showLinesMarkdown ? 'has-lines-markdown' : ''}`}
-						>
-							<div class="paper-sheet__question-main">
-								<div class={`paper-sheet__question-number ${resolvedFeedback ? 'is-resolved' : ''}`}>
-									{questionLabel}
-								</div>
-
-								<div class={`paper-sheet__question-marks ${resolvedFeedback ? 'is-resolved' : ''}`}>
-									[{question.marks}m]
-								</div>
-
-								<div class="paper-sheet__question-body">
-									{#if question.type === 'fill'}
-										{@const fillAnswers = getObjectAnswer(questionKey)}
-										{@const value0 = fillAnswers['0'] ?? ''}
-										{@const value1 = fillAnswers['1'] ?? ''}
-										{@const blank0 = getBlankConfig(question, 0)}
-										{@const blank1 = getBlankConfig(question, 1)}
-
-										<div class="paper-sheet__fill-row">
-											<MarkdownContent
-												inline
-												markdown={question.prompt}
-												class="paper-sheet__inline-markdown"
-											/>
-											<input
-												class="paper-sheet__inline-input"
-												style={buildTextInputStyle(reviewStatus, blank0?.minWidth ?? 100)}
-												value={value0}
-												oninput={(event) => {
-													updateFillAnswer(questionKey, 0, readInputValue(event));
-												}}
-												placeholder={resolveStudentInputPlaceholder(blank0?.placeholder)}
-												readonly={areInputsLocked()}
-											/>
-
-											{#if blank1}
-												<MarkdownContent
-													inline
-													markdown={question.conjunction ?? ''}
-													class="paper-sheet__inline-markdown"
-												/>
-												<input
-													class="paper-sheet__inline-input"
-													style={buildTextInputStyle(reviewStatus, blank1.minWidth ?? 100)}
-													value={value1}
-													oninput={(event) => {
-														updateFillAnswer(questionKey, 1, readInputValue(event));
-													}}
-													placeholder={resolveStudentInputPlaceholder(blank1.placeholder)}
-													readonly={areInputsLocked()}
-												/>
-											{/if}
-
-											<MarkdownContent
-												inline
-												markdown={question.after}
-												class="paper-sheet__inline-markdown"
-											/>
-										</div>
-									{:else if question.type === 'cloze'}
-										{@const clozeAnswers = getObjectAnswer(questionKey)}
-
-										<div class="paper-sheet__cloze-row">
-											{#each question.segments as segment, segmentIndex (`${question.id}-segment-${segmentIndex}`)}
-												{#if segment.trim().length > 0}
-													<MarkdownContent
-														inline
-														markdown={segment}
-														class="paper-sheet__inline-markdown"
-													/>
-												{/if}
-												{#if segmentIndex < question.blanks.length}
-													{@const blank = question.blanks[segmentIndex]}
-													<input
-														class="paper-sheet__inline-input"
-														style={buildTextInputStyle(reviewStatus, blank?.minWidth ?? 100)}
-														value={clozeAnswers[String(segmentIndex)] ?? ''}
-														oninput={(event) => {
-															updateClozeAnswer(
-																questionKey,
-																segmentIndex,
-																readInputValue(event)
-															);
-														}}
-														placeholder={resolveStudentInputPlaceholder(blank?.placeholder)}
-														readonly={areInputsLocked()}
-													/>
-												{/if}
-											{/each}
-										</div>
-										{#if question.wordBank && question.wordBank.length > 0}
-											<div class="paper-sheet__word-bank" aria-label="Word bank">
-												{#each question.wordBank as option, optionIndex (`${question.id}-word-${optionIndex}`)}
-													<span class="paper-sheet__word-bank-chip">
-														<MarkdownContent inline markdown={option} />
-													</span>
-												{/each}
-											</div>
-										{/if}
-									{:else if question.type === 'mcq'}
-										{@const selected = getTextAnswer(questionKey)}
-
-										<MarkdownContent markdown={question.prompt} class="paper-sheet__prompt" />
-										<div class="paper-sheet__mcq-grid">
-											{#each question.options as option, optionIndex (`${question.id}-option-${optionIndex}`)}
-												{@const selectedOption = selected === option}
-
-												<button
-													type="button"
-													class={`paper-sheet__mcq-option ${selectedOption ? 'is-selected' : ''}`}
-													style={buildMcqOptionStyle(selectedOption, reviewStatus)}
-													disabled={areInputsLocked()}
-													onclick={() => {
-														updateTextAnswer(questionKey, option);
-													}}
-												>
-													<span
-														class="paper-sheet__mcq-radio"
-														style={buildMcqRadioStyle(selectedOption, reviewStatus)}
-													>
-														{#if selectedOption}
-															<span class="paper-sheet__mcq-radio-dot"></span>
-														{/if}
-													</span>
-													<MarkdownContent
-														inline
-														markdown={option}
-														class="paper-sheet__mcq-label"
-													/>
-												</button>
-											{/each}
-										</div>
-									{:else if question.type === 'lines'}
-										{@const textValue = getTextAnswer(questionKey)}
-
-										<MarkdownContent markdown={question.prompt} class="paper-sheet__prompt" />
-										{#if !showLinesMarkdown}
-											<textarea
-												class="paper-sheet__lines-input"
-												value={textValue}
-												rows={question.lines}
-												oninput={(event) => {
-													updateTextAnswer(questionKey, readInputValue(event));
-												}}
-												placeholder="Write your answer here..."
-												readonly={areInputsLocked()}
-											></textarea>
-										{/if}
-									{:else if question.type === 'calc'}
-										{@const calcValue = getTextAnswer(questionKey)}
-
-										<MarkdownContent markdown={question.prompt} class="paper-sheet__prompt" />
-										{#if question.hint}
-											<div class="paper-sheet__hint">
-												<MarkdownContent inline markdown={`Hint: ${question.hint}`} />
-											</div>
-										{/if}
-										<div class="paper-sheet__calc-row">
-											<MarkdownContent
-												inline
-												markdown={question.inputLabel}
-												class="paper-sheet__inline-markdown"
-											/>
-											<input
-												class="paper-sheet__inline-input paper-sheet__inline-input--compact"
-												style={buildTextInputStyle(reviewStatus)}
-												value={calcValue}
-												oninput={(event) => {
-													updateTextAnswer(questionKey, readInputValue(event));
-												}}
-												placeholder={resolveStudentInputPlaceholder('...')}
-												readonly={areInputsLocked()}
-											/>
-											{#if question.unit.trim().length > 0}
-												<MarkdownContent
-													inline
-													markdown={question.unit}
-													class="paper-sheet__inline-markdown"
-												/>
-											{/if}
-										</div>
-									{:else if question.type === 'match'}
-										{@const selections = getObjectAnswer(questionKey)}
-										{@const activeTerm = activeMatchTerms[questionKey] ?? null}
-										{@const takenMatches = Object.values(selections)}
-
-										<div class="paper-sheet__prompt paper-sheet__prompt--with-note">
-											<MarkdownContent inline markdown={question.prompt} />
-											<span class="paper-sheet__prompt-note"
-												>(Click a term, then click its meaning)</span
-											>
-										</div>
-
-										<div class="paper-sheet__match-grid">
-											<div class="paper-sheet__match-column">
-												{#each question.pairs as pair, pairIndex (`${question.id}-term-${pairIndex}`)}
-													{@const isActive = activeTerm === pair.term}
-													{@const hasMatch = Boolean(selections[pair.term])}
-
-													<button
-														type="button"
-														class="paper-sheet__match-button paper-sheet__match-button--term"
-														style={buildMatchTermStyle(isActive, hasMatch, reviewStatus)}
-														disabled={areInputsLocked()}
-														onclick={() => {
-															selectMatchTerm(questionKey, pair.term);
-														}}
-													>
-														<MarkdownContent
-															inline
-															markdown={pair.term}
-															class="paper-sheet__match-label"
-														/>
-													</button>
-												{/each}
-											</div>
-
-											<div class="paper-sheet__match-column">
-												{#each question.pairs as pair, pairIndex (`${question.id}-match-${pairIndex}`)}
-													{@const taken = takenMatches.includes(pair.match)}
-
-													<button
-														type="button"
-														class="paper-sheet__match-button"
-														style={buildMatchValueStyle(taken, Boolean(activeTerm))}
-														disabled={areInputsLocked() || !activeTerm}
-														onclick={() => {
-															assignMatch(questionKey, pair.match);
-														}}
-													>
-														<MarkdownContent
-															inline
-															markdown={pair.match}
-															class="paper-sheet__match-label"
-														/>
-													</button>
-												{/each}
-											</div>
-										</div>
-									{:else if question.type === 'spelling'}
-										{@const spellingAnswers = getObjectAnswer(questionKey)}
-
-										<MarkdownContent markdown={question.prompt} class="paper-sheet__prompt" />
-										<div class="paper-sheet__spelling-list">
-											{#each question.words as word, index (`${question.id}-${index}`)}
-												{@const spellingValue = spellingAnswers[String(index)] ?? ''}
-
-												<div class="paper-sheet__spelling-row">
-													<MarkdownContent
-														inline
-														markdown={word.wrong}
-														class="paper-sheet__spelling-wrong"
-													/>
-													<span class="paper-sheet__spelling-arrow">→</span>
-													<input
-														class="paper-sheet__inline-input paper-sheet__inline-input--wide"
-														style={buildTextInputStyle(reviewStatus, 140)}
-														value={spellingValue}
-														oninput={(event) => {
-															updateSpellingAnswer(questionKey, index, readInputValue(event));
-														}}
-														placeholder="correct spelling..."
-														readonly={areInputsLocked()}
-													/>
-												</div>
-											{/each}
-										</div>
-									{:else if question.type === 'flow'}
-										{@const flowAnswers = getObjectAnswer(questionKey)}
-
-										<MarkdownContent markdown={question.prompt} class="paper-sheet__prompt" />
-										<div class="paper-sheet__flow-chart">
-											{#each question.rows as row, rowIndex (`${question.id}-row-${rowIndex}`)}
-												<div class={`paper-sheet__flow-row ${row.direction === 'rtl' ? 'is-rtl' : ''}`}>
-													{#each row.items as item, itemIndex (`${question.id}-row-${rowIndex}-${itemIndex}`)}
-														{#if isFlowRowItemBox(item)}
-															{@const box = getFlowBox(question, item.boxId)}
-															{#if box}
-																{#if typeof box.initialValue === 'string' || box.readonly === true}
-																	<div
-																		class={`paper-sheet__flow-box ${typeof box.initialValue === 'string' ? 'is-fixed' : ''}`}
-																		style={`min-width:${box.minWidth ?? 74}px;`}
-																	>
-																		{getFlowBoxValue(questionKey, box)}
-																	</div>
-																{:else}
-																	<input
-																		class="paper-sheet__flow-box paper-sheet__flow-box-input"
-																		style={`min-width:${box.minWidth ?? 74}px;`}
-																		value={flowAnswers[box.id] ?? ''}
-																		oninput={(event) => {
-																			updateFlowAnswer(questionKey, box.id, readInputValue(event));
-																		}}
-																		placeholder={resolveStudentInputPlaceholder(box.placeholder)}
-																		readonly={isFlowBoxLocked(box)}
-																	/>
-																{/if}
-															{/if}
-														{:else}
-															<div class="paper-sheet__flow-operation">
-																<span class="paper-sheet__flow-arrow">{resolveFlowRowArrow(row.direction)}</span>
-																<MarkdownContent
-																	inline
-																	markdown={item.label}
-																	class="paper-sheet__flow-operation-label"
-																/>
-															</div>
-														{/if}
-													{/each}
-												</div>
-												{#if question.connectors && question.connectors.length > 0 && rowIndex < question.rows.length - 1}
-													<div class="paper-sheet__flow-connectors">
-														{#each question.connectors as connector, connectorIndex (`${question.id}-connector-${connectorIndex}`)}
-															<div class="paper-sheet__flow-connector">
-																<span class="paper-sheet__flow-arrow">
-																	{resolveFlowConnectorArrow(connector.direction)}
-																</span>
-																{#if connector.label.trim().length > 0}
-																	<MarkdownContent
-																		inline
-																		markdown={connector.label}
-																		class="paper-sheet__flow-operation-label"
-																	/>
-																{/if}
-															</div>
-														{/each}
-													</div>
-												{/if}
-											{/each}
+					{#each section.questions ?? [] as entry (`${section.id}-${entry.id}`)}
+						{#if isPaperSheetQuestionGroup(entry)}
+							<div class="paper-sheet__question-group">
+								<div class="paper-sheet__question-group-main">
+									{#if entry.displayNumber}
+										<div class="paper-sheet__question-number paper-sheet__question-number--group">
+											{entry.displayNumber}
 										</div>
 									{/if}
+									<div class="paper-sheet__question-group-body">
+										<MarkdownContent markdown={entry.prompt} class="paper-sheet__group-prompt" />
+									</div>
+								</div>
+
+								<div class="paper-sheet__question-group-children">
+									{#each entry.questions as question (`${entry.id}-${question.id}`)}
+										{@render renderQuestionRow({ sectionId: section.id, question, nested: true })}
+									{/each}
 								</div>
 							</div>
-
-							{#if showLinesMarkdown}
-								{@const answerMarkdown = getTextAnswer(questionKey)}
-								{@const hasAnswerMarkdown = answerMarkdown.trim().length > 0}
-								<div class="paper-sheet__lines-markdown">
-									{#if hasAnswerMarkdown}
-										<div class="paper-sheet__answer-markdown">
-											<MarkdownContent markdown={answerMarkdown} />
-										</div>
-									{:else}
-										<p class="paper-sheet__answer-placeholder">
-											No answer found in the submission.
-										</p>
-									{/if}
-								</div>
-							{/if}
-
-							{#if showQuestionFeedback}
-								<div class="paper-sheet__question-feedback">
-									<PaperSheetQuestionFeedback
-										review={questionReview}
-										questionLabel={`question ${questionLabel}`}
-										open={isFeedbackCardOpen(questionKey)}
-										draft={getFeedbackDraft(questionKey)}
-										thread={feedbackThread}
-										processing={isFeedbackSending(questionKey)}
-										runtimeStatus={getFeedbackRuntimeStatus(questionKey)}
-										thinkingText={getFeedbackThinking(questionKey)}
-										assistantDraftText={getFeedbackAssistantDraft(questionKey)}
-										showComposer={
-											feedbackRepliesEnabled &&
-											(!resolvedFeedback || isFollowUpComposerOpen(questionKey))
-										}
-										showFollowUpButton={
-											feedbackRepliesEnabled &&
-											resolvedFeedback &&
-											!isFollowUpComposerOpen(questionKey)
-										}
-										resolvedFollowUpMode={isFollowUpComposerOpen(questionKey)}
-										onToggle={() => {
-											toggleFeedbackCard(questionKey);
-										}}
-										onRequestFollowUp={() => {
-											requestResolvedFollowUp(questionKey);
-										}}
-										draftAttachments={getFeedbackDraftAttachments(questionKey)}
-										draftAttachmentError={getFeedbackAttachmentError(questionKey)}
-										allowAttachments={feedbackRepliesEnabled}
-										allowTakePhoto={false}
-										onAttachFiles={(files) => {
-											void addFeedbackDraftAttachments(questionKey, files);
-										}}
-										onRemoveDraftAttachment={(localId) => {
-											removeFeedbackDraftAttachment(questionKey, localId);
-										}}
-										onDraftChange={(value) => {
-											updateFeedbackDraft(questionKey, value);
-										}}
-										onReply={(value) => {
-											void replyToTutor(questionKey, questionReview, value);
-										}}
-									/>
-								</div>
-							{/if}
-						</div>
+						{:else}
+							{@render renderQuestionRow({ sectionId: section.id, question: entry })}
+						{/if}
 					{/each}
 				</div>
 			</section>
@@ -2113,6 +2107,46 @@
 		padding: 16px 18px;
 	}
 
+	.paper-sheet__question-group {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		padding: 14px 0;
+		border-bottom: 1px dashed var(--paper-divider);
+	}
+
+	.paper-sheet__question-group:last-child {
+		border-bottom: 0;
+	}
+
+	.paper-sheet__question-group-main {
+		display: grid;
+		grid-template-columns: var(--paper-question-number-column) minmax(0, 1fr);
+		column-gap: 12px;
+		align-items: start;
+	}
+
+	.paper-sheet__question-number--group {
+		margin-top: 2px;
+	}
+
+	.paper-sheet__question-group-body {
+		min-width: 0;
+	}
+
+	.paper-sheet__group-prompt {
+		margin: 0;
+		font-size: var(--paper-reading-size);
+		line-height: var(--paper-reading-line-height);
+	}
+
+	.paper-sheet__question-group-children {
+		display: flex;
+		flex-direction: column;
+		padding-left: 14px;
+		border-left: 2px solid var(--paper-border-soft);
+	}
+
 	.paper-sheet__theory {
 		margin-bottom: 14px;
 		border-left: 3px solid var(--paper-accent-text);
@@ -2169,6 +2203,10 @@
 
 	.paper-sheet__question:last-child {
 		border-bottom: 0;
+	}
+
+	.paper-sheet__question.is-nested:last-child {
+		padding-bottom: 0;
 	}
 
 	.paper-sheet__question-main {
@@ -2715,7 +2753,17 @@
 			display: block;
 		}
 
+		.paper-sheet__question-group-main {
+			display: block;
+		}
+
 		.paper-sheet__question-main::after {
+			content: '';
+			display: block;
+			clear: both;
+		}
+
+		.paper-sheet__question-group-main::after {
 			content: '';
 			display: block;
 			clear: both;
@@ -2741,6 +2789,10 @@
 		.paper-sheet__question-body {
 			display: block;
 			min-width: 0;
+		}
+
+		.paper-sheet__question-group-children {
+			padding-left: 10px;
 		}
 
 		.paper-sheet__mcq-grid,

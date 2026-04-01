@@ -9,6 +9,7 @@ export type SheetCatalogPreviewKind =
 	| 'info-box'
 	| 'footer'
 	| 'fill'
+	| 'group'
 	| 'mcq'
 	| 'lines'
 	| 'calc'
@@ -57,7 +58,8 @@ export const sheetCatalogCategories: SheetCatalogCategory[] = [
 		id: 'inputs',
 		label: 'Inputs',
 		title: 'Supported problem input types',
-		description: 'Every question variant currently modeled in the shared paper-sheet schema.'
+		description:
+			'Every question variant and grouped multipart block currently modeled in the shared paper-sheet schema.'
 	},
 	{
 		id: 'outputs',
@@ -157,7 +159,7 @@ export const sheetCatalogItems: SheetCatalogItem[] = [
 		kindLabel: 'Section type',
 		title: 'Content section shell',
 		description:
-			'Collapsible section scaffold with label, derived mark total, optional theory, optional info box, and question list.',
+			'Collapsible section scaffold with label, derived mark total, optional theory, optional info box, and question or multipart-group list.',
 		requiredInputs: ['section.id', 'section.label'],
 		optionalInputs: ['section.theory', 'section.infoBox', 'section.questions[]'],
 		previewKind: 'content-section'
@@ -195,6 +197,24 @@ export const sheetCatalogItems: SheetCatalogItem[] = [
 		requiredInputs: ['sheet.level', 'sheet.subject', 'sheet.title'],
 		optionalInputs: ['showFooter = true'],
 		previewKind: 'footer'
+	},
+	{
+		id: 'group-question',
+		categoryId: 'inputs',
+		component: 'PaperSheet',
+		kindLabel: 'Question type',
+		title: 'Grouped multipart question',
+		description:
+			'Shared numbered stem for a source question that carries common text, a table, or a diagram before answer-bearing subparts such as 10(a) and 10(b).',
+		requiredInputs: [
+			'entry.id',
+			'entry.type = "group"',
+			'entry.displayNumber',
+			'entry.prompt',
+			'entry.questions[]'
+		],
+		note: 'Use this when the source prints one numbered question with shared context and multiple subparts. Keep source-faithful labels in `displayNumber`, and provide `badgeLabel` for compact subpart circles when needed. Do not hoist shared context into section theory.',
+		previewKind: 'group'
 	},
 	{
 		id: 'fill-question',

@@ -1,4 +1,5 @@
 import {
+	visitPaperSheetQuestions,
 	PaperSheetAnswersSchema,
 	PaperSheetDataSchema,
 	SparkGraderWorksheetReportSchema,
@@ -76,14 +77,14 @@ export function listWorksheetQuestionEntries(sheet: SparkGraderWorksheetReport['
 		if (!('id' in section)) {
 			continue;
 		}
-		for (const question of section.questions ?? []) {
+		visitPaperSheetQuestions(section.questions, (question) => {
 			entries.push({
 				section,
 				question,
 				number
 			});
 			number += 1;
-		}
+		});
 	}
 
 	return entries;

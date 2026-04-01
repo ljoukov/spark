@@ -16,6 +16,7 @@ Requirements:
    - build a concise worksheet grounded only in those uploads;
    - keep the topic coverage and difficulty faithful to the source.
 4. Use only the supported worksheet question shapes:
+   - `group`
    - `fill`
    - `cloze`
    - `mcq`
@@ -26,15 +27,18 @@ Requirements:
    - `flow`
 5. Use Markdown for prompt text, theory text, hint text, and tables. Use LaTeX for maths expressions.
 6. If a source question has subparts, keep the original numbering visible through `displayNumber` such as `9(a)` or `10(b)`.
-7. Every printed question or subpart visible in the source must become a question object in the matching section. Do not leave a titled section empty when the source page contains questions there.
-8. For `flow` questions:
+   - When a question should show a shorter circular badge than its full source label, also set `badgeLabel`.
+   - Example: use `displayNumber: "10(a)"` together with `badgeLabel: "a"`.
+7. If one numbered source question carries shared context such as a stem, table, diagram, or “use the table below” instruction before subparts, encode that numbered parent as a `group` entry and place the shared Markdown/table in `group.prompt`. Do not move shared question context into `section.theory`.
+8. Every printed question or subpart visible in the source must become a question object in the matching section. Do not leave a titled section empty when the source page contains questions there.
+9. For `flow` questions:
    - keep the printed box/arrow sequence faithful to the source;
    - store each editable box under a stable box id;
    - use `initialValue` for any fixed box that is already given in the source.
    - list each `rows[].items` array in the same left-to-right visual order the student sees on the page.
    - use `direction: "rtl"` only when the arrows point right-to-left; do not reverse the item order in the JSON.
    - when a top row drops into a lower row, use `connectors` to link the relevant box ids vertically.
-9. Write `sheet/output/draft.json` with this shape:
+10. Write `sheet/output/draft.json` with this shape:
 
 ```json
 {
@@ -82,7 +86,43 @@ The `sheet.sections` array must use the paper-sheet structure directly:
 
 Question shape quick reference:
 
+- `group`
+
+```json
+{
+  "id": "q10",
+  "type": "group",
+  "displayNumber": "10",
+  "prompt": "For Question 10, use the table below.\n\n| Duration of deposit | Before | After |\n| --- | ---: | ---: |\n| 2 years | 4.14% | 3.06% |",
+  "questions": [
+    {
+      "id": "q10a",
+      "type": "fill",
+      "displayNumber": "10(a)",
+      "badgeLabel": "a",
+      "marks": 1,
+      "prompt": "The difference is £",
+      "blanks": [{}],
+      "after": "."
+    },
+    {
+      "id": "q10b",
+      "type": "lines",
+      "displayNumber": "10(b)",
+      "badgeLabel": "b",
+      "marks": 1,
+      "prompt": "Explain which option earns more interest.",
+      "lines": 4
+    }
+  ]
+}
+```
+
+Use `group` when the source prints one numbered question with shared context and multiple answer-bearing subparts. The child `questions[]` hold the real answer boxes and marks.
+- Use `badgeLabel` only for display chrome such as compact subpart circles. Keep `displayNumber` source-faithful.
+
 - Never invent placeholder copy for blanks or empty boxes. Leave `placeholder` omitted unless the source itself prints placeholder text.
+- If the printed source shows a short numeric answer line such as `Answer ____ £`, prefer `calc` (or `fill` when the answer sits inline in a sentence) instead of `lines`.
 
 - `fill`
 
@@ -224,7 +264,7 @@ Question shape quick reference:
 
 Use these exact field names. Do not invent alternate keys such as `promptMarkdown`, `items`, `kind`, `choices`, or `questionNumber`.
 
-10. Write `sheet/output/run-summary.json` with this shape:
+11. Write `sheet/output/run-summary.json` with this shape:
 
 ```json
 {
@@ -239,11 +279,11 @@ Use these exact field names. Do not invent alternate keys such as `promptMarkdow
 }
 ```
 
-11. `presentation.title` and `presentation.summaryMarkdown` must stay student-facing and must not mention IDs, file paths, tools, or internal process notes.
-12. Do not try to infer the schema from logs or unrelated files. The contract above is the one to follow.
-13. After both files exist, call `publish_sheet_draft({})`.
-14. Do not call `done` before `publish_sheet_draft` succeeds.
-15. Recommended workflow:
+12. `presentation.title` and `presentation.summaryMarkdown` must stay student-facing and must not mention IDs, file paths, tools, or internal process notes.
+13. Do not try to infer the schema from logs or unrelated files. The contract above is the one to follow.
+14. After both files exist, call `publish_sheet_draft({})`.
+15. Do not call `done` before `publish_sheet_draft` succeeds.
+16. Recommended workflow:
    - first run one `extract_text` call that covers every uploaded document;
    - if the upload is already a worksheet / exam page, always run `pdf_to_images` and inspect every relevant page image (or crop) with `view_image` before drafting;
    - if the upload is not already a worksheet but layout still matters, inspect the relevant page images with `view_image`;

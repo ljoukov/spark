@@ -37,11 +37,30 @@ const worksheetReportJson = JSON.stringify({
 						options: ['3', '4']
 					},
 					{
-						id: 'q2',
-						type: 'lines',
-						marks: 2,
-						prompt: 'Explain why your answer is correct.',
-						lines: 3
+						id: 'q2-group',
+						type: 'group',
+						displayNumber: '2',
+						prompt:
+							'For Question 2, use the table below.\n\n| Option | Value |\n| --- | ---: |\n| A | 3 |\n| B | 4 |',
+						questions: [
+							{
+								id: 'q2',
+								type: 'fill',
+								displayNumber: '2(a)',
+								marks: 1,
+								prompt: 'The correct option is',
+								blanks: [{}],
+								after: '.'
+							},
+							{
+								id: 'q3',
+								type: 'lines',
+								displayNumber: '2(b)',
+								marks: 2,
+								prompt: 'Explain why your answer is correct.',
+								lines: 3
+							}
+						]
 					}
 				]
 			}
@@ -49,14 +68,17 @@ const worksheetReportJson = JSON.stringify({
 	},
 	answers: {
 		q1: '4',
-		q2: 'I added 2 and 2.'
+		q2: {
+			'0': 'B'
+		},
+		q3: 'I added 2 and 2.'
 	},
 	review: {
 		score: {
 			got: 2,
-			total: 3
+			total: 4
 		},
-		label: '2/3 correct',
+		label: '2/4 correct',
 		message: 'Solid start.',
 		note: 'Review the explanation question.',
 		questions: {
@@ -65,6 +87,10 @@ const worksheetReportJson = JSON.stringify({
 				note: 'Correct answer.'
 			},
 			q2: {
+				status: 'correct',
+				note: 'Correct option.'
+			},
+			q3: {
 				status: 'teacher-review',
 				note: 'Add the missing reasoning step.'
 			}
@@ -77,9 +103,9 @@ describe('problem worksheet report parsing', () => {
 		const report = parseGraderWorksheetReport(worksheetReportJson);
 		const entries = listWorksheetQuestionEntries(report.sheet);
 
-		expect(entries.map((entry) => entry.number)).toEqual([1, 2]);
-		expect(entries.map((entry) => entry.question.id)).toEqual(['q1', 'q2']);
-		expect(findWorksheetQuestionEntry(report.sheet, 'q2')?.section.label).toBe('Section A');
+		expect(entries.map((entry) => entry.number)).toEqual([1, 2, 3]);
+		expect(entries.map((entry) => entry.question.id)).toEqual(['q1', 'q2', 'q3']);
+		expect(findWorksheetQuestionEntry(report.sheet, 'q3')?.section.label).toBe('Section A');
 	});
 
 	it('does not accept the old markdown-style problem artifact', () => {
