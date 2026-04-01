@@ -1,7 +1,6 @@
 <script lang="ts">
 	import type { HTMLTextareaAttributes } from 'svelte/elements';
-
-	type ChatInputVariant = 'default' | 'chat';
+	import { resolveChatInputExpansionState, type ChatInputVariant } from './chat-input';
 
 	type SubmitMode = 'modEnter' | 'enter';
 
@@ -42,7 +41,7 @@
 	}: Props = $props();
 
 	let textareaEl = $state<HTMLTextAreaElement | null>(null);
-	let hasExpanded = $state(false);
+	let stickyExpanded = $state(false);
 
 	function resolveBaseClass(currentVariant: ChatInputVariant): string {
 		if (currentVariant === 'chat') {
@@ -89,13 +88,15 @@
 		const lineHeight = Number.parseFloat(style.lineHeight) || 20;
 		const paddingTop = Number.parseFloat(style.paddingTop) || 0;
 		const paddingBottom = Number.parseFloat(style.paddingBottom) || 0;
-		const hasValue = value.length > 0;
-		const wantsExtraLine = variant === 'chat' && value.includes('\n');
 		const singleHeight = lineHeight + paddingTop + paddingBottom;
 		const hasVisualOverflow = textareaEl.scrollHeight > singleHeight + 1;
-		hasExpanded = hasValue && (wantsExtraLine || hasVisualOverflow);
-		const isExpanded = hasValue && (hasExpanded || wantsExtraLine);
-		const baseMinLines = wantsExtraLine ? 3 : hasExpanded ? 2 : 1;
+		const { isExpanded, nextStickyExpanded, baseMinLines } = resolveChatInputExpansionState({
+			value,
+			variant,
+			stickyExpanded,
+			hasVisualOverflow
+		});
+		stickyExpanded = nextStickyExpanded;
 		const minLines = Math.min(maxLines, baseMinLines);
 		const minHeight = lineHeight * minLines + paddingTop + paddingBottom;
 		const maxHeight = lineHeight * maxLines + paddingTop + paddingBottom;

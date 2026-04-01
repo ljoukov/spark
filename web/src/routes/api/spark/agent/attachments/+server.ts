@@ -4,15 +4,16 @@ import { getFirestoreDocument, patchFirestoreDocument } from '$lib/server/gcp/fi
 import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken';
 import { downloadStorageObject, uploadStorageObject } from '$lib/server/gcp/storageRest';
 import { detectSparkAttachmentContentType } from '$lib/server/spark/attachmentContentType';
+import {
+	SPARK_CHAT_ATTACHMENT_MAX_FILE_SIZE_BYTES,
+	SPARK_CHAT_ATTACHMENT_MAX_FILES_PER_CONVERSATION,
+	SPARK_CHAT_ATTACHMENT_MAX_TOTAL_SIZE_BYTES
+} from '$lib/spark/chatAttachmentLimits';
 import { SPARK_ATTACHMENT_UNSUPPORTED_MESSAGE } from '$lib/spark/attachments';
 import { SparkAgentAttachmentSchema, type SparkAgentAttachment } from '@spark/schemas';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { env } from '$env/dynamic/private';
-
-const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
-const MAX_TOTAL_SIZE_BYTES = 50 * 1024 * 1024;
-const MAX_FILES_PER_CONVERSATION = 10;
 
 const conversationIdSchema = z.string().trim().min(1, 'conversationId is required');
 const removeSchema = z.object({
@@ -182,9 +183,9 @@ export const GET: RequestHandler = async ({ request, url }) => {
 	if (bytes.length === 0) {
 		return json({ error: 'download_failed', message: 'Attachment is empty.' }, { status: 502 });
 	}
-	if (bytes.length > MAX_FILE_SIZE_BYTES) {
+	if (bytes.length > SPARK_CHAT_ATTACHMENT_MAX_FILE_SIZE_BYTES) {
 		return json(
-			{ error: 'file_too_large', message: 'Attachment exceeds 25 MB limit.' },
+			{ error: 'file_too_large', message: 'Attachment exceeds 50 MB limit.' },
 			{ status: 413 }
 		);
 	}
@@ -262,16 +263,23 @@ export const POST: RequestHandler = async ({ request }) => {
 		});
 		return json({ error: 'missing_file', message: 'No file provided' }, { status: 400 });
 	}
-	if (typeof fileEntry.size === 'number' && fileEntry.size > MAX_FILE_SIZE_BYTES) {
+	if (
+		typeof fileEntry.size === 'number' &&
+		fileEntry.size > SPARK_CHAT_ATTACHMENT_MAX_FILE_SIZE_BYTES
+	) {
 		logAttachmentPostReject({
 			userId,
 			conversationId,
 			code: 'file_too_large',
 			status: 413,
-			message: 'File exceeds 25 MB limit',
-			details: { sizeBytes: fileEntry.size, maxBytes: MAX_FILE_SIZE_BYTES, filename: fileEntry.name }
+			message: 'File exceeds 50 MB limit',
+			details: {
+				sizeBytes: fileEntry.size,
+				maxBytes: SPARK_CHAT_ATTACHMENT_MAX_FILE_SIZE_BYTES,
+				filename: fileEntry.name
+			}
 		});
-		return json({ error: 'file_too_large', message: 'File exceeds 25 MB limit' }, { status: 413 });
+		return json({ error: 'file_too_large', message: 'File exceeds 50 MB limit' }, { status: 413 });
 	}
 
 	let buffer: Uint8Array;
@@ -294,16 +302,20 @@ export const POST: RequestHandler = async ({ request }) => {
 		});
 		return json({ error: 'empty_file', message: 'File is empty' }, { status: 400 });
 	}
-	if (sizeBytes > MAX_FILE_SIZE_BYTES) {
+	if (sizeBytes > SPARK_CHAT_ATTACHMENT_MAX_FILE_SIZE_BYTES) {
 		logAttachmentPostReject({
 			userId,
 			conversationId,
 			code: 'file_too_large',
 			status: 413,
-			message: 'File exceeds 25 MB limit after reading bytes',
-			details: { sizeBytes, maxBytes: MAX_FILE_SIZE_BYTES, filename: fileEntry.name }
+			message: 'File exceeds 50 MB limit after reading bytes',
+			details: {
+				sizeBytes,
+				maxBytes: SPARK_CHAT_ATTACHMENT_MAX_FILE_SIZE_BYTES,
+				filename: fileEntry.name
+			}
 		});
-		return json({ error: 'file_too_large', message: 'File exceeds 25 MB limit' }, { status: 413 });
+		return json({ error: 'file_too_large', message: 'File exceeds 50 MB limit' }, { status: 413 });
 	}
 
 	const contentType = detectSparkAttachmentContentType({
@@ -348,14 +360,14 @@ export const POST: RequestHandler = async ({ request }) => {
 		const existing = activeAttachments.find((entry) => entry.id === fileId);
 
 		if (!existing) {
-			if (activeAttachments.length >= MAX_FILES_PER_CONVERSATION) {
+			if (activeAttachments.length >= SPARK_CHAT_ATTACHMENT_MAX_FILES_PER_CONVERSATION) {
 				throw new AttachmentLimitError(
 					'too_many_files',
-					'You can attach up to 10 files per conversation.'
+					'You can attach up to 100 files per conversation.'
 				);
 			}
 			const totalSize = activeAttachments.reduce((sum, entry) => sum + entry.sizeBytes, 0);
-			if (totalSize + sizeBytes > MAX_TOTAL_SIZE_BYTES) {
+			if (totalSize + sizeBytes > SPARK_CHAT_ATTACHMENT_MAX_TOTAL_SIZE_BYTES) {
 				throw new AttachmentLimitError(
 					'total_size_exceeded',
 					'Attachments are limited to 50 MB per conversation.',

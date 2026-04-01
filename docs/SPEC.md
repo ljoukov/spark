@@ -179,7 +179,7 @@ Recommended defaults:
 
 ## 2) Key Functional Requirements
 
-- Inputs: JPG/PNG/WEBP/GIF/HEIC/HEIF images plus PDF/TXT/Markdown/LaTeX documents. Max 25 MB per file (413 on server rejection), max 10 files per conversation, and 50 MB total per conversation (client + server enforced). Text is optional when attachments are present.
+- Inputs: JPG/PNG/WEBP/GIF/HEIC/HEIF images plus PDF/TXT/Markdown/LaTeX documents. Max 50 MB per file (413 on server rejection), max 100 files per conversation, and 50 MB total per conversation (client + server enforced). Text is optional when attachments are present.
 - Metadata: `programme = gcse_triple_science`, optional `subject`, `board`, `topic`, `subtopic`. Server enriches or corrects metadata when confident; clients treat board/subject as optional choices.
 - Generation modes:
   - **Extraction mode** when source already contains Q&A pairs — preserve wording verbatim.

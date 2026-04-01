@@ -48,6 +48,7 @@ import {
 	resolveSparkAttachmentExtension,
 	resolveSparkAttachmentExtensionForContentType
 } from '$lib/spark/attachments';
+import { SPARK_CHAT_ATTACHMENT_MAX_FILE_SIZE_BYTES } from '$lib/spark/chatAttachmentLimits';
 import { env } from '$env/dynamic/private';
 import { deriveLessonStatus, countCompletedSteps } from '$lib/server/lessons/status';
 import {
@@ -93,7 +94,6 @@ const GENERATION_MAX_ATTEMPTS = 3;
 const GENERATION_RETRY_BASE_DELAY_MS = 800;
 const GENERATION_RETRY_MAX_DELAY_MS = 4_000;
 const ATTACHMENT_DOWNLOAD_TIMEOUT_MS = 10_000;
-const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 const FALLBACK_RESPONSE = [
 	'Here is a quick 3-day GCSE Biology sprint you can follow:',
 	'',
@@ -739,8 +739,8 @@ async function downloadAttachmentParts(
 		if (bytes.length === 0) {
 			throw new Error(`Attachment ${attachment.id} is empty`);
 		}
-			if (bytes.length > MAX_ATTACHMENT_BYTES) {
-				throw new Error(`Attachment ${attachment.id} exceeds 25 MB limit`);
+			if (bytes.length > SPARK_CHAT_ATTACHMENT_MAX_FILE_SIZE_BYTES) {
+				throw new Error(`Attachment ${attachment.id} exceeds 50 MB limit`);
 			}
 			if (isSparkDocumentAttachmentMimeType(normalizedMimeType)) {
 				const filename = resolveAttachmentPromptFilename({

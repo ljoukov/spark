@@ -25,6 +25,11 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import { streamSse } from '$lib/client/sse';
 	import {
+		SPARK_CHAT_ATTACHMENT_MAX_FILE_SIZE_BYTES,
+		SPARK_CHAT_ATTACHMENT_MAX_FILES_PER_CONVERSATION,
+		SPARK_CHAT_ATTACHMENT_MAX_TOTAL_SIZE_BYTES
+	} from '$lib/spark/chatAttachmentLimits';
+	import {
 		SPARK_ATTACHMENT_FILE_INPUT_ACCEPT,
 		SPARK_ATTACHMENT_UNSUPPORTED_MESSAGE,
 		isSparkImageAttachmentMimeType,
@@ -67,9 +72,6 @@
 	};
 	type ChatStreamPhase = 'idle' | 'connecting' | 'sending' | 'thinking' | 'responding';
 
-	const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
-	const MAX_TOTAL_SIZE_BYTES = 50 * 1024 * 1024;
-	const MAX_FILES_PER_CONVERSATION = 10;
 	const MAX_INLINE_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 	const TARGET_IMAGE_ATTACHMENT_BYTES = Math.floor(MAX_INLINE_ATTACHMENT_BYTES * 0.9);
 	const MAX_IMAGE_NORMALIZATION_ATTEMPTS = 10;
@@ -1015,8 +1017,8 @@
 
 	const ATTACHMENT_ERROR_REASON_BY_CODE: Record<string, string> = {
 		unsupported_file: SPARK_ATTACHMENT_UNSUPPORTED_MESSAGE,
-		file_too_large: 'This file is too large. Max size is 25 MB.',
-		too_many_files: 'You can attach up to 10 files per conversation.',
+		file_too_large: 'This file is too large. Max size is 50 MB.',
+		too_many_files: 'You can attach up to 100 files per conversation.',
 		total_size_exceeded: 'Attachments are limited to 50 MB per conversation.',
 		empty_file: 'The selected file is empty.',
 		missing_file: 'No file was received by the server.',
@@ -1355,15 +1357,15 @@
 				attachmentError = SPARK_ATTACHMENT_UNSUPPORTED_MESSAGE;
 				continue;
 			}
-			if (file.size > MAX_FILE_SIZE_BYTES) {
-				attachmentError = 'Each file must be 25 MB or smaller.';
+			if (file.size > SPARK_CHAT_ATTACHMENT_MAX_FILE_SIZE_BYTES) {
+				attachmentError = 'Each file must be 50 MB or smaller.';
 				continue;
 			}
-			if (count >= MAX_FILES_PER_CONVERSATION) {
-				attachmentError = 'You can attach up to 10 files per conversation.';
+			if (count >= SPARK_CHAT_ATTACHMENT_MAX_FILES_PER_CONVERSATION) {
+				attachmentError = 'You can attach up to 100 files per conversation.';
 				break;
 			}
-			if (sizeBytes + file.size > MAX_TOTAL_SIZE_BYTES) {
+			if (sizeBytes + file.size > SPARK_CHAT_ATTACHMENT_MAX_TOTAL_SIZE_BYTES) {
 				attachmentError = 'Attachments are limited to 50 MB per conversation.';
 				continue;
 			}
