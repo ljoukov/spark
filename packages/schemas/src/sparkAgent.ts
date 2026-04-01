@@ -21,6 +21,12 @@ export const SparkAgentAuthorSchema = z.object({
 
 export type SparkAgentAuthor = z.infer<typeof SparkAgentAuthorSchema>;
 
+export const SparkAgentMessageStatusSchema = z.enum(["ok", "error"]);
+
+export type SparkAgentMessageStatus = z.infer<
+  typeof SparkAgentMessageStatusSchema
+>;
+
 export const SparkAgentFileSchema = z.object({
   id: trimmedString.optional(),
   storagePath: trimmedString,
@@ -145,6 +151,7 @@ export type SparkAgentContentPart = z.infer<typeof SparkAgentContentPartSchema>;
 export const SparkAgentMessageSchema = z.object({
   id: trimmedString,
   role: SparkAgentRoleSchema,
+  status: SparkAgentMessageStatusSchema.optional(),
   author: SparkAgentAuthorSchema.optional(),
   createdAt: FirestoreTimestampSchema,
   content: z.array(SparkAgentContentPartSchema),
@@ -242,6 +249,7 @@ function normalizeSparkAgentMessage(
     record.createdAt,
     fallbackDate,
   );
+  const statusResult = SparkAgentMessageStatusSchema.safeParse(record.status);
   const { content, droppedContentParts } = normalizeSparkAgentContentParts(
     record.content,
   );
@@ -249,6 +257,7 @@ function normalizeSparkAgentMessage(
     message: {
       id,
       role: roleResult.data,
+      status: statusResult.success ? statusResult.data : undefined,
       author: normalizeSparkAgentAuthor(record.author),
       createdAt,
       content,

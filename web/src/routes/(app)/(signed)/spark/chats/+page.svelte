@@ -117,6 +117,10 @@
 		return '';
 	}
 
+	function isErrorMessage(message: SparkAgentMessage): boolean {
+		return message.role === 'assistant' && message.status === 'error';
+	}
+
 	function resolveConversationTitle(conversation: SparkAgentConversation): string {
 		for (const message of conversation.messages) {
 			if (message.role !== 'user') {
@@ -144,7 +148,7 @@
 			}
 			const text = extractMessageText(message);
 			if (text.length > 0) {
-				return text;
+				return isErrorMessage(message) ? `Error: ${text}` : text;
 			}
 		}
 		const attachmentCount = conversation.attachments?.length ?? 0;

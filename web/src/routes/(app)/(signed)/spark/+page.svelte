@@ -553,6 +553,10 @@
 		return base;
 	}
 
+	function isErrorMessage(message: SparkAgentMessage): boolean {
+		return message.role === 'assistant' && message.status === 'error';
+	}
+
 	function formatBytes(bytes: number): string {
 		if (!Number.isFinite(bytes) || bytes <= 0) {
 			return '0B';
@@ -1897,6 +1901,7 @@
 						{#each messages as message (message.id)}
 							{@const messageText = resolveMessageText(message)}
 							{@const thinkingText = streamingThoughtsByMessageId[message.id] ?? ''}
+							{@const isErrorState = isErrorMessage(message)}
 							{@const isActiveStreamMessage =
 								sending &&
 								message.role === 'assistant' &&
@@ -1906,11 +1911,15 @@
 							{@const messageAttachments = resolveMessageAttachments(message)}
 							{@const messageRunCards = resolveMessageRunCards(message)}
 							<div
-								class={`agent-message ${message.role === 'user' ? 'is-user' : 'is-agent'}`}
+								class={`agent-message ${message.role === 'user' ? 'is-user' : 'is-agent'} ${isErrorState ? 'is-error' : ''}`}
 								data-message-id={message.id}
 							>
 								<span class="sr-only">
-									{message.role === 'user' ? 'You' : 'Spark AI Agent'}
+									{message.role === 'user'
+										? 'You'
+										: isErrorState
+											? 'Spark AI Agent error'
+											: 'Spark AI Agent'}
 								</span>
 								{#if messageAttachments.length > 0}
 									<div
@@ -1951,7 +1960,15 @@
 									</div>
 								{/if}
 								{#if message.role === 'assistant'}
-									<div class="message-bubble">
+									<div class={`message-bubble ${isErrorState ? 'is-error' : ''}`}>
+										{#if isErrorState}
+											<div class="message-error-banner">
+												<span class="message-error-banner__label">Spark AI error</span>
+												<span class="message-error-banner__hint">
+													This response failed.
+												</span>
+											</div>
+										{/if}
 										{#if messageRunCards.length > 0}
 											<div class="message-run-cards">
 												{#each messageRunCards as runCard}
@@ -2461,10 +2478,37 @@
 		color: var(--text-primary, var(--foreground));
 	}
 
+	.message-bubble.is-error {
+		padding: 1rem 1.1rem;
+		border-radius: 1rem;
+		border: 1px solid rgba(239, 68, 68, 0.24);
+		background: rgba(239, 68, 68, 0.07);
+		color: rgba(127, 29, 29, 0.96);
+	}
+
 	.message-run-cards {
 		display: grid;
 		gap: 0.75rem;
 		margin-bottom: 0.8rem;
+	}
+
+	.message-error-banner {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.55rem;
+		margin-bottom: 0.9rem;
+		padding: 0.35rem 0.7rem;
+		border-radius: 999px;
+		background: rgba(127, 29, 29, 0.12);
+		color: rgba(127, 29, 29, 0.96);
+		font-size: 0.78rem;
+		font-weight: 700;
+		letter-spacing: 0.02em;
+	}
+
+	.message-error-banner__hint {
+		font-weight: 500;
+		opacity: 0.82;
 	}
 
 	.message-markdown {

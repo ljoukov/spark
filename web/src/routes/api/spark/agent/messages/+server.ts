@@ -593,6 +593,25 @@ function updateAssistantMessageText(
 	};
 }
 
+function updateAssistantMessageStatus(
+	conversation: ConversationDoc,
+	messageId: string,
+	status: SparkAgentMessage['status']
+): void {
+	const messageIndex = findMessageIndex(conversation, messageId);
+	if (messageIndex < 0) {
+		return;
+	}
+	const message = conversation.messages[messageIndex];
+	if (!message) {
+		return;
+	}
+	conversation.messages[messageIndex] = {
+		...message,
+		status
+	};
+}
+
 function upsertAssistantRunCard(
 	conversation: ConversationDoc,
 	messageId: string,
@@ -2511,6 +2530,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			});
 			const fallback = 'Sorry — Spark AI Agent could not respond just now. Please try again.';
 			assistantText = fallback;
+			updateAssistantMessageStatus(conversation, assistantMessageId, 'error');
 			await flushUpdate(true);
 			sendEvent?.({
 				event: 'error',

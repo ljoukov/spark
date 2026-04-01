@@ -268,6 +268,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 
 - Conversations live under `/{userId}/client/conversations/{conversationId}` (client-safe read path; server writes only).
 - Each conversation document stores an append-only `messages` array (OpenAI Response-style with `content[]` parts).
+- Assistant messages may carry optional `status = "error"` when the LLM/tool run failed after the user turn was accepted; `/spark` must render those turns as explicit error cards rather than ordinary assistant prose.
 - Assistant messages may include `agent_run` content parts for lesson/grader launches. These parts drive live chat cards that subscribe to the corresponding Firestore session/run document instead of exposing raw tool payloads in prose.
 - Conversation documents include `attachments[]` entries with `{ id, storagePath, contentType, filename?, sizeBytes, status, createdAt, updatedAt, messageId? }`, where status ∈ `uploading | attaching | attached | failed`.
 - Streaming writes to Firestore are throttled to at most one update every 500 ms; the SSE stream is used for immediate UI updates.
