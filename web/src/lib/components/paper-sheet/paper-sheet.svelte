@@ -1564,7 +1564,7 @@
 
 							<button
 								type="button"
-								class={`paper-sheet__mcq-option ${selectedOption ? 'is-selected' : ''}`}
+								class={`paper-sheet__mcq-option ${selectedOption ? 'is-selected' : ''} ${question.displayMode === 'labels_only' ? 'is-compact' : ''} ${option.label ? 'has-option-label' : ''}`}
 								style={buildMcqOptionStyle(selectedOption, reviewStatus)}
 								disabled={areInputsLocked()}
 								onclick={() => {
@@ -1584,14 +1584,12 @@
 										{option.label ?? option.id}
 									</span>
 								{:else}
-									<div class="paper-sheet__mcq-option-copy">
-										{#if option.label}
-											<span class="paper-sheet__mcq-option-prefix">
-												{formatMcqOptionLabel(option)}
-											</span>
-										{/if}
-										<MarkdownContent inline markdown={option.text} class="paper-sheet__mcq-label" />
-									</div>
+									{#if option.label}
+										<span class="paper-sheet__mcq-option-label-column">
+											{formatMcqOptionLabel(option)}
+										</span>
+									{/if}
+									<MarkdownContent inline markdown={option.text} class="paper-sheet__mcq-option-text" />
 								{/if}
 							</button>
 						{/each}
@@ -2675,7 +2673,24 @@
 		white-space: nowrap;
 	}
 
-	.paper-sheet__mcq-option,
+	.paper-sheet__mcq-option {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr);
+		align-items: center;
+		column-gap: 10px;
+		row-gap: 6px;
+		border: 1.5px solid var(--paper-choice-border);
+		border-radius: 6px;
+		background: var(--paper-choice-surface);
+		padding: 8px 12px;
+		font-family: inherit;
+		font-size: var(--paper-reading-size);
+		text-align: left;
+		color: var(--paper-text);
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+
 	.paper-sheet__match-button {
 		display: flex;
 		align-items: center;
@@ -2690,16 +2705,12 @@
 		color: var(--paper-text);
 	}
 
-	.paper-sheet__mcq-option {
-		cursor: pointer;
-		transition: all 0.15s;
-	}
-
-	.paper-sheet__mcq-grid.is-full .paper-sheet__mcq-option {
-		align-items: flex-start;
+	.paper-sheet__mcq-grid.is-full .paper-sheet__mcq-option.has-option-label {
+		grid-template-columns: auto auto minmax(0, 1fr);
 	}
 
 	.paper-sheet__mcq-grid.is-compact .paper-sheet__mcq-option {
+		grid-template-columns: auto auto;
 		min-height: 72px;
 	}
 
@@ -2719,6 +2730,7 @@
 		flex-shrink: 0;
 		align-items: center;
 		justify-content: center;
+		align-self: center;
 		border: 2px solid var(--paper-radio-border);
 		border-radius: 999px;
 		background: var(--paper-lines-bg);
@@ -2738,14 +2750,20 @@
 
 	.paper-sheet__mcq-label--compact {
 		font-weight: 700;
+		align-self: center;
+		white-space: nowrap;
 	}
 
-	.paper-sheet__mcq-option-copy {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 6px;
+	.paper-sheet__mcq-option-label-column {
+		font-weight: 700;
+		white-space: nowrap;
+		align-self: center;
+	}
+
+	.paper-sheet__mcq-option-text {
+		display: block;
 		min-width: 0;
-		align-items: baseline;
+		align-self: center;
 	}
 
 	.paper-sheet__match-label {
