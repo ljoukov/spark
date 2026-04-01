@@ -65,7 +65,10 @@ import {
 	resolveForcedSparkChatToolForTurn,
 	shouldAskClarifyingQuestionForAttachmentTurn
 } from '$lib/server/agent/turnRouting';
-import { shouldUseGeminiForSparkChatAttachmentContext } from '$lib/server/agent/chatAttachmentModel';
+import {
+	assertSparkChatDocumentUploadConfig,
+	SPARK_CHAT_DOCUMENT_UPLOAD_CONFIG_ERROR
+} from '$lib/server/agent/chatAttachmentModel';
 import lessonTaskTemplate from '$lib/server/lessonAgent/task-template.md?raw';
 import lessonSchemaReadme from '$lib/server/lessonAgent/schema/README.md?raw';
 import lessonSessionSchemaJson from '$lib/server/lessonAgent/schema/session.schema.json?raw';
@@ -693,6 +696,18 @@ function canUseCanonicalFileUploads(): boolean {
 	return bucket.trim().length > 0;
 }
 
+function resolveSparkChatFailureMessage(error: unknown): string {
+	if (error instanceof Error) {
+		if (
+			error.message === SPARK_CHAT_DOCUMENT_UPLOAD_CONFIG_ERROR ||
+			error.message.startsWith('Spark chat document uploads ')
+		) {
+			return error.message;
+		}
+	}
+	return 'Sorry — Spark AI Agent could not respond just now. Please try again.';
+}
+
 async function downloadAttachmentParts(
 	options: { userId: string; bucketName: string; serviceAccountJson: string },
 	attachments: z.infer<typeof attachmentSchema>[]
@@ -700,6 +715,9 @@ async function downloadAttachmentParts(
 	if (attachments.length === 0) {
 		return [];
 	}
+	assertSparkChatDocumentUploadConfig(attachments, {
+		canUseCanonicalFileUploads: canUseCanonicalFileUploads()
+	});
 	const downloadTasks = attachments.map(async (attachment) => {
 		const normalizedMimeType = normalizeSparkAttachmentMimeType(attachment.contentType);
 		if (!normalizedMimeType || !isSupportedAttachmentMime(normalizedMimeType)) {
@@ -721,11 +739,10 @@ async function downloadAttachmentParts(
 		if (bytes.length === 0) {
 			throw new Error(`Attachment ${attachment.id} is empty`);
 		}
-		if (bytes.length > MAX_ATTACHMENT_BYTES) {
-			throw new Error(`Attachment ${attachment.id} exceeds 25 MB limit`);
-		}
-		if (isSparkDocumentAttachmentMimeType(normalizedMimeType)) {
-			if (canUseCanonicalFileUploads()) {
+			if (bytes.length > MAX_ATTACHMENT_BYTES) {
+				throw new Error(`Attachment ${attachment.id} exceeds 25 MB limit`);
+			}
+			if (isSparkDocumentAttachmentMimeType(normalizedMimeType)) {
 				const filename = resolveAttachmentPromptFilename({
 					...attachment,
 					contentType: normalizedMimeType
@@ -742,19 +759,16 @@ async function downloadAttachmentParts(
 						filename: stored.filename ?? filename
 					} satisfies LlmContentPart;
 				} catch (error) {
-					console.warn('Canonical document upload failed; falling back to inline attachment', {
+					console.error('Canonical document upload failed for Spark chat', {
 						attachmentId: attachment.id,
 						filename,
 						error: serializeErrorForLog(error)
 					});
+					throw new Error(
+						'Spark chat document uploads failed before reaching the model. Please try again later.'
+					);
 				}
 			}
-			return {
-				type: 'inlineData',
-				data: encodeBytesToBase64(bytes),
-				mimeType: normalizedMimeType
-			} satisfies LlmContentPart;
-		}
 		return {
 			type: 'inlineData',
 			data: encodeBytesToBase64(bytes),
@@ -2076,26 +2090,21 @@ async function generateAssistantResponse(
 		attachmentMessageId: options.messageId,
 		attachmentParts
 	});
-	const instructions =
-		forcedTool === null
-			? SYSTEM_PROMPT
-			: `${SYSTEM_PROMPT}\n\n${buildForcedSparkChatToolInstruction(forcedTool)}`;
-	const logWorkspace = resolveSparkChatLogWorkspace({
-		conversationId: options.conversationId,
-		messageId: options.messageId
-	});
-	const canUseFilesystemLogging = isNodeRuntime();
-	const modelId = shouldUseGeminiForSparkChatAttachmentContext(attachmentsForTools, {
-		canUseCanonicalFileUploads: canUseCanonicalFileUploads()
-	})
-		? 'gemini-2.5-pro'
-		: SPARK_CHAT_MODEL_ID;
-	try {
-		const result = await runSparkChatAgentLoop({
-			input,
-			modelId,
-			instructions,
-			tools,
+		const instructions =
+			forcedTool === null
+				? SYSTEM_PROMPT
+				: `${SYSTEM_PROMPT}\n\n${buildForcedSparkChatToolInstruction(forcedTool)}`;
+		const logWorkspace = resolveSparkChatLogWorkspace({
+			conversationId: options.conversationId,
+			messageId: options.messageId
+		});
+		const canUseFilesystemLogging = isNodeRuntime();
+		try {
+			const result = await runSparkChatAgentLoop({
+				input,
+				modelId: SPARK_CHAT_MODEL_ID,
+				instructions,
+				tools,
 			...(canUseFilesystemLogging
 				? {
 						logging: {
@@ -2516,7 +2525,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				messageId: assistantMessageId,
 				error: serializeErrorForLog(error)
 			});
-			const fallback = 'Sorry — Spark AI Agent could not respond just now. Please try again.';
+			const fallback = resolveSparkChatFailureMessage(error);
 			assistantText = fallback;
 			updateAssistantMessageStatus(conversation, assistantMessageId, 'error');
 			await flushUpdate(true);
