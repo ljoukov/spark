@@ -37,8 +37,12 @@ const worksheetReport: SparkGraderWorksheetReport = {
 						id: 'q1',
 						type: 'mcq',
 						marks: 1,
+						displayMode: 'full_options',
 						prompt: 'What is 2 + 2?',
-						options: ['3', '4']
+						options: [
+							{ id: 'A', label: 'A', text: '3' },
+							{ id: 'B', label: 'B', text: '4' }
+						]
 					},
 					{
 						id: 'q2',
@@ -52,7 +56,7 @@ const worksheetReport: SparkGraderWorksheetReport = {
 		]
 	},
 	answers: {
-		q1: '4',
+		q1: 'B',
 		q2: 'I added 2 and 2.'
 	},
 	review: {

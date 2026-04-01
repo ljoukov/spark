@@ -172,7 +172,8 @@ function formatQuestionShape(question: PaperSheetQuestion): string {
 			return [
 				'Question type: multiple choice.',
 				`Prompt: ${question.prompt}`,
-				`Options: ${question.options.join(' | ')}`
+				`Display mode: ${question.displayMode}`,
+				`Options: ${question.options.map((option) => `${option.label ? `(${option.label}) ` : ''}${option.text}`).join(' | ')}`
 			].join('\n');
 		case 'lines':
 			return [

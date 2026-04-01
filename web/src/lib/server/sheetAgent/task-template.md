@@ -150,6 +150,7 @@ Use `group` when the source prints one numbered question with shared context and
   "type": "answer_bank",
   "displayNumber": "1",
   "marks": 1,
+  "displayMode": "inline_labeled",
   "segments": [
     "£1000 is called ",
     ", the monthly interest rate is ",
@@ -168,6 +169,7 @@ Use `group` when the source prints one numbered question with shared context and
 ```
 
 Use `answer_bank` when the source prints visible blanks plus a fixed option bank such as `(A)` to `(D)` underneath. Keep the sentence structure in `segments[]`, keep each source label in `options[].label`, and use stable option ids for the student answer state. Do not flatten these into `cloze` with a passive word bank.
+Use `displayMode: "inline_labeled"` by default when the full labelled option such as `(A) principal amount` should appear inside each selector. Use `displayMode: "banked"` only when the source shows a separate visible answer bank that should remain on screen below the sentence or when the full labelled option text is too long to fit cleanly inside the selector.
 `segments[]` must read like normal prose around the interactive blanks. Do not include decorative `(____)` wrappers, underscore runs, or dangling `)` / `]` characters copied from the printed blank markers.
 
 - `cloze`
@@ -194,9 +196,17 @@ Use `cloze` for inline free-response blanks where the student should type short 
   "displayNumber": "3",
   "marks": 1,
   "prompt": "Choose the correct answer.",
-  "options": ["A", "B", "C", "D"]
+  "displayMode": "full_options",
+  "options": [
+    { "id": "A", "label": "A", "text": "First option" },
+    { "id": "B", "label": "B", "text": "Second option" },
+    { "id": "C", "label": "C", "text": "Third option" },
+    { "id": "D", "label": "D", "text": "Fourth option" }
+  ]
 }
 ```
+
+Use `displayMode: "full_options"` by default when the selectable cards themselves should show the full option text. Use `displayMode: "labels_only"` only when long source options should stay listed separately above compact label-only selectors.
 
 - `lines`
 

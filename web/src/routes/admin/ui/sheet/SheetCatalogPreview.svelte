@@ -139,6 +139,7 @@
 									type: 'answer_bank',
 									displayNumber: '1',
 									marks: 1,
+									displayMode: 'inline_labeled',
 									segments: [
 										'Mr Ling made a fixed deposit of £1000 for a period of one year. In this case, £1000 is called ',
 										', the monthly interest rate is ',
@@ -285,14 +286,20 @@
 									id: 'mcq-1',
 									type: 'mcq',
 									marks: 1,
+									displayMode: 'full_options',
 									prompt: 'What is iron combined with to make steel?',
-									options: ['Copper', 'Aluminium', 'Carbon', 'Zinc']
+									options: [
+										{ id: 'A', label: 'A', text: 'Copper' },
+										{ id: 'B', label: 'B', text: 'Aluminium' },
+										{ id: 'C', label: 'C', text: 'Carbon' },
+										{ id: 'D', label: 'D', text: 'Zinc' }
+									]
 								}
 							]
 						}
 					],
 					initialAnswers: {
-						'mcq-1': 'Carbon'
+						'mcq-1': 'C'
 					}
 				}),
 				heightClass: 'h-[24rem]'

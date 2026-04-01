@@ -48,15 +48,63 @@ export type PaperSheetFillQuestion = z.infer<
   typeof PaperSheetFillQuestionSchema
 >;
 
-export const PaperSheetMcqQuestionSchema = z.object({
+export const PaperSheetMcqDisplayModeSchema = z.enum([
+  "full_options",
+  "labels_only",
+]);
+
+export type PaperSheetMcqDisplayMode = z.infer<
+  typeof PaperSheetMcqDisplayModeSchema
+>;
+
+export const PaperSheetMcqOptionSchema = z.object({
   id: trimmedString,
-  type: z.literal("mcq"),
-  displayNumber: optionalDisplayNumber,
-  badgeLabel: optionalBadgeLabel,
-  marks: z.number().min(0),
-  prompt: trimmedString,
-  options: z.array(trimmedString).min(2),
+  label: trimmedString.optional(),
+  text: trimmedString,
 });
+
+export type PaperSheetMcqOption = z.infer<typeof PaperSheetMcqOptionSchema>;
+
+export const PaperSheetMcqQuestionSchema = z
+  .object({
+    id: trimmedString,
+    type: z.literal("mcq"),
+    displayNumber: optionalDisplayNumber,
+    badgeLabel: optionalBadgeLabel,
+    marks: z.number().min(0),
+    prompt: trimmedString,
+    displayMode: PaperSheetMcqDisplayModeSchema,
+    options: z.array(PaperSheetMcqOptionSchema).min(2),
+  })
+  .superRefine((question, ctx) => {
+    const optionIds = new Set<string>();
+    for (let index = 0; index < question.options.length; index += 1) {
+      const option = question.options[index];
+      if (!option) {
+        continue;
+      }
+      if (optionIds.has(option.id)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["options", index, "id"],
+          message: `Duplicate MCQ option id "${option.id}".`,
+        });
+      } else {
+        optionIds.add(option.id);
+      }
+      if (
+        question.displayMode === "labels_only" &&
+        (option.label?.trim().length ?? 0) === 0
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["options", index, "label"],
+          message:
+            "MCQ options in labels_only mode need a source-faithful label such as A, B, C, or D.",
+        });
+      }
+    }
+  });
 
 export type PaperSheetMcqQuestion = z.infer<typeof PaperSheetMcqQuestionSchema>;
 
@@ -173,6 +221,7 @@ export const PaperSheetAnswerBankQuestionSchema = z
     displayNumber: optionalDisplayNumber,
     badgeLabel: optionalBadgeLabel,
     marks: z.number().min(0),
+    displayMode: z.enum(["inline_labeled", "banked"]),
     segments: z.array(z.string()).min(2),
     blanks: z.array(PaperSheetBlankSchema).min(1),
     options: z.array(PaperSheetAnswerBankOptionSchema).min(1),
@@ -215,6 +264,23 @@ export const PaperSheetAnswerBankQuestionSchema = z
         message:
           "Answer-bank questions without reuse need at least as many options as blanks.",
       });
+    }
+
+    if (question.displayMode === "banked") {
+      for (let index = 0; index < question.options.length; index += 1) {
+        const option = question.options[index];
+        if (!option) {
+          continue;
+        }
+        if ((option.label?.trim().length ?? 0) === 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["options", index, "label"],
+            message:
+              "Answer-bank questions in banked mode need source-faithful option labels.",
+          });
+        }
+      }
     }
 
     for (let index = 0; index < question.blanks.length; index += 1) {
@@ -748,10 +814,29 @@ function normalizeLegacyBlank(value: unknown): PaperSheetBlank | null {
   return parsed.success ? parsed.data : null;
 }
 
-function normalizeLegacyMcqOption(option: unknown): string | null {
+function normalizeLegacyMcqOption(
+  option: unknown,
+  index: number,
+): PaperSheetMcqOption | null {
   const direct = asTrimmedStringOrNull(option);
   if (direct) {
-    return direct;
+    const labeledMatch = /^\(([^)]+)\)\s*(.+)$/u.exec(direct);
+    if (labeledMatch) {
+      const label = labeledMatch[1]?.trim();
+      const text = labeledMatch[2]?.trim();
+      if (!label || !text) {
+        return null;
+      }
+      return {
+        id: label,
+        label,
+        text,
+      };
+    }
+    return {
+      id: `option-${(index + 1).toString()}`,
+      text: direct,
+    };
   }
   const record = asObjectRecord(option);
   if (!record) {
@@ -764,11 +849,16 @@ function normalizeLegacyMcqOption(option: unknown): string | null {
   if (!text) {
     return null;
   }
-  const id = asTrimmedStringOrNull(record.id);
-  if (!id) {
-    return text;
-  }
-  return text.startsWith(`(${id})`) ? text : `(${id}) ${text}`;
+  const label =
+    asTrimmedStringOrNull(record.label) ??
+    asTrimmedStringOrNull(record.id) ??
+    undefined;
+  const id = asTrimmedStringOrNull(record.id) ?? label ?? `option-${(index + 1).toString()}`;
+  return {
+    id,
+    ...(label ? { label } : {}),
+    text,
+  };
 }
 
 function normalizeLegacyAnswerBankOption(
@@ -1013,8 +1103,13 @@ function normalizeLegacyQuestion(
         return null;
       }
       const options = rawOptions
-        .map(normalizeLegacyMcqOption)
-        .filter((entry): entry is string => entry !== null);
+        .map((option, index) => normalizeLegacyMcqOption(option, index))
+        .filter((entry): entry is PaperSheetMcqOption => entry !== null);
+      if (options.length !== rawOptions.length) {
+        return null;
+      }
+      const displayMode =
+        record.displayMode === "labels_only" ? "labels_only" : "full_options";
       const parsed = PaperSheetMcqQuestionSchema.safeParse({
         id,
         type: "mcq",
@@ -1022,6 +1117,7 @@ function normalizeLegacyQuestion(
         ...(badgeLabel ? { badgeLabel } : {}),
         marks,
         prompt,
+        displayMode,
         options,
       });
       return parsed.success ? parsed.data : null;
@@ -1110,6 +1206,8 @@ function normalizeLegacyQuestion(
           ...(displayNumber ? { displayNumber } : {}),
           ...(badgeLabel ? { badgeLabel } : {}),
           marks,
+          displayMode:
+            record.displayMode === "banked" ? "banked" : "inline_labeled",
           segments,
           blanks,
           options,
@@ -1131,6 +1229,8 @@ function normalizeLegacyQuestion(
         ...(displayNumber ? { displayNumber } : {}),
         ...(badgeLabel ? { badgeLabel } : {}),
         marks,
+        displayMode:
+          record.displayMode === "banked" ? "banked" : "inline_labeled",
         segments: cloze.segments,
         blanks: cloze.blanks,
         options,
@@ -1456,6 +1556,15 @@ export const SparkGraderWorksheetReportSchema = z
             path: ["answers", key],
             message: `Question "${key}" expects a string answer.`,
           });
+        } else if (question.type === "mcq") {
+          const optionIds = new Set(question.options.map((option) => option.id));
+          if (!optionIds.has(answer)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["answers", key],
+              message: `MCQ question "${key}" uses unknown option "${answer}".`,
+            });
+          }
         }
         continue;
       }

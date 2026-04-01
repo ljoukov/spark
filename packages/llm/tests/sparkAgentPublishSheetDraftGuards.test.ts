@@ -243,8 +243,12 @@ describe("Spark agent tool: publish_sheet_draft guards", () => {
                       type: "mcq",
                       displayNumber: "1",
                       marks: 1,
+                      displayMode: "labels_only",
                       prompt: "Choose the correct answer.",
-                      options: ["A", "B"],
+                      options: [
+                        { id: "A", label: "A", text: "Option A" },
+                        { id: "B", label: "B", text: "Option B" },
+                      ],
                     },
                   ],
                 },
@@ -473,6 +477,7 @@ describe("Spark agent tool: publish_sheet_draft guards", () => {
                       type: "answer_bank",
                       displayNumber: "1",
                       marks: 1,
+                      displayMode: "inline_labeled",
                       segments: [
                         "£1000 is called (",
                         "), the monthly interest rate is (",

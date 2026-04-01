@@ -97,6 +97,13 @@ function formatTutorQuestionPrompt(question: PaperSheetQuestion): string {
 			return parts.join('');
 		}
 		case 'mcq':
+			return [
+				question.prompt,
+				'',
+				...question.options.map((option) =>
+					`${option.label ? `(${option.label}) ` : ''}${option.text}`
+				)
+			].join('\n');
 		case 'lines':
 		case 'calc':
 		case 'match':

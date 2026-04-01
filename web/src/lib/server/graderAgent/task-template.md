@@ -161,7 +161,7 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
    - use `sheet.sections[].theory` / `infoBox` only when it helps explain context already present in the original materials; do not invent large teaching passages just to decorate the UI.
    - `answers` must be keyed by worksheet `question.id`.
    - answer-shape rules:
-     - `mcq`, `lines`, and `calc` answers are strings.
+    - `mcq` answers are selected option ids (strings); `lines` and `calc` answers are plain strings.
      - `answer_bank` answers are objects keyed by blank index (`"0"`, `"1"`, ...) whose values are the selected option ids.
      - `fill` answers are objects keyed by blank index (`"0"`, `"1"`).
      - `cloze` answers are objects keyed by blank index (`"0"`, `"1"`, ...).

@@ -306,6 +306,8 @@ export function renderSparkSheetDraftTask(taskTemplate: string): string {
     "- Supported worksheet question types are: group, answer_bank, fill, cloze, mcq, lines, calc, match, spelling, flow.",
     "- Use `answer_bank` when the source prints visible blanks plus a fixed option bank such as `(A)` to `(D)`; keep the sentence in `segments[]` and the source-labelled options in `options[]`.",
     "- For `answer_bank`, `segments[]` must be clean prose around the interactive blanks. Do not copy decorative `(____)` wrappers, underscores, or dangling closing brackets from the printed blank markers.",
+    "- For `answer_bank`, use `displayMode: \"inline_labeled\"` by default when each selector should show the full labelled option such as `(A) principal amount`. Use `displayMode: \"banked\"` only when the source shows a separate visible answer bank that should stay below the sentence or when the full labelled option text is too long to fit cleanly in the selector.",
+    "- For `mcq`, keep the stem in `prompt`, keep structured options in `options[]`, and choose `displayMode: \"full_options\"` by default when the selectable cards should show the full option text. Use `displayMode: \"labels_only\"` only when long source options should stay listed separately above compact label-only selectors.",
     "- `fill` questions must use the real schema shape with `prompt`, `blanks`, `after`, optional `conjunction`, and `marks`.",
     "- Use `displayNumber` when a source question has subparts such as `9(a)` or `10(b)`.",
     "- When a grouped child subpart should show a compact circular badge, set `badgeLabel` separately while keeping the full source-faithful label in `displayNumber`, for example `displayNumber: \"10(a)\"` with `badgeLabel: \"a\"`.",

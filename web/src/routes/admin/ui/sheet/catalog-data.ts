@@ -229,13 +229,14 @@ export const sheetCatalogItems: SheetCatalogItem[] = [
 			'question.id',
 			'question.type = "answer_bank"',
 			'question.marks',
+			'question.displayMode',
 			'question.segments[]',
 			'question.blanks[]',
 			'question.options[]'
 		],
 		optionalInputs: ['question.allowReuse', 'option.label', 'blank.placeholder', 'blank.minWidth'],
 		answerShape: 'answers[question.id] = Record<blankIndex, optionId>',
-		note: 'Use this when the source shows visible blanks plus a fixed answer bank such as (A)–(D). Keep the sentence in `segments[]`, keep source option labels in `options[].label`, store the selection by stable `option.id`, and omit decorative blank brackets like `(____)` from the prose.',
+		note: 'Use this when the source shows visible blanks plus a fixed answer bank such as (A)–(D). Keep the sentence in `segments[]`, keep source option labels in `options[].label`, store the selection by stable `option.id`, and omit decorative blank brackets like `(____)` from the prose. Use `displayMode = "inline_labeled"` when the full labelled option should appear inside each selector, and `displayMode = "banked"` when the source uses a separate visible answer bank.',
 		previewKind: 'answer-bank'
 	},
 	{
@@ -269,11 +270,12 @@ export const sheetCatalogItems: SheetCatalogItem[] = [
 			'question.id',
 			'question.type = "mcq"',
 			'question.marks',
+			'question.displayMode',
 			'question.prompt',
 			'question.options[]'
 		],
-		answerShape: 'answers[question.id] = string',
-		note: 'Schema minimum is two options.',
+		answerShape: 'answers[question.id] = optionId',
+		note: 'Use `displayMode = "full_options"` when each option should render as the selectable card itself. Use `displayMode = "labels_only"` when long source options should stay listed separately above compact selectors. Schema minimum is two options.',
 		previewKind: 'mcq'
 	},
 	{

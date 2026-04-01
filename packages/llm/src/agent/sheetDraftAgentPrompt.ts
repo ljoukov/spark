@@ -42,6 +42,8 @@ export function buildSparkSheetDraftAgentPrompt(options?: {
     "- The worksheet UI supports grouped multipart questions, Markdown, LaTeX, tables, subpart labels, answer-bank blanks, cloze blanks, and flow-chart answer boxes.",
     "- When the source prints visible blanks plus a fixed answer bank such as `(A)` to `(D)`, use `answer_bank` instead of `cloze` so each blank stays constrained to those source options.",
     "- For `answer_bank`, keep `segments[]` as clean running sentence prose around the interactive blank. Do not copy decorative `(____)` wrappers, underscores, or dangling blank brackets into `segments[]`.",
+    "- For `answer_bank`, use `displayMode: \"inline_labeled\"` by default when the full labelled option such as `(A) principal amount` can sit directly inside each selector. Use `displayMode: \"banked\"` only when the source shows a separate answer bank that should stay visible below the sentence or when the full labelled option text is too long to fit cleanly in the selector.",
+    "- For `mcq`, keep the question stem in `prompt`, keep the options in structured `options[]`, and choose `displayMode: \"full_options\"` by default when the selectable cards should show the full option text. Use `displayMode: \"labels_only\"` only when the source options are long enough that they should stay listed separately above compact label-only selectors.",
     "- The JSON contract is defined explicitly in sheet/task.md. Follow that contract directly and do not infer alternate keys from logs or unrelated files.",
     "",
     "Deliverables:",

@@ -15,6 +15,7 @@ import type {
 	PaperSheetInfoBox,
 	PaperSheetLinesQuestion,
 	PaperSheetMatchQuestion,
+	PaperSheetMcqOption,
 	PaperSheetMcqQuestion,
 	PaperSheetQuestionEntry as SharedPaperSheetQuestionEntry,
 	PaperSheetQuestionGroup,
@@ -26,7 +27,7 @@ import type {
 	PaperSheetFlowQuestion
 } from '@spark/schemas';
 
-export type { PaperSheetAnswerBankOption, PaperSheetAnswerBankQuestion, PaperSheetBlank, PaperSheetCalcQuestion, PaperSheetClozeQuestion, PaperSheetFeedbackAttachment, PaperSheetFeedbackThread, PaperSheetFeedbackTurn, PaperSheetFillQuestion, PaperSheetHookSection, PaperSheetInfoBox, PaperSheetLinesQuestion, PaperSheetMatchQuestion, PaperSheetMcqQuestion, PaperSheetQuestionGroup, PaperSheetQuestionReview, PaperSheetQuestionReviewStatus, PaperSheetReview, PaperSheetScore, PaperSheetSpellingQuestion, PaperSheetFlowQuestion };
+export type { PaperSheetAnswerBankOption, PaperSheetAnswerBankQuestion, PaperSheetBlank, PaperSheetCalcQuestion, PaperSheetClozeQuestion, PaperSheetFeedbackAttachment, PaperSheetFeedbackThread, PaperSheetFeedbackTurn, PaperSheetFillQuestion, PaperSheetHookSection, PaperSheetInfoBox, PaperSheetLinesQuestion, PaperSheetMatchQuestion, PaperSheetMcqOption, PaperSheetMcqQuestion, PaperSheetQuestionGroup, PaperSheetQuestionReview, PaperSheetQuestionReviewStatus, PaperSheetReview, PaperSheetScore, PaperSheetSpellingQuestion, PaperSheetFlowQuestion };
 
 export type PaperSheetAnswers = SharedPaperSheetAnswers;
 export type PaperSheetMockReview = PaperSheetReview;

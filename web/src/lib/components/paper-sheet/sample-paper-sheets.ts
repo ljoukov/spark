@@ -1,4 +1,20 @@
-import type { PaperSheetAnswers, PaperSheetData, PaperSheetMockReview } from './types';
+import type {
+	PaperSheetAnswers,
+	PaperSheetData,
+	PaperSheetMcqOption,
+	PaperSheetMockReview
+} from './types';
+
+function buildMcqOptions(texts: string[]): PaperSheetMcqOption[] {
+	return texts.map((text, index) => {
+		const label = String.fromCharCode(65 + index);
+		return {
+			id: label,
+			label,
+			text
+		};
+	});
+}
 
 const hamiltonSampleAnswers: PaperSheetAnswers = {
 	'H1-response': `Since the remainder is $43$, $n > 44$ and
@@ -518,14 +534,16 @@ export const samplePaperSheets = [
 						type: 'mcq',
 						marks: 1,
 						prompt: 'What were Roman soldiers called?',
-						options: ['Gladiators', 'Centurions', 'Legionaries', 'Senators']
+						displayMode: 'full_options',
+						options: buildMcqOptions(['Gladiators', 'Centurions', 'Legionaries', 'Senators'])
 					},
 					{
 						id: 'A4',
 						type: 'mcq',
 						marks: 1,
 						prompt: 'From which city was the Roman Empire ruled?',
-						options: ['Athens', 'Rome', 'Carthage', 'London']
+						displayMode: 'full_options',
+						options: buildMcqOptions(['Athens', 'Rome', 'Carthage', 'London'])
 					}
 				]
 			},
@@ -561,7 +579,8 @@ export const samplePaperSheets = [
 						type: 'mcq',
 						marks: 1,
 						prompt: 'Which group of people did the wall keep out?',
-						options: ['Vikings', 'Picts', 'Saxons', 'Normans']
+						displayMode: 'full_options',
+						options: buildMcqOptions(['Vikings', 'Picts', 'Saxons', 'Normans'])
 					},
 					{
 						id: 'B4',
@@ -596,12 +615,13 @@ export const samplePaperSheets = [
 						type: 'mcq',
 						marks: 1,
 						prompt: 'Why did the Romans build straight roads?',
-						options: [
+						displayMode: 'full_options',
+						options: buildMcqOptions([
 							'They looked more beautiful',
 							'To move armies quickly and efficiently',
 							"Because they didn't know how to curve them",
 							'To impress local tribes'
-						]
+						])
 					},
 					{
 						id: 'C3',
@@ -640,7 +660,8 @@ export const samplePaperSheets = [
 						type: 'mcq',
 						marks: 1,
 						prompt: "Which group attacked Rome and contributed to the empire's collapse?",
-						options: ['Vikings', 'Normans', 'Visigoths', 'Picts']
+						displayMode: 'full_options',
+						options: buildMcqOptions(['Vikings', 'Normans', 'Visigoths', 'Picts'])
 					},
 					{
 						id: 'D4',
@@ -688,12 +709,13 @@ export const samplePaperSheets = [
 						type: 'mcq',
 						marks: 1,
 						prompt: 'Which property makes iron useful for making nails?',
-						options: [
+						displayMode: 'full_options',
+						options: buildMcqOptions([
 							'It is transparent',
 							'It is strong and hard',
 							'It is very light',
 							'It dissolves in water'
-						]
+						])
 					},
 					{
 						id: 'A3',
@@ -710,7 +732,8 @@ export const samplePaperSheets = [
 						type: 'mcq',
 						marks: 1,
 						prompt: 'What is iron combined with to make steel?',
-						options: ['Copper', 'Aluminium', 'Carbon', 'Zinc']
+						displayMode: 'full_options',
+						options: buildMcqOptions(['Copper', 'Aluminium', 'Carbon', 'Zinc'])
 					}
 				]
 			},
@@ -739,7 +762,13 @@ export const samplePaperSheets = [
 						type: 'mcq',
 						marks: 1,
 						prompt: 'What is the chemical name for rust?',
-						options: ['Iron carbonate', 'Hydrated iron(III) oxide', 'Iron chloride', 'Iron sulfate']
+						displayMode: 'full_options',
+						options: buildMcqOptions([
+							'Iron carbonate',
+							'Hydrated iron(III) oxide',
+							'Iron chloride',
+							'Iron sulfate'
+						])
 					},
 					{
 						id: 'B3',
@@ -802,7 +831,8 @@ export const samplePaperSheets = [
 						type: 'mcq',
 						marks: 1,
 						prompt: "Which word is the correct noun form of 'determined'?",
-						options: ['Determine', 'Determinedly', 'Determination', 'Determining']
+						displayMode: 'full_options',
+						options: buildMcqOptions(['Determine', 'Determinedly', 'Determination', 'Determining'])
 					},
 					{
 						id: 'A4',
@@ -839,7 +869,8 @@ export const samplePaperSheets = [
 						type: 'mcq',
 						marks: 1,
 						prompt: "What does the prefix 'micro-' mean?",
-						options: ['Large', 'Small', 'Between', 'Around']
+						displayMode: 'full_options',
+						options: buildMcqOptions(['Large', 'Small', 'Between', 'Around'])
 					},
 					{
 						id: 'B4',

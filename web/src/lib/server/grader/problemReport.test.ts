@@ -33,8 +33,12 @@ const worksheetReportJson = JSON.stringify({
 						id: 'q1',
 						type: 'mcq',
 						marks: 1,
+						displayMode: 'full_options',
 						prompt: 'What is 2 + 2?',
-						options: ['3', '4']
+						options: [
+							{ id: 'A', label: 'A', text: '3' },
+							{ id: 'B', label: 'B', text: '4' }
+						]
 					},
 					{
 						id: 'q2-group',
@@ -67,7 +71,7 @@ const worksheetReportJson = JSON.stringify({
 		]
 	},
 	answers: {
-		q1: '4',
+		q1: 'B',
 		q2: {
 			'0': 'B'
 		},
@@ -137,9 +141,10 @@ describe('problem worksheet report parsing', () => {
 									type: 'mcq',
 									displayNumber: '1',
 									promptMarkdown: 'The correct calculation of the following is (___).',
+									displayMode: 'labels_only',
 									options: [
-										{ id: 'A', text: '$$\\frac{1}{2}$$' },
-										{ id: 'B', text: '$$\\frac{3}{4}$$' }
+										{ id: 'A', label: 'A', text: '$$\\frac{1}{2}$$' },
+										{ id: 'B', label: 'B', text: '$$\\frac{3}{4}$$' }
 									]
 								}
 							]

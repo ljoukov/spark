@@ -34,6 +34,7 @@
 		PaperSheetQuestionReview,
 		PaperSheetQuestionReviewStatus,
 		PaperSheetLinesQuestion,
+		PaperSheetMcqQuestion,
 		PaperSheetReview,
 		PaperSheetScore,
 		PaperSheetFlowQuestion
@@ -1169,16 +1170,24 @@
 	}
 
 	function formatAnswerBankInlineOptionText(
+		question: PaperSheetAnswerBankQuestion,
 		option: PaperSheetAnswerBankQuestion['options'][number]
 	): string {
-		return option.text;
+		if (question.displayMode === 'banked') {
+			return option.label ? `(${option.label})` : option.text;
+		}
+		return formatAnswerBankOptionLabel(option);
 	}
 
 	function getAnswerBankOptionText(
 		question: PaperSheetAnswerBankQuestion,
 		optionId: string
 	): string {
-		return question.options.find((option) => option.id === optionId)?.text ?? '';
+		const option = question.options.find((entry) => entry.id === optionId);
+		if (!option) {
+			return '';
+		}
+		return formatAnswerBankOptionLabel(option);
 	}
 
 	function isAnswerBankOptionDisabled(
@@ -1198,6 +1207,29 @@
 		}
 
 		return false;
+	}
+
+	function splitInlineAffix(segment: string): { affix: string; body: string } {
+		const match = /^([,.;:!?)]\s*)([\s\S]*)$/u.exec(segment);
+		if (!match) {
+			return { affix: '', body: segment };
+		}
+		return {
+			affix: match[1] ?? '',
+			body: match[2] ?? ''
+		};
+	}
+
+	function formatMcqOptionLabel(option: PaperSheetMcqQuestion['options'][number]): string {
+		return option.label ? `(${option.label})` : option.text;
+	}
+
+	function formatMcqOptionFullText(option: PaperSheetMcqQuestion['options'][number]): string {
+		return option.label ? `(${option.label}) ${option.text}` : option.text;
+	}
+
+	function resolveMcqSelectedOptionId(question: PaperSheetMcqQuestion, rawValue: string): string {
+		return question.options.find((option) => option.id === rawValue)?.id ?? '';
 	}
 
 	function updateSpellingAnswer(questionKey: string, index: number, value: string): void {
@@ -1439,17 +1471,17 @@
 					{@const answerBankAnswers = getObjectAnswer(questionKey)}
 
 					<div class="paper-sheet__answer-bank-row">
-						{#each question.segments as segment, segmentIndex (`${question.id}-segment-${segmentIndex}`)}
-							{#if segment.trim().length > 0}
-								<MarkdownContent inline markdown={segment} class="paper-sheet__inline-markdown" />
-							{/if}
-							{#if segmentIndex < question.blanks.length}
-								{@const blank = question.blanks[segmentIndex]}
-								{@const selectedOptionId = answerBankAnswers[String(segmentIndex)] ?? ''}
-								{@const selectedOptionText =
-									selectedOptionId.length > 0
-										? getAnswerBankOptionText(question, selectedOptionId)
-										: ''}
+						{#if question.segments[0]?.trim().length > 0}
+							<MarkdownContent inline markdown={question.segments[0] ?? ''} class="paper-sheet__inline-markdown" />
+						{/if}
+						{#each question.blanks as blank, blankIndex (`${question.id}-blank-${blankIndex}`)}
+							{@const selectedOptionId = answerBankAnswers[String(blankIndex)] ?? ''}
+							{@const selectedOptionText =
+								selectedOptionId.length > 0 ? getAnswerBankOptionText(question, selectedOptionId) : ''}
+							{@const nextSegment = question.segments[blankIndex + 1] ?? ''}
+							{@const affix = splitInlineAffix(nextSegment).affix}
+							{@const body = splitInlineAffix(nextSegment).body}
+							<span class="paper-sheet__inline-blank-group">
 								{#if areInputsLocked()}
 									<span
 										class={`paper-sheet__inline-answer-chip ${selectedOptionText.length === 0 ? 'is-empty' : ''}`}
@@ -1466,7 +1498,7 @@
 											updateAnswerBankAnswer(
 												questionKey,
 												question,
-												segmentIndex,
+												blankIndex,
 												readInputValue(event)
 											);
 										}}
@@ -1480,37 +1512,55 @@
 												disabled={isAnswerBankOptionDisabled(
 													question,
 													answerBankAnswers,
-													segmentIndex,
+													blankIndex,
 													option.id
 												)}
 											>
-												{formatAnswerBankInlineOptionText(option)}
+												{formatAnswerBankInlineOptionText(question, option)}
 											</option>
 										{/each}
 									</select>
 								{/if}
+								{#if affix.length > 0}
+									<span class="paper-sheet__inline-affix">{affix}</span>
+								{/if}
+							</span>
+							{#if body.trim().length > 0}
+								<MarkdownContent inline markdown={body} class="paper-sheet__inline-markdown" />
 							{/if}
 						{/each}
 					</div>
-					<div class="paper-sheet__answer-bank" aria-label="Answer bank">
-						{#each question.options as option (`${question.id}-bank-${option.id}`)}
-							<div class="paper-sheet__answer-bank-option">
-								{#if option.label}
-									<span class="paper-sheet__answer-bank-option-label">{option.label}</span>
-								{/if}
-								<span class="paper-sheet__answer-bank-option-text">
-									<MarkdownContent inline markdown={option.text} />
-								</span>
-							</div>
-						{/each}
-					</div>
+					{#if question.displayMode === 'banked'}
+						<div class="paper-sheet__answer-bank" aria-label="Answer bank">
+							{#each question.options as option (`${question.id}-bank-${option.id}`)}
+								<div class="paper-sheet__answer-bank-option">
+									{#if option.label}
+										<span class="paper-sheet__answer-bank-option-label">{option.label}</span>
+									{/if}
+									<span class="paper-sheet__answer-bank-option-text">
+										<MarkdownContent inline markdown={option.text} />
+									</span>
+								</div>
+							{/each}
+						</div>
+					{/if}
 				{:else if question.type === 'mcq'}
-					{@const selected = getTextAnswer(questionKey)}
+					{@const selected = resolveMcqSelectedOptionId(question, getTextAnswer(questionKey))}
 
 					<MarkdownContent markdown={question.prompt} class="paper-sheet__prompt" />
-					<div class="paper-sheet__mcq-grid">
-						{#each question.options as option, optionIndex (`${question.id}-option-${optionIndex}`)}
-							{@const selectedOption = selected === option}
+					{#if question.displayMode === 'labels_only'}
+						<div class="paper-sheet__mcq-option-list" aria-label="Answer options">
+							{#each question.options as option (`${question.id}-line-${option.id}`)}
+								<div class="paper-sheet__mcq-option-line">
+									<span class="paper-sheet__mcq-option-prefix">{formatMcqOptionLabel(option)}</span>
+									<MarkdownContent inline markdown={option.text} class="paper-sheet__mcq-option-line-text" />
+								</div>
+							{/each}
+						</div>
+					{/if}
+					<div class={`paper-sheet__mcq-grid ${question.displayMode === 'labels_only' ? 'is-compact' : 'is-full'}`}>
+						{#each question.options as option (`${question.id}-option-${option.id}`)}
+							{@const selectedOption = selected === option.id}
 
 							<button
 								type="button"
@@ -1518,7 +1568,7 @@
 								style={buildMcqOptionStyle(selectedOption, reviewStatus)}
 								disabled={areInputsLocked()}
 								onclick={() => {
-									updateTextAnswer(questionKey, option);
+									updateTextAnswer(questionKey, option.id);
 								}}
 							>
 								<span
@@ -1529,7 +1579,20 @@
 										<span class="paper-sheet__mcq-radio-dot"></span>
 									{/if}
 								</span>
-								<MarkdownContent inline markdown={option} class="paper-sheet__mcq-label" />
+								{#if question.displayMode === 'labels_only'}
+									<span class="paper-sheet__mcq-label paper-sheet__mcq-label--compact">
+										{option.label ?? option.id}
+									</span>
+								{:else}
+									<div class="paper-sheet__mcq-option-copy">
+										{#if option.label}
+											<span class="paper-sheet__mcq-option-prefix">
+												{formatMcqOptionLabel(option)}
+											</span>
+										{/if}
+										<MarkdownContent inline markdown={option.text} class="paper-sheet__mcq-label" />
+									</div>
+								{/if}
 							</button>
 						{/each}
 					</div>
@@ -2515,6 +2578,19 @@
 		color: var(--paper-text);
 	}
 
+	.paper-sheet__inline-blank-group {
+		display: inline-flex;
+		align-items: center;
+		flex-wrap: nowrap;
+		gap: 0;
+		max-width: 100%;
+	}
+
+	.paper-sheet__inline-affix {
+		display: inline-block;
+		white-space: pre;
+	}
+
 	.paper-sheet__inline-input {
 		width: auto;
 		border: 0;
@@ -2578,6 +2654,27 @@
 		gap: 8px;
 	}
 
+	.paper-sheet__mcq-option-list {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		margin-bottom: 12px;
+		font-size: var(--paper-reading-size);
+		line-height: var(--paper-reading-line-height);
+	}
+
+	.paper-sheet__mcq-option-line {
+		display: flex;
+		flex-wrap: nowrap;
+		gap: 8px;
+		align-items: baseline;
+	}
+
+	.paper-sheet__mcq-option-prefix {
+		font-weight: 700;
+		white-space: nowrap;
+	}
+
 	.paper-sheet__mcq-option,
 	.paper-sheet__match-button {
 		display: flex;
@@ -2596,6 +2693,14 @@
 	.paper-sheet__mcq-option {
 		cursor: pointer;
 		transition: all 0.15s;
+	}
+
+	.paper-sheet__mcq-grid.is-full .paper-sheet__mcq-option {
+		align-items: flex-start;
+	}
+
+	.paper-sheet__mcq-grid.is-compact .paper-sheet__mcq-option {
+		min-height: 72px;
 	}
 
 	.paper-sheet__mcq-option:disabled,
@@ -2629,6 +2734,18 @@
 	.paper-sheet__mcq-label {
 		display: block;
 		min-width: 0;
+	}
+
+	.paper-sheet__mcq-label--compact {
+		font-weight: 700;
+	}
+
+	.paper-sheet__mcq-option-copy {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		min-width: 0;
+		align-items: baseline;
 	}
 
 	.paper-sheet__match-label {
