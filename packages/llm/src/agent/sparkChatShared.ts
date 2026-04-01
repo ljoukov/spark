@@ -305,6 +305,7 @@ export function renderSparkSheetDraftTask(taskTemplate: string): string {
     "- `publish_sheet_draft` only validates schema/persistence; before the first publish attempt, compare the draft against extracted text and viewed source pages and fix any paraphrase, omission, reorder, or guessed OCR.",
     "- Supported worksheet question types are: group, answer_bank, fill, cloze, mcq, lines, calc, match, spelling, flow.",
     "- Use `answer_bank` when the source prints visible blanks plus a fixed option bank such as `(A)` to `(D)`; keep the sentence in `segments[]` and the source-labelled options in `options[]`.",
+    "- For `answer_bank`, `segments[]` must be clean prose around the interactive blanks. Do not copy decorative `(____)` wrappers, underscores, or dangling closing brackets from the printed blank markers.",
     "- `fill` questions must use the real schema shape with `prompt`, `blanks`, `after`, optional `conjunction`, and `marks`.",
     "- Use `displayNumber` when a source question has subparts such as `9(a)` or `10(b)`.",
     "- When a grouped child subpart should show a compact circular badge, set `badgeLabel` separately while keeping the full source-faithful label in `displayNumber`, for example `displayNumber: \"10(a)\"` with `badgeLabel: \"a\"`.",

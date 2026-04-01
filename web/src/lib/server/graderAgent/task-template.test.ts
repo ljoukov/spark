@@ -28,6 +28,9 @@ describe('grader task template', () => {
 		expect(graderTaskTemplate).toContain(
 			'`answer_bank` for visible blanks paired with a fixed printed option bank such as `(A)` to `(D)`'
 		);
+		expect(graderTaskTemplate).toContain(
+			'`answer_bank.segments[]` must stay as clean prose around the interactive blank'
+		);
 		expect(graderTaskTemplate).toContain('`cloze` for short inline multi-blank text');
 		expect(graderTaskTemplate).toContain('`flow` for printed box-and-arrow calculations');
 	});

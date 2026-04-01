@@ -43,6 +43,9 @@ describe("sheet draft prompt", () => {
 		expect(task).toContain(
 			"Use `answer_bank` when the source prints visible blanks plus a fixed option bank such as `(A)` to `(D)`",
 		);
+		expect(task).toContain(
+			"For `answer_bank`, `segments[]` must be clean prose around the interactive blanks.",
+		);
 	});
 
   it("tells the chat tool to reuse earlier uploads for worksheet requests", () => {

@@ -1168,6 +1168,12 @@
 		return option.label ? `(${option.label}) ${option.text}` : option.text;
 	}
 
+	function formatAnswerBankInlineOptionText(
+		option: PaperSheetAnswerBankQuestion['options'][number]
+	): string {
+		return option.text;
+	}
+
 	function getAnswerBankOptionText(
 		question: PaperSheetAnswerBankQuestion,
 		optionId: string
@@ -1478,7 +1484,7 @@
 													option.id
 												)}
 											>
-												{formatAnswerBankOptionLabel(option)}
+												{formatAnswerBankInlineOptionText(option)}
 											</option>
 										{/each}
 									</select>

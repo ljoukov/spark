@@ -216,6 +216,19 @@ export const PaperSheetAnswerBankQuestionSchema = z
           "Answer-bank questions without reuse need at least as many options as blanks.",
       });
     }
+
+    for (let index = 0; index < question.blanks.length; index += 1) {
+      const leftSegment = question.segments[index]?.trimEnd() ?? "";
+      const rightSegment = question.segments[index + 1]?.trimStart() ?? "";
+      if (leftSegment.endsWith("(") && rightSegment.startsWith(")")) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["segments", index],
+          message:
+            "Answer-bank segments must not include decorative blank parentheses; keep the sentence prose clean around the interactive blank.",
+        });
+      }
+    }
   });
 
 export type PaperSheetAnswerBankQuestion = z.infer<

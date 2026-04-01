@@ -146,6 +146,7 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
    - every worksheet question must include `marks`.
    - `lines` questions must include `lines` as a positive integer.
    - `cloze` questions must preserve the surrounding sentence in `segments[]` and the blank count in `blanks[]`.
+   - `answer_bank.segments[]` must stay as clean prose around the interactive blank; do not include decorative `(____)` wrappers or dangling closing brackets copied from the printed blank markers.
    - `fill` questions must use the real schema shape:
      - `prompt`: text before the first blank,
      - `blanks`: an array of 1 or 2 blank objects like `{ "placeholder": "..." }`,

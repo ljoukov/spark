@@ -421,4 +421,105 @@ describe("Spark agent tool: publish_sheet_draft guards", () => {
       });
     });
   });
+
+  it("rejects answer-bank segments that keep decorative blank parentheses", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } = await import(
+        "../src/agent/sparkAgentRunner"
+      );
+
+      await mkdir(path.join(rootDir, "sheet/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "sheet/output/run-summary.json"),
+        JSON.stringify(
+          {
+            presentation: {
+              title: "Interest worksheet",
+              summaryMarkdown: "Student worksheet prepared from the upload.",
+            },
+            sheet: {
+              title: "Interest worksheet",
+              filePath: "sheet/output/draft.json",
+            },
+          },
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+      await writeFile(
+        path.join(rootDir, "sheet/output/draft.json"),
+        JSON.stringify(
+          {
+            schemaVersion: 1,
+            mode: "draft",
+            sheet: {
+              id: "interest-worksheet",
+              subject: "Mathematics",
+              level: "Secondary",
+              title: "Interest worksheet",
+              subtitle: "Solve the worksheet.",
+              color: "#36587A",
+              accent: "#4D7AA5",
+              light: "#E8F2FB",
+              border: "#BFD0E0",
+              sections: [
+                {
+                  id: "A",
+                  label: "Multiple choice questions",
+                  questions: [
+                    {
+                      id: "q1",
+                      type: "answer_bank",
+                      displayNumber: "1",
+                      marks: 1,
+                      segments: [
+                        "£1000 is called (",
+                        "), the monthly interest rate is (",
+                        "), the annual interest rate is (",
+                        ") and the accrued amount is (",
+                        ").",
+                      ],
+                      blanks: [{}, {}, {}, {}],
+                      options: [
+                        { id: "A", label: "A", text: "£1030" },
+                        { id: "B", label: "B", text: "3%" },
+                        { id: "C", label: "C", text: "0.25%" },
+                        { id: "D", label: "D", text: "principal amount" },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        sheetDraftPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetDraftTool = tools.publish_sheet_draft;
+      requireFunctionTool(publishSheetDraftTool);
+
+      await expect(publishSheetDraftTool.execute({})).rejects.toThrow(
+        "decorative blank parentheses",
+      );
+    });
+  });
 });

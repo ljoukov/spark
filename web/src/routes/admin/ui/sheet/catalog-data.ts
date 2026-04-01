@@ -235,7 +235,7 @@ export const sheetCatalogItems: SheetCatalogItem[] = [
 		],
 		optionalInputs: ['question.allowReuse', 'option.label', 'blank.placeholder', 'blank.minWidth'],
 		answerShape: 'answers[question.id] = Record<blankIndex, optionId>',
-		note: 'Use this when the source shows visible blanks plus a fixed answer bank such as (A)–(D). Keep the sentence in `segments[]`, keep source option labels in `options[].label`, and store the selection by stable `option.id`.',
+		note: 'Use this when the source shows visible blanks plus a fixed answer bank such as (A)–(D). Keep the sentence in `segments[]`, keep source option labels in `options[].label`, store the selection by stable `option.id`, and omit decorative blank brackets like `(____)` from the prose.',
 		previewKind: 'answer-bank'
 	},
 	{

@@ -168,6 +168,7 @@ Use `group` when the source prints one numbered question with shared context and
 ```
 
 Use `answer_bank` when the source prints visible blanks plus a fixed option bank such as `(A)` to `(D)` underneath. Keep the sentence structure in `segments[]`, keep each source label in `options[].label`, and use stable option ids for the student answer state. Do not flatten these into `cloze` with a passive word bank.
+`segments[]` must read like normal prose around the interactive blanks. Do not include decorative `(____)` wrappers, underscore runs, or dangling `)` / `]` characters copied from the printed blank markers.
 
 - `cloze`
 

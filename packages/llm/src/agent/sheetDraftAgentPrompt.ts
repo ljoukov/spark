@@ -41,6 +41,7 @@ export function buildSparkSheetDraftAgentPrompt(options?: {
     "- If the uploads are notes or teaching material rather than a ready-made question sheet, synthesize a clean student worksheet grounded only in that material.",
     "- The worksheet UI supports grouped multipart questions, Markdown, LaTeX, tables, subpart labels, answer-bank blanks, cloze blanks, and flow-chart answer boxes.",
     "- When the source prints visible blanks plus a fixed answer bank such as `(A)` to `(D)`, use `answer_bank` instead of `cloze` so each blank stays constrained to those source options.",
+    "- For `answer_bank`, keep `segments[]` as clean running sentence prose around the interactive blank. Do not copy decorative `(____)` wrappers, underscores, or dangling blank brackets into `segments[]`.",
     "- The JSON contract is defined explicitly in sheet/task.md. Follow that contract directly and do not infer alternate keys from logs or unrelated files.",
     "",
     "Deliverables:",
