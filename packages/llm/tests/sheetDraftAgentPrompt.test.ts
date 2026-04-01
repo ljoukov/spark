@@ -17,6 +17,9 @@ describe("sheet draft prompt", () => {
       "publish_sheet_draft({}) to validate and publish the worksheet draft; this only validates the artifact contract/persistence",
     );
     expect(prompt).toContain("Mark uncertainty explicitly instead of guessing");
+    expect(prompt).toContain(
+      "Do not leave a titled section empty when the source page shows questions there.",
+    );
   });
 
   it("keeps the extraction workflow visual-first for printed worksheets", () => {
@@ -29,7 +32,13 @@ describe("sheet draft prompt", () => {
       "Never invent placeholder copy for blanks or empty boxes unless the source prints it.",
     );
     expect(task).toContain(
+      "If `pdf_to_images` or `view_image` fails for a printed worksheet or exam page, stop and fix or report that failure instead of publishing a partial text-only worksheet.",
+    );
+    expect(task).toContain(
       "`publish_sheet_draft` only validates schema/persistence",
+    );
+    expect(task).toContain(
+      "`fill` questions must use the real schema shape with `prompt`, `blanks`, `after`, optional `conjunction`, and `marks`.",
     );
   });
 

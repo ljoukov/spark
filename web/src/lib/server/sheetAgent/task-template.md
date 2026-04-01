@@ -26,14 +26,15 @@ Requirements:
    - `flow`
 5. Use Markdown for prompt text, theory text, hint text, and tables. Use LaTeX for maths expressions.
 6. If a source question has subparts, keep the original numbering visible through `displayNumber` such as `9(a)` or `10(b)`.
-7. For `flow` questions:
+7. Every printed question or subpart visible in the source must become a question object in the matching section. Do not leave a titled section empty when the source page contains questions there.
+8. For `flow` questions:
    - keep the printed box/arrow sequence faithful to the source;
    - store each editable box under a stable box id;
    - use `initialValue` for any fixed box that is already given in the source.
    - list each `rows[].items` array in the same left-to-right visual order the student sees on the page.
    - use `direction: "rtl"` only when the arrows point right-to-left; do not reverse the item order in the JSON.
    - when a top row drops into a lower row, use `connectors` to link the relevant box ids vertically.
-8. Write `sheet/output/draft.json` with this shape:
+9. Write `sheet/output/draft.json` with this shape:
 
 ```json
 {
@@ -97,6 +98,8 @@ Question shape quick reference:
   "conjunction": ""
 }
 ```
+
+`fill` questions must use this exact `prompt` + `blanks` + `after` shape, and every `fill` question must include `marks`. Do not replace visible blanks with prose-only `problemMarkdown`, and do not omit the question JSON just because the answer is short.
 
 - `cloze`
 
@@ -221,7 +224,7 @@ Question shape quick reference:
 
 Use these exact field names. Do not invent alternate keys such as `promptMarkdown`, `items`, `kind`, `choices`, or `questionNumber`.
 
-9. Write `sheet/output/run-summary.json` with this shape:
+10. Write `sheet/output/run-summary.json` with this shape:
 
 ```json
 {
@@ -236,14 +239,15 @@ Use these exact field names. Do not invent alternate keys such as `promptMarkdow
 }
 ```
 
-10. `presentation.title` and `presentation.summaryMarkdown` must stay student-facing and must not mention IDs, file paths, tools, or internal process notes.
-11. Do not try to infer the schema from logs or unrelated files. The contract above is the one to follow.
-12. After both files exist, call `publish_sheet_draft({})`.
-13. Do not call `done` before `publish_sheet_draft` succeeds.
-14. Recommended workflow:
+11. `presentation.title` and `presentation.summaryMarkdown` must stay student-facing and must not mention IDs, file paths, tools, or internal process notes.
+12. Do not try to infer the schema from logs or unrelated files. The contract above is the one to follow.
+13. After both files exist, call `publish_sheet_draft({})`.
+14. Do not call `done` before `publish_sheet_draft` succeeds.
+15. Recommended workflow:
    - first run one `extract_text` call that covers every uploaded document;
    - if the upload is already a worksheet / exam page, always run `pdf_to_images` and inspect every relevant page image (or crop) with `view_image` before drafting;
    - if the upload is not already a worksheet but layout still matters, inspect the relevant page images with `view_image`;
+   - if `pdf_to_images` or `view_image` fails for a printed worksheet / exam page, stop and fix or report that failure instead of publishing a partial text-only worksheet;
    - before `publish_sheet_draft({})`, compare the draft against extracted text and viewed source pages; fix any paraphrase, omission, reorder, guessed OCR, or invented placeholder text.
    - then write the two JSON files, call `publish_sheet_draft({})`, and fix any reported validation issues.
    - if the upload is already a worksheet / exam page, transcribe that structure rather than synthesizing a new worksheet.

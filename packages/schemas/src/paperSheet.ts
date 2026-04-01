@@ -296,6 +296,19 @@ export const PaperSheetContentSectionSchema = z.object({
   theory: z.string().optional(),
   infoBox: PaperSheetInfoBoxSchema.optional(),
   questions: z.array(PaperSheetQuestionSchema).optional(),
+}).superRefine((section, ctx) => {
+  const hasTheory =
+    typeof section.theory === "string" && section.theory.trim().length > 0;
+  const hasInfoBox = section.infoBox !== undefined;
+  const questionCount = section.questions?.length ?? 0;
+  if (!hasTheory && !hasInfoBox && questionCount === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["questions"],
+      message:
+        "Worksheet content sections need at least one question, theory block, or info box.",
+    });
+  }
 });
 
 export type PaperSheetContentSection = z.infer<
@@ -540,6 +553,31 @@ function splitLegacyBlankPrompt(prompt: string): {
   };
 }
 
+function normalizeLegacyBlank(value: unknown): PaperSheetBlank | null {
+  if (value === undefined || value === null) {
+    return {};
+  }
+  if (typeof value === "string") {
+    const parsed = PaperSheetBlankSchema.safeParse({
+      placeholder: value,
+    });
+    return parsed.success ? parsed.data : null;
+  }
+  const record = asObjectRecord(value);
+  if (!record) {
+    return null;
+  }
+  const parsed = PaperSheetBlankSchema.safeParse({
+    ...(typeof record.placeholder === "string"
+      ? { placeholder: record.placeholder }
+      : {}),
+    ...(typeof record.minWidth === "number" && Number.isInteger(record.minWidth)
+      ? { minWidth: record.minWidth }
+      : {}),
+  });
+  return parsed.success ? parsed.data : null;
+}
+
 function normalizeLegacyMcqOption(option: unknown): string | null {
   const direct = asTrimmedStringOrNull(option);
   if (direct) {
@@ -739,12 +777,11 @@ function normalizeLegacyQuestion(
     asTrimmedStringOrNull(record.prompt) ??
     asTrimmedStringOrNull(record.promptMarkdown);
 
-  if (!prompt) {
-    return null;
-  }
-
   switch (type) {
     case "mcq": {
+      if (!prompt) {
+        return null;
+      }
       const rawOptions = Array.isArray(record.options) ? record.options : null;
       if (!rawOptions) {
         return null;
@@ -763,6 +800,41 @@ function normalizeLegacyQuestion(
       return parsed.success ? parsed.data : null;
     }
     case "fill": {
+      const rawBlanks = Array.isArray(record.blanks) ? record.blanks : null;
+      const rawPrompt =
+        typeof record.prompt === "string"
+          ? record.prompt
+          : typeof record.promptMarkdown === "string"
+            ? record.promptMarkdown
+            : "";
+      const rawAfter = typeof record.after === "string" ? record.after : "";
+      const rawConjunction =
+        typeof record.conjunction === "string" ? record.conjunction : undefined;
+      if (rawBlanks && rawBlanks.length >= 1 && rawBlanks.length <= 2) {
+        const blanks = rawBlanks
+          .map(normalizeLegacyBlank)
+          .filter((blank): blank is PaperSheetBlank => blank !== null);
+        if (blanks.length === rawBlanks.length) {
+          const structuredFill = PaperSheetFillQuestionSchema.safeParse({
+            id,
+            type: "fill",
+            ...(displayNumber ? { displayNumber } : {}),
+            marks,
+            prompt: rawPrompt,
+            blanks,
+            after: rawAfter,
+            ...(rawConjunction !== undefined
+              ? { conjunction: rawConjunction }
+              : {}),
+          });
+          if (structuredFill.success) {
+            return structuredFill.data;
+          }
+        }
+      }
+      if (!prompt) {
+        return null;
+      }
       const cloze = splitLegacyBlankPrompt(prompt);
       if (!cloze) {
         return null;
@@ -778,6 +850,9 @@ function normalizeLegacyQuestion(
       return parsed.success ? parsed.data : null;
     }
     case "lines": {
+      if (!prompt) {
+        return null;
+      }
       const parsed = PaperSheetLinesQuestionSchema.safeParse({
         id,
         type: "lines",
@@ -790,6 +865,9 @@ function normalizeLegacyQuestion(
       return parsed.success ? parsed.data : null;
     }
     case "calc": {
+      if (!prompt) {
+        return null;
+      }
       const inputLabel = asTrimmedStringOrNull(record.inputLabel);
       const unit = typeof record.unit === "string" ? record.unit : "";
       if (inputLabel) {
@@ -818,6 +896,9 @@ function normalizeLegacyQuestion(
       return fallback.success ? fallback.data : null;
     }
     case "flow":
+      if (!prompt) {
+        return null;
+      }
       return normalizeLegacyFlowQuestion(record, id, displayNumber, marks, prompt);
     default:
       return null;

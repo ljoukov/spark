@@ -31,4 +31,23 @@ describe("resolvePdfiumWasmAssetUrl", () => {
       }),
     ).toBe("file:///tmp/pdfium.wasm");
   });
+
+  it("maps Vite dev @fs asset paths to file URLs", () => {
+    expect(
+      resolvePdfiumWasmAssetUrl({
+        assetUrl: "/@fs/Users/dev/project/node_modules/@hyzyla/pdfium/pdfium.wasm",
+        moduleUrl: "file:///Users/dev/project/web/.svelte-kit/output/server/chunks/sparkAgentRunner.js",
+      }),
+    ).toBe("file:///Users/dev/project/node_modules/@hyzyla/pdfium/pdfium.wasm");
+  });
+
+  it("maps Vite dev @fs asset URLs served over http back to file URLs", () => {
+    expect(
+      resolvePdfiumWasmAssetUrl({
+        assetUrl:
+          "http://localhost:5173/@fs/Users/dev/project/node_modules/@hyzyla/pdfium/pdfium.wasm",
+        moduleUrl: "file:///Users/dev/project/web/.svelte-kit/output/server/chunks/sparkAgentRunner.js",
+      }),
+    ).toBe("file:///Users/dev/project/node_modules/@hyzyla/pdfium/pdfium.wasm");
+  });
 });

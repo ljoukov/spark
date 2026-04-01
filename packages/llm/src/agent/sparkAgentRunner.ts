@@ -1903,6 +1903,29 @@ async function validateSheetDraftWorkspaceForPublish(options: {
     );
   }
 
+  let questionCount = 0;
+  for (let sectionIndex = 0; sectionIndex < draft.sheet.sections.length; sectionIndex += 1) {
+    const section = draft.sheet.sections[sectionIndex];
+    if (!("id" in section)) {
+      continue;
+    }
+    const currentSectionQuestionCount = section.questions?.length ?? 0;
+    questionCount += currentSectionQuestionCount;
+    const hasTheory =
+      typeof section.theory === "string" && section.theory.trim().length > 0;
+    const hasInfoBox = section.infoBox !== undefined;
+    if (!hasTheory && !hasInfoBox && currentSectionQuestionCount === 0) {
+      throw new Error(
+        `Worksheet draft "${resolvedSheetPath}" has an empty content section "${section.id} ${section.label}". Preserve the source questions instead of publishing an empty section.`,
+      );
+    }
+  }
+  if (questionCount === 0) {
+    throw new Error(
+      `Worksheet draft "${resolvedSheetPath}" must include at least one question before publish.`,
+    );
+  }
+
   return {
     summaryPath: resolvedSummaryPath,
     sheetPath: resolvedSheetPath,

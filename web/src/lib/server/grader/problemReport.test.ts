@@ -188,4 +188,66 @@ describe('problem worksheet report parsing', () => {
 			displayNumber: '12'
 		});
 	});
+
+	it('preserves structured fill questions that only omit marks', () => {
+		const draft = safeParseSolveSheetDraft(
+			JSON.stringify({
+				schemaVersion: 1,
+				mode: 'draft',
+				sheet: {
+					id: 'interest-sheet',
+					subject: 'Mathematics',
+					level: 'Secondary',
+					title: 'Calculating interest and percentage',
+					subtitle: 'Solve the worksheet.',
+					color: '#36587A',
+					accent: '#4D7AA5',
+					light: '#E8F2FB',
+					border: '#BFD0E0',
+					sections: [
+						{
+							id: 'B',
+							label: 'Fill in the blanks',
+							questions: [
+								{
+									id: 'q4',
+									type: 'fill',
+									displayNumber: '4',
+									prompt: 'Given that the taxable amount is £150 000 and the tax rate is 10.5%, the amount of tax to pay is £',
+									blanks: [{}],
+									after: ' .'
+								},
+								{
+									id: 'q10a',
+									type: 'fill',
+									displayNumber: '10(a)',
+									prompt: 'For a three-year fixed deposit of £10 000, the interest earned under the new interest rate will be £',
+									blanks: [{}],
+									after: ' less than the interest that would be earned under the original interest rate.'
+								}
+							]
+						}
+					]
+				}
+			})
+		);
+
+		expect(draft).not.toBeNull();
+		const section = draft?.sheet.sections[0];
+		if (!section || !('id' in section)) {
+			throw new Error('Expected normalized content section');
+		}
+		expect(section.questions).toMatchObject([
+			{
+				type: 'fill',
+				displayNumber: '4',
+				marks: 1
+			},
+			{
+				type: 'fill',
+				displayNumber: '10(a)',
+				marks: 1
+			}
+		]);
+	});
 });

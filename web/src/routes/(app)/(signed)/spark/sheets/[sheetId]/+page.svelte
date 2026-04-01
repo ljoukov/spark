@@ -622,16 +622,13 @@
 				if (parsed.data.status !== 'executing') {
 					gradingDraft = false;
 				}
-				const shouldReloadForDraft =
-					draft === null &&
-					report === null &&
-					parsed.data.status === 'done' &&
-					nextSheetPhase === 'solving';
+				const shouldReloadCompletedBuild =
+					draft === null && report === null && parsed.data.status === 'done';
 				const shouldReloadForReport =
 					report === null &&
 					parsed.data.status === 'done' &&
 					nextSheetPhase === 'graded';
-				if (shouldReloadForDraft || shouldReloadForReport) {
+				if (shouldReloadCompletedBuild || shouldReloadForReport) {
 					void refreshSheetArtifacts();
 				}
 			},

@@ -191,4 +191,97 @@ describe("Spark agent tool: publish_sheet_draft guards", () => {
       expect(thirdSection.questions?.[1]?.type).toBe("flow");
     });
   });
+
+  it("rejects worksheet drafts with empty content sections", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } = await import(
+        "../src/agent/sparkAgentRunner"
+      );
+
+      await mkdir(path.join(rootDir, "sheet/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "sheet/output/run-summary.json"),
+        JSON.stringify(
+          {
+            presentation: {
+              title: "Interest worksheet",
+              summaryMarkdown: "Student worksheet prepared from the upload.",
+            },
+            sheet: {
+              title: "Interest worksheet",
+              filePath: "sheet/output/draft.json",
+            },
+          },
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+      await writeFile(
+        path.join(rootDir, "sheet/output/draft.json"),
+        JSON.stringify(
+          {
+            schemaVersion: 1,
+            mode: "draft",
+            sheet: {
+              id: "interest-worksheet",
+              subject: "Mathematics",
+              level: "Secondary",
+              title: "Interest worksheet",
+              subtitle: "Solve the worksheet.",
+              color: "#36587A",
+              accent: "#4D7AA5",
+              light: "#E8F2FB",
+              border: "#BFD0E0",
+              sections: [
+                {
+                  id: "A",
+                  label: "Multiple choice questions",
+                  questions: [
+                    {
+                      id: "q1",
+                      type: "mcq",
+                      displayNumber: "1",
+                      marks: 1,
+                      prompt: "Choose the correct answer.",
+                      options: ["A", "B"],
+                    },
+                  ],
+                },
+                {
+                  id: "B",
+                  label: "Fill in the blanks",
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        sheetDraftPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetDraftTool = tools.publish_sheet_draft;
+      requireFunctionTool(publishSheetDraftTool);
+
+      await expect(publishSheetDraftTool.execute({})).rejects.toThrow(
+        "Worksheet content sections need at least one question, theory block, or info box.",
+      );
+    });
+  });
 });

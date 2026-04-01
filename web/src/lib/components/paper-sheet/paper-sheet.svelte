@@ -181,11 +181,15 @@
 	}
 
 	function shouldRenderLinesAnswerAsMarkdown(question: PaperSheetLinesQuestion): boolean {
-		return question.renderMode === 'markdown' || areInputsLocked();
+		return areInputsLocked() && question.renderMode === 'markdown';
 	}
 
 	function shouldShowLinesMarkdownRow(question: PaperSheetQuestion): boolean {
 		return question.type === 'lines' && shouldRenderLinesAnswerAsMarkdown(question);
+	}
+
+	function getDisplayedQuestionLabel(questionKey: string, question: PaperSheetQuestion): string {
+		return question.displayNumber ?? questionNumbers[questionKey]?.toString() ?? question.id;
 	}
 
 	function isFlowRowItemBox(
@@ -1335,13 +1339,14 @@
 						{@const showQuestionFeedback = questionReview && shouldShowQuestionFeedback(questionReview)}
 						{@const resolvedFeedback = feedbackThread?.status === 'resolved'}
 						{@const showLinesMarkdown = shouldShowLinesMarkdownRow(question)}
+						{@const questionLabel = getDisplayedQuestionLabel(questionKey, question)}
 
 						<div
 							class={`paper-sheet__question ${showQuestionFeedback ? 'has-feedback' : ''} ${resolvedFeedback ? 'is-resolved' : ''} ${showLinesMarkdown ? 'has-lines-markdown' : ''}`}
 						>
 							<div class="paper-sheet__question-main">
 								<div class={`paper-sheet__question-number ${resolvedFeedback ? 'is-resolved' : ''}`}>
-									{questionNumbers[questionKey]}
+									{questionLabel}
 								</div>
 
 								<div class={`paper-sheet__question-marks ${resolvedFeedback ? 'is-resolved' : ''}`}>
@@ -1692,7 +1697,7 @@
 								<div class="paper-sheet__question-feedback">
 									<PaperSheetQuestionFeedback
 										review={questionReview}
-										questionLabel={`question ${questionNumbers[questionKey]}`}
+										questionLabel={`question ${questionLabel}`}
 										open={isFeedbackCardOpen(questionKey)}
 										draft={getFeedbackDraft(questionKey)}
 										thread={feedbackThread}
@@ -1847,6 +1852,7 @@
 		--paper-lines-rule-alt: #ececec;
 		--paper-frame-shadow: 0 4px 30px rgba(0, 0, 0, 0.18), 0 1px 4px rgba(0, 0, 0, 0.1);
 		--paper-card-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+		--paper-question-number-column: 48px;
 		--paper-header-orb: rgba(255, 255, 255, 0.08);
 		--paper-header-orb-subtle: rgba(255, 255, 255, 0.06);
 		--paper-header-eyebrow: rgba(255, 255, 255, 0.72);
@@ -2167,7 +2173,7 @@
 
 	.paper-sheet__question-main {
 		display: grid;
-		grid-template-columns: 26px minmax(0, 1fr) auto;
+		grid-template-columns: var(--paper-question-number-column) minmax(0, 1fr) auto;
 		column-gap: 12px;
 		align-items: start;
 		min-width: 0;
@@ -2178,16 +2184,21 @@
 		grid-row: 1;
 		display: flex;
 		height: 26px;
-		width: 26px;
+		min-width: 26px;
+		width: fit-content;
 		flex-shrink: 0;
 		align-items: center;
 		justify-content: center;
+		padding: 0 8px;
 		margin-top: 1px;
+		box-sizing: border-box;
 		border-radius: 999px;
 		background: var(--sheet-color);
 		color: #ffffff;
-		font-size: var(--paper-reading-size);
+		font-size: 14px;
+		line-height: 1;
 		font-weight: 800;
+		white-space: nowrap;
 	}
 
 	.paper-sheet__question-number.is-resolved {
@@ -2220,7 +2231,7 @@
 
 	.paper-sheet__question-feedback {
 		min-width: 0;
-		margin-left: calc(26px + 12px);
+		margin-left: calc(var(--paper-question-number-column) + 12px);
 	}
 
 	.paper-sheet__prompt {

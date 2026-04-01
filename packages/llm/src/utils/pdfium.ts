@@ -25,12 +25,20 @@ export function resolvePdfiumWasmAssetUrl(options: {
   const moduleUrl = options.moduleUrl ?? import.meta.url;
   const { assetUrl } = options;
 
-  if (
-    assetUrl.startsWith("file:") ||
-    assetUrl.startsWith("http:") ||
-    assetUrl.startsWith("https:")
-  ) {
+  if (assetUrl.startsWith("file:")) {
     return assetUrl;
+  }
+
+  if (assetUrl.startsWith("http:") || assetUrl.startsWith("https:")) {
+    const parsedAssetUrl = new URL(assetUrl);
+    if (parsedAssetUrl.pathname.startsWith("/@fs/")) {
+      return pathToFileURL(parsedAssetUrl.pathname.slice("/@fs".length)).href;
+    }
+    return assetUrl;
+  }
+
+  if (assetUrl.startsWith("/@fs/")) {
+    return pathToFileURL(assetUrl.slice("/@fs".length)).href;
   }
 
   if (assetUrl.startsWith("/_app/")) {
