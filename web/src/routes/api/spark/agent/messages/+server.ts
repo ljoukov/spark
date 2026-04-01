@@ -65,6 +65,7 @@ import {
 	resolveForcedSparkChatToolForTurn,
 	shouldAskClarifyingQuestionForAttachmentTurn
 } from '$lib/server/agent/turnRouting';
+import { shouldUseGeminiForSparkChatAttachmentContext } from '$lib/server/agent/chatAttachmentModel';
 import lessonTaskTemplate from '$lib/server/lessonAgent/task-template.md?raw';
 import lessonSchemaReadme from '$lib/server/lessonAgent/schema/README.md?raw';
 import lessonSessionSchemaJson from '$lib/server/lessonAgent/schema/session.schema.json?raw';
@@ -690,21 +691,6 @@ function resolveAttachmentPromptFilename(
 function canUseCanonicalFileUploads(): boolean {
 	const bucket = env.LLM_FILES_GCS_BUCKET ?? env.VERTEX_GCS_BUCKET ?? '';
 	return bucket.trim().length > 0;
-}
-
-function shouldUseGeminiForChatAttachments(
-	attachments: z.infer<typeof attachmentSchema>[]
-): boolean {
-	if (canUseCanonicalFileUploads()) {
-		return false;
-	}
-	for (const attachment of attachments) {
-		const normalizedMimeType = normalizeSparkAttachmentMimeType(attachment.contentType);
-		if (normalizedMimeType && isSparkDocumentAttachmentMimeType(normalizedMimeType)) {
-			return true;
-		}
-	}
-	return false;
 }
 
 async function downloadAttachmentParts(
@@ -2099,7 +2085,9 @@ async function generateAssistantResponse(
 		messageId: options.messageId
 	});
 	const canUseFilesystemLogging = isNodeRuntime();
-	const modelId = shouldUseGeminiForChatAttachments(options.attachments)
+	const modelId = shouldUseGeminiForSparkChatAttachmentContext(attachmentsForTools, {
+		canUseCanonicalFileUploads: canUseCanonicalFileUploads()
+	})
 		? 'gemini-2.5-pro'
 		: SPARK_CHAT_MODEL_ID;
 	try {
