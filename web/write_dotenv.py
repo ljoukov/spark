@@ -23,6 +23,20 @@ def parse_env_entries(content: str) -> list[tuple[str, str]]:
     return entries
 
 
+def write_text_file(path: str, content: str) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as file:
+        file.write(content)
+
+
+def render_cloud_run_env_yaml(entries: list[tuple[str, str]]) -> str:
+    lines: list[str] = []
+    for key, value in entries:
+        escaped = value.replace("'", "''")
+        lines.append(f"{key}: '{escaped}'")
+    return "\n".join(lines) + "\n"
+
+
 dotenv = os.getenv("DOTENV")
 if dotenv is None:
     print(
@@ -31,11 +45,18 @@ if dotenv is None:
     )
     sys.exit(1)
 
-file_name = "web/.env.local"
-print(f"Writing {file_name} (len={len(dotenv)})")
-for key, value in parse_env_entries(dotenv):
+entries = parse_env_entries(dotenv)
+
+dotenv_file_name = "web/.env.local"
+cloud_run_env_file_name = "web/cloud-run-env.yaml"
+
+print(f"Writing {dotenv_file_name} (len={len(dotenv)})")
+for key, value in entries:
     print(f"ENV {key} len={len(value)}")
-os.makedirs(os.path.dirname(file_name), exist_ok=True)
-with open(file_name, "w") as f:
-    f.write(dotenv)
+write_text_file(dotenv_file_name, dotenv)
+cloud_run_env_yaml = render_cloud_run_env_yaml(entries)
+print(
+    f"Writing {cloud_run_env_file_name} (entries={len(entries)})"
+)
+write_text_file(cloud_run_env_file_name, cloud_run_env_yaml)
 print("Done.")

@@ -55,7 +55,6 @@ COPY --from=build /workspace/package.json ./package.json
 COPY --from=build /workspace/web/scripts/start-with-env-inventory.mjs ./start-with-env-inventory.mjs
 
 COPY --from=build /workspace/web/build ./build
-COPY --from=build /workspace/web/.env.local ./build/.env.local
 COPY --from=build /workspace/packages ./packages
 
 WORKDIR /usr/src/app/build

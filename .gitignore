@@ -4,6 +4,7 @@
 /data
 /spark-data
 .env*
+/web/cloud-run-env.yaml
 node_modules/
 eval/output/
 *.tsbuildinfo

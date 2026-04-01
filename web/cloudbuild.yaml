@@ -42,6 +42,8 @@ steps:
         '--region',
         '$_REGION',
         '--allow-unauthenticated',
+        '--env-vars-file',
+        'web/cloud-run-env.yaml',
         '--timeout',
         '20m'
       ]

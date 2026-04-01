@@ -108,8 +108,8 @@ Model policy examples
   then `container build -f web/Dockerfile -t spark-web-local .`, then
   `container run --name spark-web-local-test --detach --rm -e PORT=8080 -p 8080:8080 spark-web-local`, then
   `curl http://127.0.0.1:8080`. Cleanup: `container stop spark-web-local-test` and `container builder stop`.
-- Local Apple `container` builds use `web/.env.local` directly. In Cloud Build, the same file is produced by
-  `web/write_dotenv.py` from Secret Manager before the Docker build starts, so local Cloud Run image testing should reuse
-  `web/.env.local` rather than trying to emulate Secret Manager inside the container.
+- Local Apple `container` builds use `web/.env.local` directly. In Cloud Build, `web/write_dotenv.py` derives
+  `web/.env.local` for the image build and `web/cloud-run-env.yaml` for `gcloud run deploy --env-vars-file`, so hosted
+  runtime env should come from Cloud Run service config rather than a copied `.env.local` inside the image.
 - Expect the first Apple `container` build/run to be much slower than the Docker equivalent because it bootstraps the kernel,
   BuildKit VM, init image, and local snapshot import. Use it for deployment-specific investigation, not for routine web dev.
