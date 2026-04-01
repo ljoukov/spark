@@ -276,4 +276,70 @@ describe('problem worksheet report parsing', () => {
 			}
 		]);
 	});
+
+	it('accepts answer-bank worksheet questions with labelled source options', () => {
+		const draft = safeParseSolveSheetDraft(
+			JSON.stringify({
+				schemaVersion: 1,
+				mode: 'draft',
+				sheet: {
+					id: 'interest-answer-bank',
+					subject: 'Mathematics',
+					level: 'Secondary',
+					title: 'Calculating interest and percentage',
+					subtitle: 'Solve the worksheet.',
+					color: '#36587A',
+					accent: '#4D7AA5',
+					light: '#E8F2FB',
+					border: '#BFD0E0',
+					sections: [
+						{
+							id: 'A',
+							label: 'Multiple choice questions',
+							questions: [
+								{
+									id: 'q1',
+									type: 'answer_bank',
+									displayNumber: '1',
+									marks: 1,
+									segments: [
+										'£1000 is called ',
+										', the monthly interest rate is ',
+										', the annual interest rate is ',
+										' and the accrued amount is ',
+										'.'
+									],
+									blanks: [{}, {}, {}, {}],
+									options: [
+										{ id: 'A', label: 'A', text: '£1030' },
+										{ id: 'B', label: 'B', text: '3%' },
+										{ id: 'C', label: 'C', text: '0.25%' },
+										{ id: 'D', label: 'D', text: 'principal amount' }
+									]
+								}
+							]
+						}
+					]
+				}
+			})
+		);
+
+		expect(draft).not.toBeNull();
+		const section = draft?.sheet.sections[0];
+		if (!section || !('id' in section)) {
+			throw new Error('Expected normalized content section');
+		}
+		expect(section.questions).toMatchObject([
+			{
+				type: 'answer_bank',
+				displayNumber: '1',
+				options: [
+					{ id: 'A', label: 'A', text: '£1030' },
+					{ id: 'B', label: 'B', text: '3%' },
+					{ id: 'C', label: 'C', text: '0.25%' },
+					{ id: 'D', label: 'D', text: 'principal amount' }
+				]
+			}
+		]);
+	});
 });

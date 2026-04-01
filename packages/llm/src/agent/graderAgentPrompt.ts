@@ -22,7 +22,7 @@ export function buildSparkGraderAgentPrompt(options?: {
     "- Keep official/reference problem statements verbatim where possible; do not rewrite them into cleaned canonical wording.",
     "- Keep the user-facing run summary concise, derived from the uploaded content, and free of IDs, paths, and tool/process narration.",
     "- Final output must be one worksheet JSON artifact that the paper-sheet UI can render directly.",
-    "- The worksheet artifact must contain supported sheet question types (`fill`, `cloze`, `mcq`, `lines`, `calc`, `match`, `spelling`, `flow`), the student's submitted answers, per-question review notes for the interactive feedback cards, and reference markdown for auditing.",
+    "- The worksheet artifact must contain supported sheet question types (`answer_bank`, `fill`, `cloze`, `mcq`, `lines`, `calc`, `match`, `spelling`, `flow`), the student's submitted answers, per-question review notes for the interactive feedback cards, and reference markdown for auditing.",
     "- Use subagents selectively: keep short routine problems in the main agent, and only spawn a subagent when a problem needs substantial independent reasoning. Keep no more than 6 subagents live at once, and close finished ones before spawning more.",
     "- When spawning a grader subagent, pass one text instruction via `prompt` or `message` only. Do not include `items` for workspace files or uploads; instead tell the subagent which workspace paths to read itself.",
     "",

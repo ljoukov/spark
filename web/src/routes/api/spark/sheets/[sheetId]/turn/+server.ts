@@ -143,6 +143,14 @@ function formatThreadMessages(
 
 function formatQuestionShape(question: PaperSheetQuestion): string {
 	switch (question.type) {
+		case 'answer_bank':
+			return [
+				'Question type: answer-bank blanks.',
+				`Segment count: ${question.segments.length.toString()}`,
+				`Blank count: ${question.blanks.length.toString()}`,
+				`Options: ${question.options.map((option) => `${option.label ? `(${option.label}) ` : ''}${option.text}`).join(' | ')}`,
+				`Option reuse allowed: ${question.allowReuse === true ? 'yes' : 'no'}`
+			].join('\n');
 		case 'fill':
 			return [
 				'Question type: fill-in-the-blank.',

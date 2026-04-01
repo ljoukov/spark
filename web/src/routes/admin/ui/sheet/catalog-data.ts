@@ -8,6 +8,7 @@ export type SheetCatalogPreviewKind =
 	| 'theory'
 	| 'info-box'
 	| 'footer'
+	| 'answer-bank'
 	| 'fill'
 	| 'group'
 	| 'mcq'
@@ -215,6 +216,27 @@ export const sheetCatalogItems: SheetCatalogItem[] = [
 		],
 		note: 'Use this when the source prints one numbered question with shared context and multiple subparts. Keep source-faithful labels in `displayNumber`, and provide `badgeLabel` for compact subpart circles when needed. Do not hoist shared context into section theory.',
 		previewKind: 'group'
+	},
+	{
+		id: 'answer-bank-question',
+		categoryId: 'inputs',
+		component: 'PaperSheet',
+		kindLabel: 'Question type',
+		title: 'Answer bank blanks',
+		description:
+			'Inline sentence blanks filled from a constrained answer bank, for source-faithful worksheet questions that print a fixed list of options beneath the stem.',
+		requiredInputs: [
+			'question.id',
+			'question.type = "answer_bank"',
+			'question.marks',
+			'question.segments[]',
+			'question.blanks[]',
+			'question.options[]'
+		],
+		optionalInputs: ['question.allowReuse', 'option.label', 'blank.placeholder', 'blank.minWidth'],
+		answerShape: 'answers[question.id] = Record<blankIndex, optionId>',
+		note: 'Use this when the source shows visible blanks plus a fixed answer bank such as (A)–(D). Keep the sentence in `segments[]`, keep source option labels in `options[].label`, and store the selection by stable `option.id`.',
+		previewKind: 'answer-bank'
 	},
 	{
 		id: 'fill-question',

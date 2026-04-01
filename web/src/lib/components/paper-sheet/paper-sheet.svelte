@@ -20,6 +20,7 @@
 	} from '$lib/spark/attachments';
 	import PaperSheetQuestionFeedback from './paper-sheet-question-feedback.svelte';
 	import type {
+		PaperSheetAnswerBankQuestion,
 		PaperSheetAnswers,
 		PaperSheetBlank,
 		PaperSheetComposerAttachmentDraft,
@@ -254,6 +255,7 @@
 
 		if (status === 'correct') {
 			switch (question.type) {
+				case 'answer_bank':
 				case 'fill':
 				case 'cloze':
 					return {
@@ -329,6 +331,7 @@
 		}
 
 		switch (question.type) {
+			case 'answer_bank':
 			case 'fill':
 			case 'cloze':
 				return {
@@ -498,6 +501,19 @@
 		].join('; ');
 	}
 
+	function buildInlineSelectStyle(
+		status: PaperSheetQuestionReviewStatus | null,
+		minWidth = 160
+	): string {
+		const colors = resolveReviewColors(status);
+		return [
+			`min-width:${minWidth}px`,
+			`border-color:${colors.border || 'var(--paper-choice-border)'}`,
+			`background:${colors.background || 'var(--paper-choice-surface)'}`,
+			`color:${colors.text || 'var(--paper-text-strong)'}`
+		].join('; ');
+	}
+
 	function buildMcqOptionStyle(
 		selected: boolean,
 		status: PaperSheetQuestionReviewStatus | null
@@ -562,7 +578,11 @@
 
 	function readInputValue(event: Event): string {
 		const target = event.currentTarget;
-		if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+		if (
+			target instanceof HTMLInputElement ||
+			target instanceof HTMLTextAreaElement ||
+			target instanceof HTMLSelectElement
+		) {
 			return target.value;
 		}
 		return '';
@@ -1120,6 +1140,60 @@
 		});
 	}
 
+	function updateAnswerBankAnswer(
+		questionKey: string,
+		question: PaperSheetAnswerBankQuestion,
+		index: number,
+		optionId: string
+	): void {
+		const current = getObjectAnswer(questionKey);
+		const next: Record<string, string> = {};
+		for (const [existingKey, existingValue] of Object.entries(current)) {
+			if (question.allowReuse !== true && existingKey !== String(index) && existingValue === optionId) {
+				continue;
+			}
+			next[existingKey] = existingValue;
+		}
+
+		if (optionId.trim().length > 0) {
+			next[String(index)] = optionId;
+		} else {
+			delete next[String(index)];
+		}
+
+		updateObjectAnswer(questionKey, next);
+	}
+
+	function formatAnswerBankOptionLabel(option: PaperSheetAnswerBankQuestion['options'][number]): string {
+		return option.label ? `(${option.label}) ${option.text}` : option.text;
+	}
+
+	function getAnswerBankOptionText(
+		question: PaperSheetAnswerBankQuestion,
+		optionId: string
+	): string {
+		return question.options.find((option) => option.id === optionId)?.text ?? '';
+	}
+
+	function isAnswerBankOptionDisabled(
+		question: PaperSheetAnswerBankQuestion,
+		answers: Record<string, string>,
+		blankIndex: number,
+		optionId: string
+	): boolean {
+		if (question.allowReuse === true) {
+			return false;
+		}
+
+		for (const [selectedBlankIndex, selectedOptionId] of Object.entries(answers)) {
+			if (selectedBlankIndex !== String(blankIndex) && selectedOptionId === optionId) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	function updateSpellingAnswer(questionKey: string, index: number, value: string): void {
 		const current = getObjectAnswer(questionKey);
 		updateObjectAnswer(questionKey, {
@@ -1355,6 +1429,75 @@
 							{/each}
 						</div>
 					{/if}
+				{:else if question.type === 'answer_bank'}
+					{@const answerBankAnswers = getObjectAnswer(questionKey)}
+
+					<div class="paper-sheet__answer-bank-row">
+						{#each question.segments as segment, segmentIndex (`${question.id}-segment-${segmentIndex}`)}
+							{#if segment.trim().length > 0}
+								<MarkdownContent inline markdown={segment} class="paper-sheet__inline-markdown" />
+							{/if}
+							{#if segmentIndex < question.blanks.length}
+								{@const blank = question.blanks[segmentIndex]}
+								{@const selectedOptionId = answerBankAnswers[String(segmentIndex)] ?? ''}
+								{@const selectedOptionText =
+									selectedOptionId.length > 0
+										? getAnswerBankOptionText(question, selectedOptionId)
+										: ''}
+								{#if areInputsLocked()}
+									<span
+										class={`paper-sheet__inline-answer-chip ${selectedOptionText.length === 0 ? 'is-empty' : ''}`}
+										style={buildInlineSelectStyle(reviewStatus, blank?.minWidth ?? 160)}
+									>
+										{selectedOptionText.length > 0 ? selectedOptionText : 'No answer'}
+									</span>
+								{:else}
+									<select
+										class="paper-sheet__inline-select"
+										style={buildInlineSelectStyle(reviewStatus, blank?.minWidth ?? 160)}
+										value={selectedOptionId}
+										onchange={(event) => {
+											updateAnswerBankAnswer(
+												questionKey,
+												question,
+												segmentIndex,
+												readInputValue(event)
+											);
+										}}
+									>
+										<option value="">
+											{blank?.placeholder ?? 'Select option'}
+										</option>
+										{#each question.options as option (`${question.id}-option-${option.id}`)}
+											<option
+												value={option.id}
+												disabled={isAnswerBankOptionDisabled(
+													question,
+													answerBankAnswers,
+													segmentIndex,
+													option.id
+												)}
+											>
+												{formatAnswerBankOptionLabel(option)}
+											</option>
+										{/each}
+									</select>
+								{/if}
+							{/if}
+						{/each}
+					</div>
+					<div class="paper-sheet__answer-bank" aria-label="Answer bank">
+						{#each question.options as option (`${question.id}-bank-${option.id}`)}
+							<div class="paper-sheet__answer-bank-option">
+								{#if option.label}
+									<span class="paper-sheet__answer-bank-option-label">{option.label}</span>
+								{/if}
+								<span class="paper-sheet__answer-bank-option-text">
+									<MarkdownContent inline markdown={option.text} />
+								</span>
+							</div>
+						{/each}
+					</div>
 				{:else if question.type === 'mcq'}
 					{@const selected = getTextAnswer(questionKey)}
 
@@ -2301,6 +2444,7 @@
 
 	.paper-sheet__fill-row,
 	.paper-sheet__cloze-row,
+	.paper-sheet__answer-bank-row,
 	.paper-sheet__calc-row {
 		display: flex;
 		flex-wrap: wrap;
@@ -2328,6 +2472,43 @@
 		color: var(--paper-text-soft);
 	}
 
+	.paper-sheet__answer-bank {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+		gap: 8px;
+		margin-top: 12px;
+	}
+
+	.paper-sheet__answer-bank-option {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		border: 1px solid var(--paper-choice-border);
+		border-radius: 10px;
+		background: var(--paper-choice-surface);
+		padding: 10px 12px;
+	}
+
+	.paper-sheet__answer-bank-option-label {
+		display: inline-flex;
+		height: 28px;
+		min-width: 28px;
+		align-items: center;
+		justify-content: center;
+		border-radius: 999px;
+		background: var(--sheet-accent);
+		color: #ffffff;
+		font-size: calc(var(--paper-reading-size) * 0.9);
+		font-weight: 700;
+		line-height: 1;
+	}
+
+	.paper-sheet__answer-bank-option-text {
+		font-size: var(--paper-reading-size);
+		line-height: var(--paper-reading-line-height);
+		color: var(--paper-text);
+	}
+
 	.paper-sheet__inline-input {
 		width: auto;
 		border: 0;
@@ -2340,6 +2521,32 @@
 		font-size: var(--paper-reading-size);
 		color: var(--paper-text-strong);
 		transition: border-color 0.2s;
+	}
+
+	.paper-sheet__inline-select,
+	.paper-sheet__inline-answer-chip {
+		min-height: 40px;
+		border: 1.5px solid var(--paper-choice-border);
+		border-radius: 10px;
+		padding: 6px 12px;
+		font-family: inherit;
+		font-size: var(--paper-reading-size);
+		line-height: 1.2;
+	}
+
+	.paper-sheet__inline-select {
+		cursor: pointer;
+	}
+
+	.paper-sheet__inline-answer-chip {
+		display: inline-flex;
+		align-items: center;
+		background: var(--paper-choice-surface);
+	}
+
+	.paper-sheet__inline-answer-chip.is-empty {
+		color: var(--paper-placeholder);
+		font-style: italic;
 	}
 
 	.paper-sheet__inline-input--compact {

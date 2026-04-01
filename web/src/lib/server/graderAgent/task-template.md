@@ -131,8 +131,9 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
 ```
 
 7. Worksheet-report rules:
-   - the worksheet UI supports these question types: `fill`, `cloze`, `mcq`, `lines`, `calc`, `match`, `spelling`, `flow`.
+   - the worksheet UI supports these question types: `answer_bank`, `fill`, `cloze`, `mcq`, `lines`, `calc`, `match`, `spelling`, `flow`.
    - choose the most natural supported worksheet type for each student-facing prompt:
+     - `answer_bank` for visible blanks paired with a fixed printed option bank such as `(A)` to `(D)`,
      - `fill` for literal blanks / short phrase completions,
      - `cloze` for short inline multi-blank text where the original printed sentence should stay visible,
      - `mcq` for multiple choice,
@@ -160,6 +161,7 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
    - `answers` must be keyed by worksheet `question.id`.
    - answer-shape rules:
      - `mcq`, `lines`, and `calc` answers are strings.
+     - `answer_bank` answers are objects keyed by blank index (`"0"`, `"1"`, ...) whose values are the selected option ids.
      - `fill` answers are objects keyed by blank index (`"0"`, `"1"`).
      - `cloze` answers are objects keyed by blank index (`"0"`, `"1"`, ...).
      - `match` answers are objects keyed by the shown term.

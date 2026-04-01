@@ -22,8 +22,8 @@ describe("sheet draft prompt", () => {
     );
   });
 
-  it("keeps the extraction workflow visual-first for printed worksheets", () => {
-    const task = renderSparkSheetDraftTask("# Task");
+	it("keeps the extraction workflow visual-first for printed worksheets", () => {
+		const task = renderSparkSheetDraftTask("# Task");
 
     expect(task).toContain(
       "always run `pdf_to_images` and inspect every relevant page or crop with `view_image` before drafting",
@@ -37,10 +37,13 @@ describe("sheet draft prompt", () => {
     expect(task).toContain(
       "`publish_sheet_draft` only validates schema/persistence",
     );
-    expect(task).toContain(
-      "`fill` questions must use the real schema shape with `prompt`, `blanks`, `after`, optional `conjunction`, and `marks`.",
-    );
-  });
+		expect(task).toContain(
+			"`fill` questions must use the real schema shape with `prompt`, `blanks`, `after`, optional `conjunction`, and `marks`.",
+		);
+		expect(task).toContain(
+			"Use `answer_bank` when the source prints visible blanks plus a fixed option bank such as `(A)` to `(D)`",
+		);
+	});
 
   it("tells the chat tool to reuse earlier uploads for worksheet requests", () => {
     expect(SPARK_CHAT_CREATE_SHEET_TOOL_DESCRIPTION).toContain(

@@ -17,6 +17,7 @@ Requirements:
    - keep the topic coverage and difficulty faithful to the source.
 4. Use only the supported worksheet question shapes:
    - `group`
+   - `answer_bank`
    - `fill`
    - `cloze`
    - `mcq`
@@ -141,6 +142,33 @@ Use `group` when the source prints one numbered question with shared context and
 
 `fill` questions must use this exact `prompt` + `blanks` + `after` shape, and every `fill` question must include `marks`. Do not replace visible blanks with prose-only `problemMarkdown`, and do not omit the question JSON just because the answer is short.
 
+- `answer_bank`
+
+```json
+{
+  "id": "q1",
+  "type": "answer_bank",
+  "displayNumber": "1",
+  "marks": 1,
+  "segments": [
+    "£1000 is called ",
+    ", the monthly interest rate is ",
+    ", the annual interest rate is ",
+    " and the accrued amount is ",
+    "."
+  ],
+  "blanks": [{}, {}, {}, {}],
+  "options": [
+    { "id": "A", "label": "A", "text": "£1030" },
+    { "id": "B", "label": "B", "text": "3%" },
+    { "id": "C", "label": "C", "text": "0.25%" },
+    { "id": "D", "label": "D", "text": "principal amount" }
+  ]
+}
+```
+
+Use `answer_bank` when the source prints visible blanks plus a fixed option bank such as `(A)` to `(D)` underneath. Keep the sentence structure in `segments[]`, keep each source label in `options[].label`, and use stable option ids for the student answer state. Do not flatten these into `cloze` with a passive word bank.
+
 - `cloze`
 
 ```json
@@ -150,10 +178,11 @@ Use `group` when the source prints one numbered question with shared context and
   "displayNumber": "2",
   "marks": 2,
   "segments": ["First sentence with ", " one blank and ", " another blank."],
-  "blanks": [{}, {}],
-  "wordBank": ["optional", "word", "bank"]
+  "blanks": [{}, {}]
 }
 ```
+
+Use `cloze` for inline free-response blanks where the student should type short answers, not for source-printed answer banks.
 
 - `mcq`
 

@@ -156,6 +156,72 @@ export type PaperSheetClozeQuestion = z.infer<
   typeof PaperSheetClozeQuestionSchema
 >;
 
+export const PaperSheetAnswerBankOptionSchema = z.object({
+  id: trimmedString,
+  label: trimmedString.optional(),
+  text: trimmedString,
+});
+
+export type PaperSheetAnswerBankOption = z.infer<
+  typeof PaperSheetAnswerBankOptionSchema
+>;
+
+export const PaperSheetAnswerBankQuestionSchema = z
+  .object({
+    id: trimmedString,
+    type: z.literal("answer_bank"),
+    displayNumber: optionalDisplayNumber,
+    badgeLabel: optionalBadgeLabel,
+    marks: z.number().min(0),
+    segments: z.array(z.string()).min(2),
+    blanks: z.array(PaperSheetBlankSchema).min(1),
+    options: z.array(PaperSheetAnswerBankOptionSchema).min(1),
+    allowReuse: z.boolean().optional(),
+  })
+  .superRefine((question, ctx) => {
+    if (question.segments.length !== question.blanks.length + 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["segments"],
+        message:
+          "Answer-bank questions need exactly one more segment than blank.",
+      });
+    }
+
+    const optionIds = new Set<string>();
+    for (let index = 0; index < question.options.length; index += 1) {
+      const option = question.options[index];
+      if (!option) {
+        continue;
+      }
+      if (optionIds.has(option.id)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["options", index, "id"],
+          message: `Duplicate answer-bank option id "${option.id}".`,
+        });
+      } else {
+        optionIds.add(option.id);
+      }
+    }
+
+    if (
+      question.allowReuse !== true &&
+      question.options.length < question.blanks.length
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["options"],
+        message:
+          "Answer-bank questions without reuse need at least as many options as blanks.",
+      });
+    }
+  });
+
+export type PaperSheetAnswerBankQuestion = z.infer<
+  typeof PaperSheetAnswerBankQuestionSchema
+>;
+
 export const PaperSheetFlowBoxSchema = z.object({
   id: trimmedString,
   placeholder: z.string().optional(),
@@ -294,6 +360,7 @@ export const PaperSheetQuestionSchema = z.discriminatedUnion("type", [
   PaperSheetMatchQuestionSchema,
   PaperSheetSpellingQuestionSchema,
   PaperSheetClozeQuestionSchema,
+  PaperSheetAnswerBankQuestionSchema,
   PaperSheetFlowQuestionSchema,
 ]);
 
@@ -321,6 +388,7 @@ export const PaperSheetQuestionEntrySchema = z.discriminatedUnion("type", [
   PaperSheetMatchQuestionSchema,
   PaperSheetSpellingQuestionSchema,
   PaperSheetClozeQuestionSchema,
+  PaperSheetAnswerBankQuestionSchema,
   PaperSheetFlowQuestionSchema,
 ]);
 
@@ -690,6 +758,59 @@ function normalizeLegacyMcqOption(option: unknown): string | null {
   return text.startsWith(`(${id})`) ? text : `(${id}) ${text}`;
 }
 
+function normalizeLegacyAnswerBankOption(
+  option: unknown,
+  index: number,
+): PaperSheetAnswerBankOption | null {
+  const direct = asTrimmedStringOrNull(option);
+  if (direct) {
+    const labeledMatch = /^\(([^)]+)\)\s*(.+)$/u.exec(direct);
+    if (labeledMatch) {
+      const label = labeledMatch[1]?.trim();
+      const text = labeledMatch[2]?.trim();
+      if (label && text) {
+        const parsed = PaperSheetAnswerBankOptionSchema.safeParse({
+          id: label,
+          label,
+          text,
+        });
+        return parsed.success ? parsed.data : null;
+      }
+    }
+    const parsed = PaperSheetAnswerBankOptionSchema.safeParse({
+      id: `option-${index + 1}`,
+      text: direct,
+    });
+    return parsed.success ? parsed.data : null;
+  }
+
+  const record = asObjectRecord(option);
+  if (!record) {
+    return null;
+  }
+
+  const text =
+    asTrimmedStringOrNull(record.text) ??
+    asTrimmedStringOrNull(record.value) ??
+    null;
+  if (!text) {
+    return null;
+  }
+
+  const label =
+    asTrimmedStringOrNull(record.label) ??
+    asTrimmedStringOrNull(record.optionLabel) ??
+    undefined;
+  const id =
+    asTrimmedStringOrNull(record.id) ?? label ?? `option-${index + 1}`;
+  const parsed = PaperSheetAnswerBankOptionSchema.safeParse({
+    id,
+    ...(label ? { label } : {}),
+    text,
+  });
+  return parsed.success ? parsed.data : null;
+}
+
 function normalizeLegacyFlowQuestion(
   value: Record<string, unknown>,
   questionId: string,
@@ -941,6 +1062,66 @@ function normalizeLegacyQuestion(
         marks,
         segments: cloze.segments,
         blanks: cloze.blanks,
+      });
+      return parsed.success ? parsed.data : null;
+    }
+    case "answer_bank": {
+      const rawOptions = Array.isArray(record.options) ? record.options : null;
+      if (!rawOptions) {
+        return null;
+      }
+      const options = rawOptions
+        .map((option, index) => normalizeLegacyAnswerBankOption(option, index))
+        .filter(
+          (option): option is PaperSheetAnswerBankOption => option !== null,
+        );
+      if (options.length !== rawOptions.length) {
+        return null;
+      }
+
+      const rawSegments = Array.isArray(record.segments) ? record.segments : null;
+      const rawBlanks = Array.isArray(record.blanks) ? record.blanks : null;
+      if (rawSegments && rawBlanks) {
+        const blanks = rawBlanks
+          .map(normalizeLegacyBlank)
+          .filter((blank): blank is PaperSheetBlank => blank !== null);
+        if (blanks.length !== rawBlanks.length) {
+          return null;
+        }
+        const segments = rawSegments.map((segment) =>
+          typeof segment === "string" ? segment : "",
+        );
+        const parsed = PaperSheetAnswerBankQuestionSchema.safeParse({
+          id,
+          type: "answer_bank",
+          ...(displayNumber ? { displayNumber } : {}),
+          ...(badgeLabel ? { badgeLabel } : {}),
+          marks,
+          segments,
+          blanks,
+          options,
+          ...(record.allowReuse === true ? { allowReuse: true } : {}),
+        });
+        return parsed.success ? parsed.data : null;
+      }
+
+      if (!prompt) {
+        return null;
+      }
+      const cloze = splitLegacyBlankPrompt(prompt);
+      if (!cloze) {
+        return null;
+      }
+      const parsed = PaperSheetAnswerBankQuestionSchema.safeParse({
+        id,
+        type: "answer_bank",
+        ...(displayNumber ? { displayNumber } : {}),
+        ...(badgeLabel ? { badgeLabel } : {}),
+        marks,
+        segments: cloze.segments,
+        blanks: cloze.blanks,
+        options,
+        ...(record.allowReuse === true ? { allowReuse: true } : {}),
       });
       return parsed.success ? parsed.data : null;
     }
@@ -1298,6 +1479,43 @@ export const SparkGraderWorksheetReportSchema = z
               path: ["answers", key],
               message: `Cloze question "${key}" is missing blank "${expectedKey}".`,
             });
+          }
+        }
+        continue;
+      }
+
+      if (question.type === "answer_bank") {
+        const expectedKeys = question.blanks.map((_, index) => index.toString());
+        const optionIds = new Set(question.options.map((option) => option.id));
+        const usedOptionIds = new Set<string>();
+        for (const expectedKey of expectedKeys) {
+          const selectedOptionId = answer[expectedKey];
+          if (selectedOptionId === undefined) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["answers", key],
+              message: `Answer-bank question "${key}" is missing blank "${expectedKey}".`,
+            });
+            continue;
+          }
+          if (!optionIds.has(selectedOptionId)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["answers", key, expectedKey],
+              message: `Answer-bank question "${key}" uses unknown option "${selectedOptionId}".`,
+            });
+            continue;
+          }
+          if (question.allowReuse !== true) {
+            if (usedOptionIds.has(selectedOptionId)) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["answers", key, expectedKey],
+                message: `Answer-bank question "${key}" reuses option "${selectedOptionId}" across blanks.`,
+              });
+            } else {
+              usedOptionIds.add(selectedOptionId);
+            }
           }
         }
         continue;

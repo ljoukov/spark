@@ -71,6 +71,18 @@ function stringifyJson(value: unknown): string {
 
 function formatTutorQuestionPrompt(question: PaperSheetQuestion): string {
 	switch (question.type) {
+		case 'answer_bank': {
+			const parts: string[] = [];
+			for (let index = 0; index < question.blanks.length; index += 1) {
+				parts.push(question.segments[index] ?? '');
+				parts.push('_____');
+			}
+			parts.push(question.segments[question.segments.length - 1] ?? '');
+			const optionList = question.options
+				.map((option) => `${option.label ? `(${option.label}) ` : ''}${option.text}`)
+				.join(' | ');
+			return `${parts.join('')}\n\nOptions: ${optionList}`;
+		}
 		case 'fill':
 			return [question.prompt, ...question.blanks.map(() => '_____'), question.after]
 				.filter((part) => part.trim().length > 0)

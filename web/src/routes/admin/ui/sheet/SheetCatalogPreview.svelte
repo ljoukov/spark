@@ -122,6 +122,59 @@
 	}
 
 	function buildQuestionSheet(kind: SheetCatalogItem['previewKind']): SheetPreviewConfig {
+		if (kind === 'answer-bank') {
+			return {
+				sheet: createPreviewSheet({
+					id: 'catalog-answer-bank',
+					title: 'Interest preview',
+					subject: 'Mathematics',
+					level: 'Secondary',
+					sections: [
+						{
+							id: 'A',
+							label: 'Multiple choice questions',
+							questions: [
+								{
+									id: 'bank-1',
+									type: 'answer_bank',
+									displayNumber: '1',
+									marks: 1,
+									segments: [
+										'Mr Ling made a fixed deposit of £1000 for a period of one year. In this case, £1000 is called ',
+										', the monthly interest rate is ',
+										', the annual interest rate is ',
+										' and without paying tax, the accrued amount at the end is ',
+										'.'
+									],
+									blanks: [
+										{ minWidth: 170 },
+										{ minWidth: 120 },
+										{ minWidth: 120 },
+										{ minWidth: 130 }
+									],
+									options: [
+										{ id: 'A', label: 'A', text: '£1030' },
+										{ id: 'B', label: 'B', text: '3%' },
+										{ id: 'C', label: 'C', text: '0.25%' },
+										{ id: 'D', label: 'D', text: 'principal amount' }
+									]
+								}
+							]
+						}
+					],
+					initialAnswers: {
+						'bank-1': {
+							'0': 'D',
+							'1': 'C',
+							'2': 'B',
+							'3': 'A'
+						}
+					}
+				}),
+				heightClass: 'h-[26rem]'
+			};
+		}
+
 		if (kind === 'fill') {
 			return {
 				sheet: createPreviewSheet({
@@ -690,6 +743,7 @@
 					showFooter: true,
 					scrollToBottom: true
 				};
+			case 'answer-bank':
 			case 'fill':
 			case 'group':
 			case 'mcq':
