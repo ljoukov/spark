@@ -33,9 +33,9 @@ export type SheetCatalogItem = {
 	id: string;
 	categoryId: SheetCatalogCategoryId;
 	component:
-		| 'PaperSheet'
-		| 'PaperSheetQuestionFeedback'
-		| 'PaperSheetFeedbackChat'
+		| 'Sheet'
+		| 'SheetFeedbackCard'
+		| 'SheetFeedbackThread'
 		| 'AnnotatedTextPanel';
 	kindLabel: string;
 	title: string;
@@ -60,7 +60,7 @@ export const sheetCatalogCategories: SheetCatalogCategory[] = [
 		label: 'Inputs',
 		title: 'Supported problem input types',
 		description:
-			'Every question variant and grouped multipart block currently modeled in the shared paper-sheet schema.'
+			'Every question variant and grouped multipart block currently modeled in the shared sheet schema.'
 	},
 	{
 		id: 'outputs',
@@ -86,66 +86,68 @@ export const sheetCatalogCategories: SheetCatalogCategory[] = [
 
 export const sheetCatalogItems: SheetCatalogItem[] = [
 	{
-		id: 'paper-sheet-root',
+		id: 'sheet-root',
 		categoryId: 'structure',
-		component: 'PaperSheet',
+		component: 'Sheet',
 		kindLabel: 'Container',
-		title: 'Paper sheet root',
+		title: 'Sheet root',
 		description:
 			'Top-level worksheet surface that owns theme tokens, numbering, section state, answer state, and optional review/feedback overlays.',
 		requiredInputs: [
-			'sheet.id',
-			'sheet.subject',
-			'sheet.level',
-			'sheet.title',
-			'sheet.subtitle',
-			'sheet.color',
-			'sheet.accent',
-			'sheet.light',
-			'sheet.border',
-			'sheet.sections[]'
+			'document.id',
+			'document.subject',
+			'document.level',
+			'document.title',
+			'document.subtitle',
+			'document.color',
+			'document.accent',
+			'document.light',
+			'document.border',
+			'document.sections[]'
 		],
 		optionalInputs: [
 			'answers',
-			'reviewMode',
+			'seedAnswers',
 			'review',
+			'mockReview',
 			'feedbackThreads',
-			'feedbackSending',
-			'feedbackRuntimeStatuses',
-			'feedbackThinking',
-			'feedbackAssistantDrafts',
-			'editable',
-			'allowFeedbackReplies',
+			'feedbackState',
+			'mode',
+			'gradeLabel',
+			'grading',
+			'allowReplies',
 			'showFooter',
-			'onReplyToTutor'
+			'onAnswersChange',
+			'onGrade',
+			'onReply'
 		],
 		previewKind: 'sheet-root'
 	},
 	{
 		id: 'sheet-header',
 		categoryId: 'structure',
-		component: 'PaperSheet',
+		component: 'Sheet',
 		kindLabel: 'Header',
 		title: 'Sheet header and identity',
 		description:
 			'The opening identity block for subject, level, title, subtitle, and theme-driven accent treatment.',
 		requiredInputs: [
-			'sheet.subject',
-			'sheet.level',
-			'sheet.title',
-			'sheet.subtitle',
-			'sheet.color',
-			'sheet.accent',
-			'sheet.light',
-			'sheet.border'
+			'document.subject',
+			'document.level',
+			'document.title',
+			'document.subtitle',
+			'document.color',
+			'document.accent',
+			'document.light',
+			'document.border'
 		],
-		optionalInputs: ['sheet.sections[] (used to derive total marks)'],
+		optionalInputs: ['document.sections[] (used to derive total marks)'],
 		previewKind: 'sheet-header'
 	},
 	{
 		id: 'hook-section',
 		categoryId: 'structure',
-		component: 'PaperSheet',
+		component: 'Sheet',
 		kindLabel: 'Section type',
 		title: 'Hook section',
 		description:
@@ -156,7 +158,7 @@ export const sheetCatalogItems: SheetCatalogItem[] = [
 	{
 		id: 'content-section',
 		categoryId: 'structure',
-		component: 'PaperSheet',
+		component: 'Sheet',
 		kindLabel: 'Section type',
 		title: 'Content section shell',
 		description:
@@ -168,7 +170,7 @@ export const sheetCatalogItems: SheetCatalogItem[] = [
 	{
 		id: 'theory-block',
 		categoryId: 'structure',
-		component: 'PaperSheet',
+		component: 'Sheet',
 		kindLabel: 'Section block',
 		title: 'Theory block',
 		description:
@@ -179,7 +181,7 @@ export const sheetCatalogItems: SheetCatalogItem[] = [
 	{
 		id: 'info-box',
 		categoryId: 'structure',
-		component: 'PaperSheet',
+		component: 'Sheet',
 		kindLabel: 'Section block',
 		title: 'Info box',
 		description:
@@ -190,19 +192,19 @@ export const sheetCatalogItems: SheetCatalogItem[] = [
 	{
 		id: 'sheet-footer',
 		categoryId: 'structure',
-		component: 'PaperSheet',
+		component: 'Sheet',
 		kindLabel: 'Footer',
 		title: 'Sheet footer',
 		description:
 			'Closing identity stripe used at the bottom of the sheet when footer rendering is enabled.',
-		requiredInputs: ['sheet.level', 'sheet.subject', 'sheet.title'],
+		requiredInputs: ['document.level', 'document.subject', 'document.title'],
 		optionalInputs: ['showFooter = true'],
 		previewKind: 'footer'
 	},
 	{
 		id: 'group-question',
 		categoryId: 'inputs',
-		component: 'PaperSheet',
+		component: 'Sheet',
 		kindLabel: 'Question type',
 		title: 'Grouped multipart question',
 		description:
@@ -220,7 +222,7 @@ export const sheetCatalogItems: SheetCatalogItem[] = [
 	{
 		id: 'answer-bank-question',
 		categoryId: 'inputs',
-		component: 'PaperSheet',
+		component: 'Sheet',
 		kindLabel: 'Question type',
 		title: 'Answer bank blanks',
 		description:
@@ -242,7 +244,7 @@ export const sheetCatalogItems: SheetCatalogItem[] = [
 	{
 		id: 'fill-question',
 		categoryId: 'inputs',
-		component: 'PaperSheet',
+		component: 'Sheet',
 		kindLabel: 'Question type',
 		title: 'Fill in the blanks',
 		description:
@@ -262,7 +264,7 @@ export const sheetCatalogItems: SheetCatalogItem[] = [
 	{
 		id: 'mcq-question',
 		categoryId: 'inputs',
-		component: 'PaperSheet',
+		component: 'Sheet',
 		kindLabel: 'Question type',
 		title: 'Multiple choice',
 		description: 'Button-based single-select question with two or more markdown-capable options.',
@@ -281,7 +283,7 @@ export const sheetCatalogItems: SheetCatalogItem[] = [
 	{
 		id: 'lines-question',
 		categoryId: 'inputs',
-		component: 'PaperSheet',
+		component: 'Sheet',
 		kindLabel: 'Question type',
 		title: 'Lines / extended response',
 		description:
@@ -301,7 +303,7 @@ export const sheetCatalogItems: SheetCatalogItem[] = [
 	{
 		id: 'calc-question',
 		categoryId: 'inputs',
-		component: 'PaperSheet',
+		component: 'Sheet',
 		kindLabel: 'Question type',
 		title: 'Calculation row',
 		description: 'Compact numeric or symbolic answer row with a left label and a right-side unit.',
@@ -320,7 +322,7 @@ export const sheetCatalogItems: SheetCatalogItem[] = [
 	{
 		id: 'match-question',
 		categoryId: 'inputs',
-		component: 'PaperSheet',
+		component: 'Sheet',
 		kindLabel: 'Question type',
 		title: 'Match pairs',
 		description:
@@ -339,7 +341,7 @@ export const sheetCatalogItems: SheetCatalogItem[] = [
 	{
 		id: 'spelling-question',
 		categoryId: 'inputs',
-		component: 'PaperSheet',
+		component: 'Sheet',
 		kindLabel: 'Question type',
 		title: 'Spelling correction',
 		description:
@@ -358,7 +360,7 @@ export const sheetCatalogItems: SheetCatalogItem[] = [
 	{
 		id: 'review-summary',
 		categoryId: 'outputs',
-		component: 'PaperSheet',
+		component: 'Sheet',
 		kindLabel: 'Output',
 		title: 'Sheet review summary',
 		description:
@@ -381,7 +383,7 @@ export const sheetCatalogItems: SheetCatalogItem[] = [
 	{
 		id: 'question-feedback',
 		categoryId: 'outputs',
-		component: 'PaperSheetQuestionFeedback',
+		component: 'SheetFeedbackCard',
 		kindLabel: 'Output',
 		title: 'Question feedback note',
 		description:
@@ -418,7 +420,7 @@ export const sheetCatalogItems: SheetCatalogItem[] = [
 	{
 		id: 'attachment-output',
 		categoryId: 'outputs',
-		component: 'PaperSheetFeedbackChat',
+		component: 'SheetFeedbackThread',
 		kindLabel: 'Output',
 		title: 'Feedback attachments',
 		description:
@@ -438,7 +440,7 @@ export const sheetCatalogItems: SheetCatalogItem[] = [
 	{
 		id: 'runtime-feedback',
 		categoryId: 'runtime',
-		component: 'PaperSheetQuestionFeedback',
+		component: 'SheetFeedbackCard',
 		kindLabel: 'Runtime state',
 		title: 'Feedback progression states',
 		description:

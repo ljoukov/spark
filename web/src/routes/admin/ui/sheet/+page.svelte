@@ -14,7 +14,7 @@
 		{
 			title: 'Worksheet',
 			description:
-				'Full paper-sheet previews with seeded sample worksheets and tab switching between subjects.',
+				'Full @ljoukov/sheet previews with seeded sample worksheets and tab switching between subjects.',
 			href: '/admin/ui/sheet/worksheet'
 		},
 		{

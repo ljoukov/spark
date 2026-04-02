@@ -25,11 +25,12 @@
 		"all-tests": "bun run lint && bun run test && bun run build"
 	},
 	"dependencies": {
+		"@bufbuild/protobuf": "^2.11.0",
 		"@connectrpc/connect": "^2.1.1",
 		"@connectrpc/connect-node": "^2.1.1",
 		"@connectrpc/connect-web": "^2.1.1",
-		"@bufbuild/protobuf": "^2.11.0",
 		"@ljoukov/llm": "7.0.0",
+		"@ljoukov/sheet": "0.2.0",
 		"@spark/llm": "workspace:*",
 		"@spark/proto": "workspace:*",
 		"@spark/schemas": "workspace:*",

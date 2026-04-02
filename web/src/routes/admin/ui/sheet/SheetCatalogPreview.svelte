@@ -5,18 +5,29 @@
 	} from '$lib/components/annotated-text/index.js';
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import {
-		PaperSheet,
-		PaperSheetQuestionFeedback,
-		samplePaperSheets,
-		type PaperSheetAnswers,
-		type PaperSheetData,
-		type PaperSheetFeedbackAttachment,
-		type PaperSheetFeedbackThread,
-		type PaperSheetQuestionReview,
-		type PaperSheetReview
-	} from '$lib/components/paper-sheet/index.js';
+		Sheet as PaperSheet,
+		SheetFeedbackCard as PaperSheetQuestionFeedback,
+		sampleSheets,
+		type SheetAnswers as PaperSheetAnswers,
+		type SheetDocument,
+		type SheetFeedbackAttachment as PaperSheetFeedbackAttachment,
+		type SheetFeedbackThreadData as PaperSheetFeedbackThread,
+		type SheetQuestionReview as PaperSheetQuestionReview,
+		type SheetReview as PaperSheetReview
+	} from '@ljoukov/sheet';
 	import { cn } from '$lib/utils.js';
 	import type { SheetCatalogItem } from './catalog-data';
+
+	type PaperSheetData = SheetDocument & {
+		initialAnswers?: PaperSheetAnswers;
+		mockReview?: PaperSheetReview;
+	};
+
+	const samplePaperSheets: PaperSheetData[] = sampleSheets.map((sample) => ({
+		...sample.document,
+		...(sample.seedAnswers ? { initialAnswers: sample.seedAnswers } : {}),
+		...(sample.mockReview ? { mockReview: sample.mockReview } : {})
+	}));
 
 	type RuntimeStage = 'pending' | 'thinking' | 'responding' | 'resolved';
 	type ReviewMode = 'none' | 'live' | 'mock';
@@ -795,11 +806,18 @@
 		>
 			<div class="mx-auto w-full max-w-[1024px]">
 				<PaperSheet
-					sheet={sheetPreview.sheet}
-					reviewMode={sheetPreview.reviewMode ?? 'none'}
+					document={sheetPreview.sheet}
 					answers={sheetPreview.answers}
 					review={sheetPreview.review}
-					editable={sheetPreview.editable ?? true}
+					mode={
+						sheetPreview.reviewMode === 'mock'
+							? 'demo'
+							: sheetPreview.reviewMode === 'live'
+								? 'review'
+								: sheetPreview.editable === false
+									? 'readonly'
+									: 'interactive'
+					}
 					showFooter={sheetPreview.showFooter ?? false}
 				/>
 			</div>

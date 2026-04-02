@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import { invalidateAll } from '$app/navigation';
-	import { PaperSheet } from '$lib/components/paper-sheet/index.js';
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
+	import { Sheet as PaperSheet, type SheetFeedbackStateMap } from '@ljoukov/sheet';
 	import type {
 		PaperSheetAnswers,
 		PaperSheetFeedbackAttachment,
@@ -267,9 +267,6 @@
 		left: PageData['run']['totals'],
 		right: PageData['run']['totals']
 	): boolean {
-		if (left === right) {
-			return true;
-		}
 		if (left === null || right === null) {
 			return false;
 		}
@@ -928,8 +925,6 @@
 		return threads;
 	});
 
-	const feedbackSending = $derived.by(() => submittingQuestionIds);
-
 	const feedbackRuntimeStatuses = $derived.by((): Record<string, FeedbackRuntimeStatus> => {
 		if (!activeRuntimeQuestionId) {
 			return {};
@@ -967,6 +962,42 @@
 			: {}
 	);
 
+	const feedbackState = $derived.by((): SheetFeedbackStateMap => {
+		const next: SheetFeedbackStateMap = {};
+
+		for (const [questionId, sending] of Object.entries(submittingQuestionIds)) {
+			if (sending) {
+				next[questionId] = {
+					...(next[questionId] ?? {}),
+					sending: true
+				};
+			}
+		}
+
+		for (const [questionId, runtimeStatus] of Object.entries(feedbackRuntimeStatuses)) {
+			next[questionId] = {
+				...(next[questionId] ?? {}),
+				runtimeStatus
+			};
+		}
+
+		for (const [questionId, thinkingText] of Object.entries(feedbackThinking)) {
+			next[questionId] = {
+				...(next[questionId] ?? {}),
+				thinkingText
+			};
+		}
+
+		for (const [questionId, assistantDraftText] of Object.entries(feedbackAssistantDrafts)) {
+			next[questionId] = {
+				...(next[questionId] ?? {}),
+				assistantDraftText
+			};
+		}
+
+		return next;
+	});
+
 </script>
 
 <svelte:head>
@@ -987,29 +1018,24 @@
 	{#if report && reviewState}
 		<div class="sheet-shell">
 			<PaperSheet
-				sheet={reviewState.sheet}
+				document={reviewState.sheet}
 				answers={reviewState.answers}
 				review={reviewState.review}
-				reviewMode="live"
-				editable={false}
-				allowFeedbackReplies={run.status === 'done'}
+				mode="review"
+				allowReplies={run.status === 'done'}
 				feedbackThreads={feedbackThreads}
-				feedbackSending={feedbackSending}
-				feedbackRuntimeStatuses={feedbackRuntimeStatuses}
-				feedbackThinking={feedbackThinking}
-				feedbackAssistantDrafts={feedbackAssistantDrafts}
-				onReplyToTutor={(questionId, draft, attachments) => {
-					return submitQuestionReply(questionId, draft, attachments);
+				feedbackState={feedbackState}
+				onReply={(questionId, payload) => {
+					return submitQuestionReply(questionId, payload.text, payload.attachments);
 				}}
 			/>
 		</div>
 	{:else if draft}
 		<div class="sheet-shell">
 			<PaperSheet
-				sheet={draft.sheet}
+				document={draft.sheet}
 				answers={draftAnswers}
-				reviewMode="none"
-				editable={canEditDraftSheet()}
+				mode={canEditDraftSheet() ? 'interactive' : 'readonly'}
 				grading={isDraftGradingInProgress()}
 				gradeLabel={run.status === 'failed' || run.status === 'stopped' ? 'Grade Again' : 'Grade'}
 				onAnswersChange={(answers) => {

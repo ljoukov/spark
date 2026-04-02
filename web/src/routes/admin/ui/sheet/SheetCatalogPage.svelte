@@ -60,9 +60,9 @@
 	] as const;
 
 	const sourceFiles = [
+		'@ljoukov/sheet',
+		'@ljoukov/sheet/styles.css',
 		'packages/schemas/src/paperSheet.ts',
-		'web/src/lib/components/paper-sheet/paper-sheet.svelte',
-		'web/src/lib/components/paper-sheet/paper-sheet-question-feedback.svelte',
 		'web/src/lib/components/annotated-text/annotated-text-panel.svelte'
 	] as const;
 </script>
@@ -76,8 +76,9 @@
 		<div class="space-y-2">
 			<h1 class="text-2xl font-semibold tracking-tight text-foreground">Sheet UI catalog</h1>
 			<p class="max-w-3xl text-sm text-muted-foreground">
-				Canonical inventory of what the current sheet UI supports. The surrounding page follows the
-				standard admin layout; the preview panes render the actual sheet components.
+				Canonical inventory of what the current <code>@ljoukov/sheet</code> package supports. The
+				surrounding page follows the standard admin layout; the preview panes render the published
+				package components.
 			</p>
 		</div>
 

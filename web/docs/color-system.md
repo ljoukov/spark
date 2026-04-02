@@ -57,7 +57,7 @@ The light-mode block sets high-contrast defaults, while the dark-mode override a
 variables. Re-use `--app-content-*` (and similar) inside child elements instead of hard-coded rgba
 values.
 
-The worksheet surface in `web/src/lib/components/paper-sheet/paper-sheet.svelte` follows the same
+The worksheet surface from `@ljoukov/sheet` follows the same
 pattern. It defines local `--paper-*` tokens for the page surface, text, borders, inputs, and
 review states, then overrides those tokens inside the dark selectors while keeping the per-sheet
 accent color (`--sheet-color`) intact. When extending the worksheet UI, wire new colors through the

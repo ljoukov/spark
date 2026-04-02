@@ -1,8 +1,19 @@
 <script lang="ts">
-	import { samplePaperSheets, PaperSheet } from '$lib/components/paper-sheet/index.js';
+	import { Sheet as PaperSheet, sampleSheets, type SheetAnswers, type SheetReview } from '@ljoukov/sheet';
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils.js';
 	import SheetPreviewNav from '../SheetPreviewNav.svelte';
+
+	type PreviewSheet = (typeof sampleSheets)[number]['document'] & {
+		initialAnswers?: SheetAnswers;
+		mockReview?: SheetReview;
+	};
+
+	const samplePaperSheets: PreviewSheet[] = sampleSheets.map((sample) => ({
+		...sample.document,
+		...(sample.seedAnswers ? { initialAnswers: sample.seedAnswers } : {}),
+		...(sample.mockReview ? { mockReview: sample.mockReview } : {})
+	}));
 
 	function getDefaultSheetId(): string {
 		for (const sheet of samplePaperSheets) {
@@ -30,8 +41,8 @@
 		<div class="space-y-2">
 			<h1 class="text-2xl font-semibold tracking-tight text-foreground">Worksheet preview</h1>
 			<p class="max-w-3xl text-sm text-muted-foreground">
-				Reusable paper-sheet component from <code>$lib/components/paper-sheet</code>, seeded with
-				sample worksheets and mock per-question feedback.
+				Reusable worksheet surface from <code>@ljoukov/sheet</code>, seeded with sample sheets and
+				mock per-question feedback.
 			</p>
 		</div>
 
@@ -73,7 +84,7 @@
 			<div class="sheet-preview-canvas">
 				<div class="sheet-preview-paper">
 					{#key activeSheet.id}
-						<PaperSheet sheet={activeSheet} reviewMode="mock" />
+						<PaperSheet document={activeSheet} mode="demo" />
 					{/key}
 				</div>
 			</div>

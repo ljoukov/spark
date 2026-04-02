@@ -2,12 +2,12 @@
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
 	import {
-		PaperSheetQuestionFeedback,
-		type PaperSheetComposerAttachmentDraft,
-		type PaperSheetFeedbackAttachment,
-		type PaperSheetFeedbackThread,
-		type PaperSheetQuestionReview
-	} from '$lib/components/paper-sheet/index.js';
+		SheetFeedbackCard as PaperSheetQuestionFeedback,
+		type SheetComposerAttachmentDraft as PaperSheetComposerAttachmentDraft,
+		type SheetFeedbackAttachment as PaperSheetFeedbackAttachment,
+		type SheetFeedbackThreadData as PaperSheetFeedbackThread,
+		type SheetQuestionReview as PaperSheetQuestionReview
+	} from '@ljoukov/sheet';
 	import { cn } from '$lib/utils.js';
 	import SheetPreviewNav from '../SheetPreviewNav.svelte';
 

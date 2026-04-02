@@ -255,7 +255,7 @@ async function persistReplyAttachments(options: {
 	if (options.files.length > MAX_FILES_PER_REPLY) {
 		throw new z.ZodError([
 			{
-				code: z.ZodIssueCode.custom,
+				code: 'custom',
 				path: ['file'],
 				message: 'You can attach up to 10 files per reply.'
 			}
@@ -270,7 +270,7 @@ async function persistReplyAttachments(options: {
 		if (typeof file.size === 'number' && file.size > MAX_FILE_SIZE_BYTES) {
 			throw new z.ZodError([
 				{
-					code: z.ZodIssueCode.custom,
+					code: 'custom',
 					path: ['file', index],
 					message: 'Each file must be 25 MB or smaller.'
 				}
@@ -281,7 +281,7 @@ async function persistReplyAttachments(options: {
 		if (buffer.byteLength === 0) {
 			throw new z.ZodError([
 				{
-					code: z.ZodIssueCode.custom,
+					code: 'custom',
 					path: ['file', index],
 					message: 'Attached files cannot be empty.'
 				}
@@ -290,7 +290,7 @@ async function persistReplyAttachments(options: {
 		if (buffer.byteLength > MAX_FILE_SIZE_BYTES) {
 			throw new z.ZodError([
 				{
-					code: z.ZodIssueCode.custom,
+					code: 'custom',
 					path: ['file', index],
 					message: 'Each file must be 25 MB or smaller.'
 				}
@@ -301,7 +301,7 @@ async function persistReplyAttachments(options: {
 		if (totalSizeBytes > MAX_TOTAL_SIZE_BYTES) {
 			throw new z.ZodError([
 				{
-					code: z.ZodIssueCode.custom,
+					code: 'custom',
 					path: ['file'],
 					message: 'Attachments are limited to 50 MB total per reply.'
 				}
@@ -316,7 +316,7 @@ async function persistReplyAttachments(options: {
 		if (!contentType) {
 			throw new z.ZodError([
 				{
-					code: z.ZodIssueCode.custom,
+					code: 'custom',
 					path: ['file', index],
 					message: SPARK_ATTACHMENT_UNSUPPORTED_MESSAGE
 				}

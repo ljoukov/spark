@@ -1,5 +1,6 @@
 <script lang="ts">
 	import '../app.css';
+	import '@ljoukov/sheet/styles.css';
 
 	let { children } = $props();
 </script>
