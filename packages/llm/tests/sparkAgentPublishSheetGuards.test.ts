@@ -36,7 +36,9 @@ async function writeValidSheetArtifacts(rootDir: string): Promise<void> {
         contextLabel: "Section 2 Test 5",
         presentation: {
           title: "English grammar worksheet Section 2 Test 5",
-          summaryMarkdown: "Checked the visible worksheet page and prepared the first feedback notes."
+          subtitle: "Student answers checked against the uploaded worksheet page.",
+          summaryMarkdown: "Checked the visible worksheet page and prepared the first feedback notes.",
+          footer: "Section 2 Test 5 · uploaded worksheet"
         },
         totals: {
           awardedMarks: 1,
@@ -156,7 +158,9 @@ describe("Spark agent tool: publish_sheet guards", () => {
           {
             presentation: {
               title: "English grammar worksheet Section 2 Test 5",
-              summaryMarkdown: "Checked the visible worksheet page."
+              subtitle: "Student answers checked against the uploaded worksheet page.",
+              summaryMarkdown: "Checked the visible worksheet page.",
+              footer: "Section 2 Test 5 · uploaded worksheet"
             },
             totals: {
               awardedMarks: 1,

@@ -45,8 +45,10 @@ describe("Spark agent tool: publish_sheet_draft guards", () => {
           {
             presentation: {
               title: "Division of fractions (2)",
+              subtitle: "Worksheet draft reconstructed from the uploaded fractions exercise.",
               summaryMarkdown:
                 "Worksheet draft prepared from the uploaded fractions exercise.",
+              footer: "Fractions exercise · uploaded worksheet",
             },
             sheet: {
               title: "Division of fractions (2)",
@@ -205,7 +207,9 @@ describe("Spark agent tool: publish_sheet_draft guards", () => {
           {
             presentation: {
               title: "Interest worksheet",
+              subtitle: "Worksheet draft prepared from the uploaded interest page.",
               summaryMarkdown: "Student worksheet prepared from the upload.",
+              footer: "Interest worksheet · uploaded page",
             },
             sheet: {
               title: "Interest worksheet",
@@ -302,7 +306,9 @@ describe("Spark agent tool: publish_sheet_draft guards", () => {
           {
             presentation: {
               title: "Interest worksheet",
+              subtitle: "Worksheet draft prepared from the uploaded interest page.",
               summaryMarkdown: "Student worksheet prepared from the upload.",
+              footer: "Interest worksheet · uploaded page",
             },
             sheet: {
               title: "Interest worksheet",
@@ -439,7 +445,9 @@ describe("Spark agent tool: publish_sheet_draft guards", () => {
           {
             presentation: {
               title: "Interest worksheet",
+              subtitle: "Worksheet draft prepared from the uploaded interest page.",
               summaryMarkdown: "Student worksheet prepared from the upload.",
+              footer: "Interest worksheet · uploaded page",
             },
             sheet: {
               title: "Interest worksheet",

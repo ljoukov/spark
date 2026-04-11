@@ -91,7 +91,9 @@ export type SparkGraderPaper = z.infer<typeof SparkGraderPaperSchema>;
 
 export const SparkGraderPresentationSchema = z.object({
   title: trimmedString.optional(),
+  subtitle: trimmedString.optional(),
   summaryMarkdown: trimmedString.optional(),
+  footer: trimmedString.optional(),
 });
 
 export type SparkGraderPresentation = z.infer<
@@ -100,8 +102,10 @@ export type SparkGraderPresentation = z.infer<
 
 export const SparkGraderRunDisplaySchema = z.object({
   title: trimmedString,
+  subtitle: z.string().trim().min(1).nullable(),
   metaLine: z.string().trim().min(1).nullable(),
   summaryMarkdown: z.string().trim().min(1).nullable(),
+  footer: z.string().trim().min(1).nullable(),
 });
 
 export type SparkGraderRunDisplay = z.infer<

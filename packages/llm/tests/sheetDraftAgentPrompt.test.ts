@@ -16,6 +16,9 @@ describe("sheet draft prompt", () => {
     expect(prompt).toContain(
       "publish_sheet_draft({}) to validate and publish the worksheet draft; this only validates the artifact contract/persistence",
     );
+    expect(prompt).toContain(
+      "presentation title, subtitle, body summary markdown, and footer provenance",
+    );
     expect(prompt).toContain("Mark uncertainty explicitly instead of guessing");
     expect(prompt).toContain(
       "Do not leave a titled section empty when the source page shows questions there.",

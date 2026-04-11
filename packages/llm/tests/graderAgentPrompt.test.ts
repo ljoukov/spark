@@ -36,5 +36,6 @@ describe("grader agent prompt", () => {
     expect(prompt).toContain(
       "Before the first publish attempt, verify that both grader/output/sheet.json and grader/output/run-summary.json exist",
     );
+    expect(prompt).toContain("title, subtitle, body summary markdown, and footer provenance");
   });
 });

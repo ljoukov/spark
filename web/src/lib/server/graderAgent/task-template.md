@@ -200,7 +200,9 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
 	},
 	"presentation": {
 		"title": "string",
-		"summaryMarkdown": "string"
+		"subtitle": "string",
+		"summaryMarkdown": "string",
+		"footer": "string"
 	},
 	"sheet": {
 		"title": "string",
@@ -214,11 +216,19 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
    - use the actual paper name when confidently identified,
    - otherwise describe the worksheet that was graded, for example `Section 2 Test 5 worksheet` or `Uploaded worksheet`.
 - base `presentation.title` on the uploaded content and identified source context rather than a generic subject label.
+- `presentation.subtitle` is required and should be a short factual line for the card header:
+   - describe what the upload is or what state the reviewed work is in,
+   - keep it distinct from the title and from the body summary,
+   - avoid marks, percentages, and process-log wording.
 - `presentation.summaryMarkdown` is required and should be short Markdown suitable for direct UI rendering:
    - one short paragraph or 2-3 short bullet points,
-   - focus on what was graded and any important caveats,
+   - focus on what was graded, what happened, or what the student should notice next,
    - do not repeat marks / question counts / percent because the UI shows those separately.
-- in both `presentation.title` and `presentation.summaryMarkdown`, do NOT mention:
+- `presentation.footer` is required and should be a terse provenance/retrieval line for the card footer:
+   - source context, paper label, or upload cue only,
+   - do not repeat the full title,
+   - do not include marks, percentages, or status prose.
+- in `presentation.title`, `presentation.subtitle`, `presentation.summaryMarkdown`, and `presentation.footer`, do NOT mention:
    - run IDs, workspace IDs, file paths, tool names, source-policy labels, or implementation/process details.
 - `sheet.filePath` must be exactly `grader/output/sheet.json`.
 - include `paperUrl` and `markSchemeUrl` only when known.

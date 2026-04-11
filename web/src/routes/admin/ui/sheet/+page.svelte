@@ -14,7 +14,7 @@
 		{
 			title: 'Thumbnails',
 			description:
-				'Explorations for the /spark/sheets list card output: same shell, leaner content strategies.',
+				'Approved /spark/sheets list-card layout with the production subtitle/body/footer contract.',
 			href: '/admin/ui/sheet/thumbnails'
 		},
 		{

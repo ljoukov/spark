@@ -57,7 +57,9 @@ export const load: PageServerLoad = async ({ params }) => {
 			presentation: run.presentation
 				? {
 						title: run.presentation.title ?? null,
-						summaryMarkdown: run.presentation.summaryMarkdown ?? null
+						subtitle: run.presentation.subtitle ?? null,
+						summaryMarkdown: run.presentation.summaryMarkdown ?? null,
+						footer: run.presentation.footer ?? null
 					}
 				: null,
 			totals: run.totals

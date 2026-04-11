@@ -6,7 +6,9 @@ type GraderRunPaperInput = {
 
 type GraderRunPresentationInput = {
 	title?: string | null;
+	subtitle?: string | null;
 	summaryMarkdown?: string | null;
+	footer?: string | null;
 };
 
 type GraderRunDisplayInput = {
@@ -19,8 +21,10 @@ type GraderRunDisplayInput = {
 
 export type GraderRunDisplay = {
 	title: string;
+	subtitle: string | null;
 	metaLine: string | null;
 	summaryMarkdown: string | null;
+	footer: string | null;
 };
 
 const PLACEHOLDER_TEXT_PATTERN =
@@ -61,6 +65,45 @@ function buildMetaLine(options: {
 		return null;
 	}
 	return parts.join(' • ');
+}
+
+function buildFallbackSubtitle(options: {
+	status: GraderRunDisplayInput['status'];
+	sheetPhase?: GraderRunDisplayInput['sheetPhase'];
+	metaLine: string | null;
+}): string | null {
+	if (options.metaLine) {
+		return options.metaLine;
+	}
+	if (options.sheetPhase === 'building') {
+		return options.status === 'created'
+			? 'Queued from the uploaded material.'
+			: 'Preparing a worksheet from the uploaded material.';
+	}
+	if (options.sheetPhase === 'solving') {
+		return 'Worksheet draft prepared from the uploaded material.';
+	}
+	if (options.sheetPhase === 'grading') {
+		return options.status === 'created'
+			? 'Saved answers are queued for grading.'
+			: 'Submitted answers are being graded.';
+	}
+	if (options.sheetPhase === 'graded' || options.status === 'done') {
+		return 'Worksheet review prepared from the uploaded material.';
+	}
+	if (options.status === 'created') {
+		return 'Queued from the uploaded material.';
+	}
+	if (options.status === 'executing') {
+		return 'Submitted answers are being graded.';
+	}
+	if (options.status === 'stopped') {
+		return 'Worksheet processing stopped before completion.';
+	}
+	if (options.status === 'failed') {
+		return 'Worksheet processing could not be completed.';
+	}
+	return 'Uploaded material.';
 }
 
 function buildFallbackSummary(options: {
@@ -128,11 +171,39 @@ function getPreferredSummary(options: {
 	return resultSummary;
 }
 
+function buildFooter(options: {
+	title: string;
+	presentation?: GraderRunPresentationInput | null;
+	paper?: GraderRunPaperInput | null;
+}): string | null {
+	const explicitFooter = getMeaningfulText(options.presentation?.footer);
+	if (explicitFooter) {
+		return explicitFooter;
+	}
+	const parts = [
+		getMeaningfulText(options.paper?.contextLabel),
+		getMeaningfulText(options.paper?.year)
+	].filter((value): value is string => value !== null);
+	if (parts.length === 0) {
+		return 'Uploaded material';
+	}
+	const titleLower = options.title.toLowerCase();
+	const distinctParts = parts.filter((part) => !titleLower.includes(part.toLowerCase()));
+	if (distinctParts.length === 0) {
+		return 'Uploaded material';
+	}
+	return distinctParts.join(' • ');
+}
+
 export function buildGraderRunDisplay(input: GraderRunDisplayInput): GraderRunDisplay {
 	const paperName = getMeaningfulText(input.paper?.paperName);
 	const title =
 		getMeaningfulText(input.presentation?.title) ??
 		buildFallbackTitle({ paperName });
+	const metaLine = buildMetaLine({
+		title,
+		paper: input.paper
+	});
 	const summaryMarkdown =
 		getPreferredSummary({
 			presentation: input.presentation,
@@ -145,10 +216,19 @@ export function buildGraderRunDisplay(input: GraderRunDisplayInput): GraderRunDi
 		});
 	return {
 		title,
-		metaLine: buildMetaLine({
+		subtitle:
+			getMeaningfulText(input.presentation?.subtitle) ??
+			buildFallbackSubtitle({
+				status: input.status,
+				sheetPhase: input.sheetPhase,
+				metaLine
+			}),
+		metaLine,
+		summaryMarkdown,
+		footer: buildFooter({
 			title,
+			presentation: input.presentation,
 			paper: input.paper
-		}),
-		summaryMarkdown
+		})
 	};
 }

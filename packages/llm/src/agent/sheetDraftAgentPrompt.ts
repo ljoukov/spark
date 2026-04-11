@@ -48,7 +48,7 @@ export function buildSparkSheetDraftAgentPrompt(options?: {
     "",
     "Deliverables:",
     `1) Write one worksheet draft JSON file at ${sheetPath}`,
-    `2) Write ${summaryPath} including a concise student-facing presentation title and summary markdown`,
+    `2) Write ${summaryPath} including a concise student-facing presentation title, subtitle, body summary markdown, and footer provenance`,
     "3) Call publish_sheet_draft({}) to validate and publish the worksheet draft; this only validates the artifact contract/persistence, so complete the source-fidelity check before calling it. If it fails, fix the files and retry until it succeeds",
     "4) Call done with a short summary after publish_sheet_draft succeeds",
   ].join("\n");

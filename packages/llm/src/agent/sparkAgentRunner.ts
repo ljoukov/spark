@@ -1012,7 +1012,9 @@ const GraderSummarySheetSchema = z.object({
 
 const GraderRunPresentationSchema = z.object({
   title: z.string().trim().min(1).optional(),
+  subtitle: z.string().trim().min(1).optional(),
   summaryMarkdown: z.string().trim().min(1).optional(),
+  footer: z.string().trim().min(1).optional(),
 });
 
 const GraderRunSummarySchema = z
@@ -1055,7 +1057,9 @@ type PublishedGraderSheetArtifacts = {
   };
   presentation: {
     title: string;
+    subtitle: string;
     summaryMarkdown: string;
+    footer: string;
   };
   totals: {
     awardedMarks: number;
@@ -1078,7 +1082,9 @@ type PublishedSheetDraftArtifacts = {
   sheetSha256: string;
   presentation: {
     title: string;
+    subtitle: string;
     summaryMarkdown: string;
+    footer: string;
   };
   sheet: {
     title?: string;
@@ -1719,10 +1725,22 @@ async function validateGraderWorkspaceForPublish(options: {
       `Grader summary "${resolvedSummaryPath}" is missing presentation.title.`,
     );
   }
+  const presentationSubtitle = summary.presentation?.subtitle?.trim();
+  if (!presentationSubtitle) {
+    throw new Error(
+      `Grader summary "${resolvedSummaryPath}" is missing presentation.subtitle.`,
+    );
+  }
   const presentationSummary = summary.presentation?.summaryMarkdown?.trim();
   if (!presentationSummary) {
     throw new Error(
       `Grader summary "${resolvedSummaryPath}" is missing presentation.summaryMarkdown.`,
+    );
+  }
+  const presentationFooter = summary.presentation?.footer?.trim();
+  if (!presentationFooter) {
+    throw new Error(
+      `Grader summary "${resolvedSummaryPath}" is missing presentation.footer.`,
     );
   }
   if (!summary.totals) {
@@ -1793,7 +1811,9 @@ async function validateGraderWorkspaceForPublish(options: {
     ...(Object.keys(paper).length > 0 ? { paper } : {}),
     presentation: {
       title: presentationTitle,
+      subtitle: presentationSubtitle,
       summaryMarkdown: presentationSummary,
+      footer: presentationFooter,
     },
     totals: summariseGraderTotals(summary),
     sheet: {
@@ -1855,10 +1875,22 @@ async function validateSheetDraftWorkspaceForPublish(options: {
       `Worksheet draft summary "${resolvedSummaryPath}" is missing presentation.title.`,
     );
   }
+  const presentationSubtitle = summary.presentation?.subtitle?.trim();
+  if (!presentationSubtitle) {
+    throw new Error(
+      `Worksheet draft summary "${resolvedSummaryPath}" is missing presentation.subtitle.`,
+    );
+  }
   const presentationSummary = summary.presentation?.summaryMarkdown?.trim();
   if (!presentationSummary) {
     throw new Error(
       `Worksheet draft summary "${resolvedSummaryPath}" is missing presentation.summaryMarkdown.`,
+    );
+  }
+  const presentationFooter = summary.presentation?.footer?.trim();
+  if (!presentationFooter) {
+    throw new Error(
+      `Worksheet draft summary "${resolvedSummaryPath}" is missing presentation.footer.`,
     );
   }
 
@@ -1935,7 +1967,9 @@ async function validateSheetDraftWorkspaceForPublish(options: {
     sheetSha256: createHash("sha256").update(normalizedSheetRaw).digest("hex"),
     presentation: {
       title: presentationTitle,
+      subtitle: presentationSubtitle,
       summaryMarkdown: presentationSummary,
+      footer: presentationFooter,
     },
     sheet: {
       filePath: resolvedSheetPath,

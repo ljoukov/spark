@@ -310,7 +310,9 @@ Use these exact field names. Do not invent alternate keys such as `promptMarkdow
 {
   "presentation": {
     "title": "string",
-    "summaryMarkdown": "string"
+    "subtitle": "string",
+    "summaryMarkdown": "string",
+    "footer": "string"
   },
   "sheet": {
     "title": "string",
@@ -319,7 +321,10 @@ Use these exact field names. Do not invent alternate keys such as `promptMarkdow
 }
 ```
 
-12. `presentation.title` and `presentation.summaryMarkdown` must stay student-facing and must not mention IDs, file paths, tools, or internal process notes.
+12. `presentation.title`, `presentation.subtitle`, `presentation.summaryMarkdown`, and `presentation.footer` must stay student-facing and must not mention IDs, file paths, tools, or internal process notes.
+    - `presentation.subtitle` should be a short factual header line about the uploaded worksheet or current state.
+    - `presentation.summaryMarkdown` is the body copy for the list card and should not repeat marks or percentages.
+    - `presentation.footer` should be a terse provenance/source line rather than a repeated title.
 13. Do not try to infer the schema from logs or unrelated files. The contract above is the one to follow.
 14. After both files exist, call `publish_sheet_draft({})`.
 15. Do not call `done` before `publish_sheet_draft` succeeds.

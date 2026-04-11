@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { renderMarkdown } from '$lib/markdown';
+	import { renderMarkdownOptional } from '$lib/markdown';
 	import { sumPaperSheetMarks, type PaperSheetData } from '@spark/schemas';
 	import type { PageData } from './$types';
 
@@ -132,6 +132,15 @@
 		}
 		return 'graded';
 	}
+
+	function resolveFooterText(sheet: PageData['sheets'][number]): string {
+		if (sheet.display.footer) {
+			return sheet.display.footer;
+		}
+		return [sheet.previewSheet?.level ?? 'Worksheet', sheet.previewSheet?.subject ?? 'Submission'].join(
+			' · '
+		);
+	}
 </script>
 
 <svelte:head>
@@ -159,6 +168,7 @@
 		<div class="sheet-grid">
 			{#each data.sheets as sheet (sheet.id)}
 				{@const marksSummary = resolveMarksSummary(sheet)}
+				{@const summaryHtml = renderMarkdownOptional(sheet.display.summaryMarkdown)}
 				<a class="sheet-card" href={`/spark/sheets/${sheet.id}`} data-status={sheet.status}>
 					<div class="sheet-preview" style={buildPreviewStyle(sheet.previewSheet)}>
 						<header class="sheet-preview__header">
@@ -177,10 +187,10 @@
 										{sheet.previewSheet?.subject ?? 'Submission'}
 									</p>
 									<h2 class="sheet-preview__title">
-										{sheet.previewSheet?.title ?? sheet.display.title}
+										{sheet.display.title}
 									</h2>
 									<p class="sheet-preview__subtitle">
-										{sheet.previewSheet?.subtitle ?? sheet.display.summaryMarkdown ?? 'Awaiting sheet output.'}
+										{sheet.display.subtitle ?? sheet.previewSheet?.subtitle ?? 'Awaiting sheet output.'}
 									</p>
 								</div>
 							</div>
@@ -196,19 +206,15 @@
 
 							{#if sheet.error}
 								<p class="sheet-preview__error">{sheet.error}</p>
-							{:else if sheet.display.summaryMarkdown}
+							{:else if summaryHtml}
 								<div class="sheet-preview__summary markdown-content">
-									{@html renderMarkdown(sheet.display.summaryMarkdown)}
+									{@html summaryHtml}
 								</div>
 							{/if}
 						</div>
 
 						<footer class="sheet-preview__footer">
-							<span>
-								{sheet.previewSheet?.level ?? 'Worksheet'} ·
-								{sheet.previewSheet?.subject ?? 'Submission'} ·
-								{sheet.previewSheet?.title ?? sheet.display.title}
-							</span>
+							<span>{resolveFooterText(sheet)}</span>
 						</footer>
 					</div>
 				</a>
@@ -286,9 +292,11 @@
 		display: grid;
 		gap: 1rem;
 		grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+		align-items: start;
 	}
 
 	.sheet-card {
+		display: block;
 		text-decoration: none;
 		color: inherit;
 	}

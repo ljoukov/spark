@@ -29,8 +29,6 @@
 	};
 
 	type ThumbnailExploration = {
-		id: string;
-		label: string;
 		title: string;
 		description: string;
 		recommendation?: string;
@@ -67,195 +65,67 @@
 		border: '#cadaeb'
 	};
 
-	const explorations: ThumbnailExploration[] = [
-		{
-			id: 'signal-first',
-			label: 'Recommended',
-			title: 'Signal-first summary',
-			description:
-				'Best balance for the real list page. Header handles identity, body carries one outcome sentence, and the footer becomes provenance instead of a repeated title.',
-			recommendation: 'Strongest default for production list cards.',
-			keep: [
-				'One clean sentence in the body, tuned to the current state.',
-				'Footer as provenance: board, paper, source.',
-				'Marks box limited to ratio plus percent.'
-			],
-			strip: [
-				'Repeated title or subject in the footer.',
-				'Multiple explanatory sentences in the card body.',
-				'Any second score row below the summary.'
-			],
-			cards: [
-				{
-					id: 'signal-ready',
-					eyebrow: 'GCSE Higher · Combined Science: Trilogy Physics',
-					title: 'AQA GCSE Combined Science: Trilogy Physics Paper 1H',
-					subtitle: 'June 2024 handwritten responses matched to the uploaded paper',
-					marksValue: '— / 70',
-					statusLabel: 'Ready to solve',
-					statusTone: 'ready',
-					updatedAt: 'Apr 1, 2026, 10:49 PM',
-					summary:
-						'Ready to solve across six sections covering energy stores, power equations, circuit components, and graph interpretation.',
-					footer: 'AQA · Paper 1H · uploaded paper + notebook pages',
-					theme: physicsTheme
-				},
-				{
-					id: 'signal-graded',
-					eyebrow: 'GCSE Higher · Combined Science: Trilogy Physics',
-					title: 'AQA GCSE Combined Science Trilogy Physics Paper 1H',
-					subtitle: 'June 2024 handwritten responses graded against the uploaded paper',
-					marksValue: '60 / 70',
-					marksDetail: '85.7%',
-					statusLabel: 'Graded',
-					statusTone: 'graded',
-					updatedAt: 'Apr 1, 2026, 10:55 PM',
-					summary:
-						'Strong on calculation questions; most dropped marks came from explanation detail, the unfinished graph, and the final 06.4 response.',
-					footer: 'AQA · Paper 1H · uploaded paper + notebook pages',
-					theme: physicsTheme
-				},
-				{
-					id: 'signal-grading',
-					eyebrow: 'Worksheet · Submission',
-					title: 'Uploaded worksheet',
-					subtitle: 'Scanned handwritten answers from a mixed worksheet upload',
-					marksValue: 'Not graded',
-					statusLabel: 'Grading',
-					statusTone: 'grading',
-					updatedAt: 'Apr 1, 2026, 10:58 PM',
-					summary:
-						'Grader is still assembling marks and feedback from the uploaded worksheet before publishing the review.',
-					footer: 'Uploaded worksheet · handwritten answers',
-					theme: uploadTheme
-				}
-			]
-		},
-		{
-			id: 'topic-strip',
-			label: 'Alternative',
-			title: 'Topic-strip footer',
-			description:
-				'Good when the list is used as a revision shelf. The footer stops behaving like provenance and instead turns into a compact retrieval cue for what is inside the sheet.',
-			keep: [
-				'Footer as revision topics for faster scanning.',
-				'Body summary shortened to one line of status or performance.',
-				'Title kept fully intact for exam specificity.'
-			],
-			strip: [
-				'Board/paper/source detail from the footer.',
-				'Long narrative summaries that bury the topic signal.',
-				'Redundant "worksheet" wording in the subtitle.'
-			],
-			cards: [
-				{
-					id: 'topic-ready',
-					eyebrow: 'Secondary · Mathematics',
-					title: '1.13 Calculating interest and percentage',
-					subtitle: 'Worksheet 1.13 reconstructed from the uploaded page set',
-					marksValue: '— / 11',
-					statusLabel: 'Ready to solve',
-					statusTone: 'ready',
-					updatedAt: 'Apr 1, 2026, 10:07 PM',
-					summary:
-						'Ready to solve with mixed multiple-choice, fill-in, and written-solution questions.',
-					footer: 'simple interest · tax · accrued amount · percentages',
-					theme: mathTheme
-				},
-				{
-					id: 'topic-graded',
-					eyebrow: 'Secondary · Mathematics',
-					title: 'Calculating interest and percentage',
-					subtitle: 'Marked from the uploaded worksheet and saved answers',
-					marksValue: '8 / 11',
-					marksDetail: '72.7%',
-					statusLabel: 'Graded',
-					statusTone: 'graded',
-					updatedAt: 'Mar 29, 2026, 9:47 PM',
-					summary:
-						'Secure on short percentage questions; the main slip was separating interest, after-tax interest, and accrued amount in longer problems.',
-					footer: 'simple interest · tax · accrued amount · percentages',
-					theme: mathTheme
-				},
-				{
-					id: 'topic-grading',
-					eyebrow: 'Secondary · Mathematics',
-					title: 'Calculating interest and percentage',
-					subtitle: 'Handwritten responses are still being parsed for marking',
-					marksValue: 'Not graded',
-					statusLabel: 'Grading',
-					statusTone: 'grading',
-					updatedAt: 'Apr 1, 2026, 10:38 PM',
-					summary:
-						'Waiting on the grader report for the long-response workings and the final summary note.',
-					footer: 'simple interest · tax · accrued amount · percentages',
-					theme: mathTheme
-				}
-			]
-		},
-		{
-			id: 'next-step',
-			label: 'Alternative',
-			title: 'Next-step guidance',
-			description:
-				'Most tutor-like. The card body is optimized around what the student should do next, while the footer keeps the source context light and factual.',
-			keep: [
-				'Body copy written as an actionable next move.',
-				'Footer stays factual and quiet.',
-				'Best fit for graded cards when the list doubles as a revision queue.'
-			],
-			strip: [
-				'Performance recap that does not change what the learner should do.',
-				'Footer topic strips if the page already shows many similar sheets.',
-				'Any extra "awaiting grading" language in the marks box.'
-			],
-			cards: [
-				{
-					id: 'next-ready',
-					eyebrow: 'GCSE Higher · Combined Science: Trilogy Physics',
-					title: 'AQA GCSE Combined Science: Trilogy Physics Paper 1H',
-					subtitle: 'June 2024 handwritten responses from the uploaded paper',
-					marksValue: '— / 70',
-					statusLabel: 'Ready to solve',
-					statusTone: 'ready',
-					updatedAt: 'Apr 1, 2026, 10:49 PM',
-					summary:
-						'Next: open the worksheet and work through the six sections in order before sending it for grading.',
-					footer: 'AQA · Paper 1H · uploaded paper',
-					theme: physicsTheme
-				},
-				{
-					id: 'next-graded',
-					eyebrow: 'GCSE Higher · Combined Science: Trilogy Physics',
-					title: 'AQA GCSE Combined Science Trilogy Physics Paper 1H',
-					subtitle: 'June 2024 handwritten responses graded against the uploaded paper',
-					marksValue: '60 / 70',
-					marksDetail: '85.7%',
-					statusLabel: 'Graded',
-					statusTone: 'graded',
-					updatedAt: 'Apr 1, 2026, 10:55 PM',
-					summary:
-						'Next focus: tighten explanation detail, finish the graph question, and revisit the final 06.4 long response.',
-					footer: 'AQA · Paper 1H · uploaded paper',
-					theme: physicsTheme
-				},
-				{
-					id: 'next-grading',
-					eyebrow: 'Worksheet · Submission',
-					title: 'Uploaded worksheet',
-					subtitle: 'Mixed handwritten responses from a scanned upload',
-					marksValue: 'Not graded',
-					statusLabel: 'Grading',
-					statusTone: 'grading',
-					updatedAt: 'Apr 1, 2026, 10:58 PM',
-					summary:
-						'Next: wait for the grader report to land, then reopen the card for marks and a single review sentence.',
-					footer: 'Uploaded worksheet · scanned handwriting',
-					theme: uploadTheme
-				}
-			]
-		}
-	];
+	const exploration: ThumbnailExploration = {
+		title: 'Approved thumbnail layout',
+		description:
+			'Production direction for the real list page. Header handles identity, body carries one outcome sentence, and the footer becomes provenance instead of a repeated title.',
+		recommendation: 'Approved for production.',
+		keep: [
+			'One clean sentence in the body, tuned to the current state.',
+			'Footer as provenance: board, paper, or upload cue.',
+			'Marks box limited to ratio plus percent.'
+		],
+		strip: [
+			'Repeated title or subject in the footer.',
+			'Multiple explanatory sentences in the card body.',
+			'Any second score row below the summary.'
+		],
+		cards: [
+			{
+				id: 'signal-ready',
+				eyebrow: 'GCSE Higher · Combined Science: Trilogy Physics',
+				title: 'AQA GCSE Combined Science: Trilogy Physics Paper 1H',
+				subtitle: 'June 2024 handwritten responses matched to the uploaded paper',
+				marksValue: '— / 70',
+				statusLabel: 'Ready to solve',
+				statusTone: 'ready',
+				updatedAt: 'Apr 1, 2026, 10:49 PM',
+				summary:
+					'Ready to solve across six sections covering energy stores, power equations, circuit components, and graph interpretation.',
+				footer: 'AQA · Paper 1H · uploaded paper + notebook pages',
+				theme: physicsTheme
+			},
+			{
+				id: 'signal-graded',
+				eyebrow: 'GCSE Higher · Combined Science: Trilogy Physics',
+				title: 'AQA GCSE Combined Science Trilogy Physics Paper 1H',
+				subtitle: 'June 2024 handwritten responses graded against the uploaded paper',
+				marksValue: '60 / 70',
+				marksDetail: '85.7%',
+				statusLabel: 'Graded',
+				statusTone: 'graded',
+				updatedAt: 'Apr 1, 2026, 10:55 PM',
+				summary:
+					'Strong on calculation questions; most dropped marks came from explanation detail, the unfinished graph, and the final 06.4 response.',
+				footer: 'AQA · Paper 1H · uploaded paper + notebook pages',
+				theme: physicsTheme
+			},
+			{
+				id: 'signal-grading',
+				eyebrow: 'Worksheet · Submission',
+				title: 'Uploaded worksheet',
+				subtitle: 'Scanned handwritten answers from a mixed worksheet upload',
+				marksValue: 'Not graded',
+				statusLabel: 'Grading',
+				statusTone: 'grading',
+				updatedAt: 'Apr 1, 2026, 10:58 PM',
+				summary:
+					'Grader is still assembling marks and feedback from the uploaded worksheet before publishing the review.',
+				footer: 'Uploaded worksheet · handwritten answers',
+				theme: uploadTheme
+			}
+		]
+	};
 
 	function buildCardStyle(theme: ThumbnailTheme): string {
 		return [
@@ -268,19 +138,19 @@
 </script>
 
 <svelte:head>
-	<title>Sheet thumbnail explorations · Spark admin</title>
+	<title>Sheet thumbnail preview · Spark admin</title>
 </svelte:head>
 
 <div class="space-y-6">
 	<div class="space-y-3">
 		<div class="space-y-2">
 			<h1 class="text-2xl font-semibold tracking-tight text-foreground">
-				Sheet thumbnail explorations
+				Sheet thumbnail preview
 			</h1>
 			<p class="max-w-3xl text-sm text-muted-foreground">
-				Thumbnail studies for the <code>/spark/sheets</code> list. These keep the same card
-				structure as production while testing leaner content outputs before touching any
-				generation prompts.
+				Approved content layout for the <code>/spark/sheets</code> list. This mirrors the
+				production card shell and the structured subtitle/body/footer contract the agents now
+				generate.
 			</p>
 		</div>
 
@@ -313,95 +183,93 @@
 		</Card.Content>
 	</Card.Root>
 
-	{#each explorations as exploration (exploration.id)}
-		<Card.Root class="border-border/70 bg-card/95 shadow-sm">
-			<Card.Header class="gap-3">
-				<div class="flex flex-wrap items-start justify-between gap-3">
-					<div class="space-y-1">
-						<div class="flex flex-wrap items-center gap-2">
-							<span
-								class="rounded-full border border-border/70 bg-muted/30 px-2.5 py-1 text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase"
-							>
-								{exploration.label}
+	<Card.Root class="border-border/70 bg-card/95 shadow-sm">
+		<Card.Header class="gap-3">
+			<div class="flex flex-wrap items-start justify-between gap-3">
+				<div class="space-y-1">
+					<div class="flex flex-wrap items-center gap-2">
+						<span
+							class="rounded-full border border-border/70 bg-muted/30 px-2.5 py-1 text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase"
+						>
+							Approved
+						</span>
+						{#if exploration.recommendation}
+							<span class="text-xs font-medium text-emerald-700">
+								{exploration.recommendation}
 							</span>
-							{#if exploration.recommendation}
-								<span class="text-xs font-medium text-emerald-700">
-									{exploration.recommendation}
-								</span>
-							{/if}
+						{/if}
+					</div>
+					<Card.Title>{exploration.title}</Card.Title>
+					<Card.Description>{exploration.description}</Card.Description>
+				</div>
+			</div>
+		</Card.Header>
+		<Card.Content class="space-y-5">
+			<div class="grid gap-4 xl:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
+				<div class="space-y-4">
+					<div class="space-y-2">
+						<p class="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+							Keep
+						</p>
+						<div class="space-y-2">
+							{#each exploration.keep as item}
+								<p class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+									{item}
+								</p>
+							{/each}
 						</div>
-						<Card.Title>{exploration.title}</Card.Title>
-						<Card.Description>{exploration.description}</Card.Description>
+					</div>
+
+					<div class="space-y-2">
+						<p class="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+							Strip
+						</p>
+						<div class="space-y-2">
+							{#each exploration.strip as item}
+								<p class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+									{item}
+								</p>
+							{/each}
+						</div>
 					</div>
 				</div>
-			</Card.Header>
-			<Card.Content class="space-y-5">
-				<div class="grid gap-4 xl:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
-					<div class="space-y-4">
-						<div class="space-y-2">
-							<p class="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
-								Keep
-							</p>
-							<div class="space-y-2">
-								{#each exploration.keep as item}
-									<p class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-										{item}
-									</p>
-								{/each}
-							</div>
-						</div>
 
-						<div class="space-y-2">
-							<p class="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
-								Strip
-							</p>
-							<div class="space-y-2">
-								{#each exploration.strip as item}
-									<p class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-										{item}
-									</p>
-								{/each}
-							</div>
-						</div>
-					</div>
-
-					<div class="thumbnail-grid">
-						{#each exploration.cards as item (item.id)}
-							<article class="thumbnail-card" style={buildCardStyle(item.theme)}>
-								<header class="thumbnail-card__header">
-									<div class="thumbnail-card__header-inner">
-										<div class="thumbnail-card__marks">
-											<p class="thumbnail-card__marks-label">Marks</p>
-											<p class="thumbnail-card__marks-value">{item.marksValue}</p>
-											{#if item.marksDetail}
-												<p class="thumbnail-card__marks-detail">{item.marksDetail}</p>
-											{/if}
-										</div>
-
-										<p class="thumbnail-card__eyebrow">{item.eyebrow}</p>
-										<h3 class="thumbnail-card__title">{item.title}</h3>
-										<p class="thumbnail-card__subtitle">{item.subtitle}</p>
+				<div class="thumbnail-grid">
+					{#each exploration.cards as item (item.id)}
+						<article class="thumbnail-card" style={buildCardStyle(item.theme)}>
+							<header class="thumbnail-card__header">
+								<div class="thumbnail-card__header-inner">
+									<div class="thumbnail-card__marks">
+										<p class="thumbnail-card__marks-label">Marks</p>
+										<p class="thumbnail-card__marks-value">{item.marksValue}</p>
+										{#if item.marksDetail}
+											<p class="thumbnail-card__marks-detail">{item.marksDetail}</p>
+										{/if}
 									</div>
-								</header>
 
-								<div class="thumbnail-card__body">
-									<div class="thumbnail-card__meta">
-										<span class="thumbnail-card__status" data-tone={item.statusTone}>
-											{item.statusLabel}
-										</span>
-										<span>{item.updatedAt}</span>
-									</div>
-									<p class="thumbnail-card__summary">{item.summary}</p>
+									<p class="thumbnail-card__eyebrow">{item.eyebrow}</p>
+									<h3 class="thumbnail-card__title">{item.title}</h3>
+									<p class="thumbnail-card__subtitle">{item.subtitle}</p>
 								</div>
+							</header>
 
-								<footer class="thumbnail-card__footer">{item.footer}</footer>
-							</article>
-						{/each}
-					</div>
+							<div class="thumbnail-card__body">
+								<div class="thumbnail-card__meta">
+									<span class="thumbnail-card__status" data-tone={item.statusTone}>
+										{item.statusLabel}
+									</span>
+									<span>{item.updatedAt}</span>
+								</div>
+								<p class="thumbnail-card__summary">{item.summary}</p>
+							</div>
+
+							<footer class="thumbnail-card__footer">{item.footer}</footer>
+						</article>
+					{/each}
 				</div>
-			</Card.Content>
-		</Card.Root>
-	{/each}
+			</div>
+		</Card.Content>
+	</Card.Root>
 </div>
 
 <style lang="postcss">
@@ -409,9 +277,11 @@
 		display: grid;
 		gap: 1rem;
 		grid-template-columns: repeat(auto-fit, minmax(16.75rem, 1fr));
+		align-items: start;
 	}
 
 	.thumbnail-card {
+		align-self: start;
 		overflow: hidden;
 		border-radius: 1.15rem;
 		border: 1px solid var(--thumb-border);

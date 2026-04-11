@@ -283,8 +283,10 @@
 	): boolean {
 		return (
 			left.title === right.title &&
+			left.subtitle === right.subtitle &&
 			left.metaLine === right.metaLine &&
-			left.summaryMarkdown === right.summaryMarkdown
+			left.summaryMarkdown === right.summaryMarkdown &&
+			left.footer === right.footer
 		);
 	}
 

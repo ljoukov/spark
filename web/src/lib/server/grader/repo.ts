@@ -86,7 +86,9 @@ const sparkGraderPaperSchema = z
 
 const sparkGraderPresentationSchema = z.object({
 	title: trimmedString.optional(),
-	summaryMarkdown: trimmedString.optional()
+	subtitle: trimmedString.optional(),
+	summaryMarkdown: trimmedString.optional(),
+	footer: trimmedString.optional()
 });
 
 const sparkGraderRunSchema = z.object({
