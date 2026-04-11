@@ -13,6 +13,7 @@
     "tools:say": "tsx src/tools/say.ts",
     "tools:lesson-agent-smoke": "tsx src/tools/lesson-agent-smoke.ts",
     "tools:spark-chat-grader-local": "tsx src/tools/spark-chat-grader-local.ts",
+    "tools:export-agent-runs": "tsx src/tools/export-agent-runs.ts",
     "auth:chatgpt": "tsx src/tools/chatgpt-login.ts",
     "test:llm": "tsx src/tests/testLlmApi.ts",
     "test:llm-web-search": "tsx src/tests/testLlmWebSearch.ts",
