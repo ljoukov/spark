@@ -6,14 +6,14 @@ Source run replayed for all rows:
 
 Notes:
 
-- `chatgpt-gpt-5.4` replay exposes `thinkingLevel=low|medium|high`; there is no distinct replay-time `xhigh`. On this branch, `xhigh` is effectively an alias of `high`.
+- `chatgpt-gpt-5.4-fast` replay exposes `thinkingLevel=low|medium|high`; there is no distinct replay-time `xhigh`. On this branch, `xhigh` is effectively an alias of `high`.
 - Exact supported Gemini IDs used on this branch:
   - `gemini-3.1-pro-preview` for the requested Gemini 3.1 Pro row
   - `gemini-2.5-pro`
   - `gemini-flash-latest`
 - The Gemini rows below are the post-fix reruns after the shared `@ljoukov/llm` Gemini function-call/history fix. Earlier March 9 Gemini failures were superseded by these reruns.
 
-## ChatGPT GPT-5.4
+## ChatGPT GPT-5.4-fast
 
 | Mode | State | Wall s | Model calls | Tool calls | Tokens `p/c/r/th/tot` | Cost | Output | Artifact |
 | --- | --- | ---: | ---: | ---: | --- | ---: | --- | --- |
@@ -24,7 +24,7 @@ Notes:
 
 Key observations:
 
-- `low` was the only completed `chatgpt-gpt-5.4` run. It produced [summary.json](output/2026-03-09T14-11-43-317Z/chatgpt-gpt-5-4/summary.json) and [run-summary.json](output/2026-03-09T14-11-43-317Z/chatgpt-gpt-5-4/workspace/grader/output/run-summary.json), with a final score of `20/30`.
+- `low` was the only completed `chatgpt-gpt-5.4-fast` run. It produced [summary.json](output/2026-03-09T14-11-43-317Z/chatgpt-gpt-5-4/summary.json) and [run-summary.json](output/2026-03-09T14-11-43-317Z/chatgpt-gpt-5-4/workspace/grader/output/run-summary.json), with a final score of `20/30`.
 - `medium` failed in the `extract_text` path with `UND_ERR_BODY_TIMEOUT` during a `gemini-flash-latest` tool call.
 - `high` reproduced the source-run bottleneck: much higher thinking-token spend early, but it still did not reach final grading output during observation.
 
@@ -50,7 +50,7 @@ Key observations:
 
 ## Bottom Line
 
-- Best overall completed run from the full matrix: `chatgpt-gpt-5.4 low`
+- Best overall completed run from the full matrix: `chatgpt-gpt-5.4-fast low`
 - Best Gemini run after the shared llm fix: `gemini-3.1-pro-preview`
 - Lowest cost / fastest Gemini run: `gemini-flash-latest`, but with the weakest output quality
 - `gemini-2.5-pro` is unblocked by the llm-layer fix, but still needs stronger output-contract enforcement

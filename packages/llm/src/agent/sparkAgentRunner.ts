@@ -131,7 +131,7 @@ import type {
   StageHandle,
 } from "../utils/concurrency";
 
-const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4";
+const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4-fast";
 const SPARK_AGENT_FILESYSTEM_TOOL_PROFILE = "codex" as const;
 
 type LlmDebugOptions = {
@@ -163,7 +163,7 @@ type TrackedSubmodelCallSummary = {
   readonly usageTokens: LlmUsageTokenUpdate | null;
   readonly costUsd: number | null;
 };
-const DEFAULT_GENERATE_TEXT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4";
+const DEFAULT_GENERATE_TEXT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4-fast";
 const WORKSPACE_UPDATE_THROTTLE_MS = 10_000;
 const AGENT_LOG_THROTTLE_MS = 2_000;
 const AGENT_TOOL_LOG_SNIPPET_MAX_BYTES = 4 * 1024;

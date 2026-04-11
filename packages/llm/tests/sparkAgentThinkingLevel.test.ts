@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 describe("resolveSparkAgentThinkingLevel", () => {
-  it("uses medium thinking for gpt-5.4 agent runs", async () => {
+  it("uses medium thinking for gpt-5.4-fast agent runs", async () => {
     const { resolveSparkAgentThinkingLevel } = await import(
       "../src/agent/sparkAgentRunner"
     );
 
-    expect(resolveSparkAgentThinkingLevel("chatgpt-gpt-5.4")).toBe("medium");
+    expect(resolveSparkAgentThinkingLevel("chatgpt-gpt-5.4-fast")).toBe("medium");
   });
 
   it("uses medium thinking for gpt-5.3-codex-spark agent runs", async () => {
@@ -27,7 +27,7 @@ describe("resolveSparkAgentThinkingLevel", () => {
     expect(resolveSparkAgentThinkingLevel("gemini-flash-latest")).toBeUndefined();
   });
 
-  it("pins Spark subagents to chatgpt-gpt-5.4", async () => {
+  it("keeps the Codex prompt pattern for Spark subagents", async () => {
     const { resolveSparkAgentSubagentSelection } = await import(
       "../src/agent/sparkAgentRunner"
     );

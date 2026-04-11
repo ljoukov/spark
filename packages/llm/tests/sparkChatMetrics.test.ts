@@ -92,7 +92,7 @@ describe("runSparkChatAgentLoop", () => {
     expect(publishSparkToolLoopStepMetricsFromEnvMock).toHaveBeenCalledWith(
       expect.objectContaining({
         operation: "agent_run_tool_loop",
-        model: "chatgpt-gpt-5.4",
+        model: "chatgpt-gpt-5.4-fast",
         provider: "chatgpt",
         status: "ok",
         agentType: "chat",

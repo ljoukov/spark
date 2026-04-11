@@ -29,7 +29,7 @@ ensureEvalEnvLoaded();
 const BENCHMARK_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT_DIR = path.resolve(BENCHMARK_DIR, "../../../..");
 const OUTPUT_ROOT_DIR = path.join(BENCHMARK_DIR, "output");
-const DEFAULT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4";
+const DEFAULT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4-fast";
 const { toRepoRelativePath } = createRepoPathHelpers({
   benchmarkDir: BENCHMARK_DIR,
   repoRootDir: REPO_ROOT_DIR,

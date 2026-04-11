@@ -52,7 +52,7 @@ const DEFAULT_INPUT_FILE_PATHS = [
   path.join(BENCHMARK_DIR, "data", "hamilton-2017-solutions-p2.jpg"),
 ] as const;
 const OUTPUT_ROOT_DIR = path.join(BENCHMARK_DIR, "output");
-const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4";
+const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4-fast";
 const MAX_STEPS = 160;
 const REQUIRED_CUSTOM_TOOL_NAMES = [
   "extract_text",

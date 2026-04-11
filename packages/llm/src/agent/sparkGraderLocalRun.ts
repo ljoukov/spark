@@ -12,7 +12,7 @@ import {
   resolveSparkAgentWorkspaceRoot,
 } from "./sparkAgentRunner";
 
-const DEFAULT_LOCAL_GRADER_MODEL_ID = "chatgpt-gpt-5.4" as const;
+const DEFAULT_LOCAL_GRADER_MODEL_ID = "chatgpt-gpt-5.4-fast" as const;
 const DEFAULT_LOCAL_GRADER_MAX_STEPS = 200;
 
 export type SparkLocalGraderRunHandle = {

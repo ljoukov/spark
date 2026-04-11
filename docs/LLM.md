@@ -40,7 +40,7 @@ All calls accept:
 
 OpenAI model routing:
 - `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano` → OpenAI API.
-- `chatgpt-gpt-5.4`, `chatgpt-gpt-5.4-fast`, `chatgpt-gpt-5.4-mini`, `chatgpt-gpt-5.3-codex-spark` → ChatGPT Codex backend (OAuth). Legacy aliases `gpt-5.2-codex`, `chatgpt-gpt-5.2-codex`, and `chatgpt-gpt-5.3-codex` are normalized to `chatgpt-gpt-5.3-codex-spark`.
+- `chatgpt-gpt-5.4-fast`, `chatgpt-gpt-5.4-mini`, `chatgpt-gpt-5.3-codex-spark` → ChatGPT Codex backend (OAuth). Legacy aliases `gpt-5.2-codex`, `chatgpt-gpt-5.2-codex`, and `chatgpt-gpt-5.3-codex` are normalized to `chatgpt-gpt-5.3-codex-spark`.
 
 ### JSON convenience
 
