@@ -38,6 +38,8 @@ type DashboardGradedSheetInput = {
   title: string;
   summaryMarkdown: string | null;
   percentage: number | null;
+  awardedMarks: number | null;
+  maxMarks: number | null;
   updatedAt: string;
   reportPath: string;
   subject: string;
@@ -129,6 +131,8 @@ function buildDashboardBrief(options: {
     "## Objectives",
     "- Tag each graded sheet with stable subject labels that /spark/sheets can filter on quickly.",
     "- Capture both strong spots and weak spots from the student's graded work.",
+    "- Extract concrete revision detail such as exact topics, question types, missing key terms, and what to learn next.",
+    "- Put any general high-level advice after the specific revision pointers, not before them.",
     "- Keep the dashboard concise, evidence-backed, and student-facing.",
     "- Reuse prior dashboard state when it still matches the evidence, but update it when the new sheet changes the picture.",
   );
@@ -154,6 +158,15 @@ function buildDashboardTask(): string {
     "- Subject tags must be broad worksheet-filter labels such as Biology, Chemistry, Physics, Mathematics, English, Science, History, or Geography.",
     "- Prefer one primary subject tag per sheet, with at most 4 tags total when a sheet genuinely spans multiple subjects.",
     "- Strong spots and weak spots must describe learning patterns, not raw mark totals alone.",
+    "- Read the worksheet reports deeply enough to extract specific topics, question types, missing ideas, and exact revision targets. Use report `review.questions`, `references.gradingMarkdown`, and `references.overallFeedbackMarkdown` when present instead of relying only on run summaries.",
+    "- Do not stop at generic phrases like `extended responses`, `precision`, or `question focus`. If those patterns matter, pair them with concrete subject matter such as the exact topic, process, practical, calculation type, or missing term.",
+    "- Weak-spot titles must name the topic family first when the evidence allows it, not just the study skill. Prefer `Biology Paper 1 explanation chains in circulation and digestion` over `Extended responses`.",
+    "- Fill `specifics` with exact topics, question families, missing scientific ideas, or specific content Andrew should recognize on the page.",
+    "- For every subject summary and evidence-backed weak spot, include at least 2 concrete `specifics` items and 2 concrete `nextSteps` items unless the worksheet evidence is genuinely too thin.",
+    "- Fill `nextSteps` with direct revision pointers about what to learn deeper or rehearse next.",
+    "- If the weakness is process-based, translate it into the underlying syllabus content and command words, for example the exact practical, explanation chain, compare question, graph-reading task, or key terminology that needs rehearsal.",
+    "- Keep `generalFeedback` optional and place broad wrap-up advice there only after the specific revision detail is covered.",
+    "- Treat upload mismatches, missing pages, or ungradable scripts as confidence / process issues, not as the student's academic weakness. They may be mentioned, but they should not dominate subject summaries or academic averages.",
     "- Capture strengths as well as weak spots.",
     "- Keep every title and summary user-facing and free of file paths, IDs, and process narration.",
     "- `summaryMarkdown` may use short bullets, but keep it concise.",
@@ -168,10 +181,10 @@ function buildDashboardTask(): string {
     '  "summaryMarkdown": "optional markdown summary",',
     '  "focusNote": "optional string",',
     '  "generatedFromRunId": "optional run id",',
-    '  "strengths": [{ "id": "string", "title": "string", "summary": "string", "evidenceRunIds": ["run-id"], "subjectKeys": ["biology"] }],',
-    '  "weakSpots": [{ "id": "string", "title": "string", "summary": "string", "evidenceRunIds": ["run-id"], "subjectKeys": ["biology"] }],',
-    '  "subjects": [{ "key": "biology", "label": "Biology", "summary": "string", "runIds": ["run-id"], "averagePercentage": 72, "strongSpots": ["string"], "weakSpots": ["string"] }],',
-    '  "runAnalyses": [{ "runId": "run-id", "subjectTags": [{ "key": "biology", "label": "Biology" }], "primarySubjectKey": "biology", "summary": "string", "strongSpots": ["string"], "weakSpots": ["string"] }]',
+    '  "strengths": [{ "id": "string", "title": "string", "summary": "string", "evidenceRunIds": ["run-id"], "subjectKeys": ["biology"], "specifics": ["short recall on photosynthesis"], "nextSteps": ["build this into full 6-mark chains"], "generalFeedback": "optional broad note" }],',
+    '  "weakSpots": [{ "id": "string", "title": "string", "summary": "string", "evidenceRunIds": ["run-id"], "subjectKeys": ["biology"], "specifics": ["coronary heart disease treatments", "monoclonal antibody test-strip questions"], "nextSteps": ["rehearse stent vs statin vs bypass explanations"], "generalFeedback": "optional broad note" }],',
+    '  "subjects": [{ "key": "biology", "label": "Biology", "summary": "string", "runIds": ["run-id"], "averagePercentage": 72, "strongSpots": ["Cell recall"], "weakSpots": ["Long explanation chains"], "specifics": ["alveoli gas exchange", "chlorosis terminology"], "nextSteps": ["learn exact meanings of chlorosis, lignin, translocation"], "generalFeedback": "optional broad note" }],',
+    '  "runAnalyses": [{ "runId": "run-id", "subjectTags": [{ "key": "biology", "label": "Biology" }], "primarySubjectKey": "biology", "summary": "string", "strongSpots": ["Photosynthesis leaf questions"], "weakSpots": ["Question drift"], "specifics": ["stents and coronary treatments", "mitosis drug action"], "nextSteps": ["finish the final calculation step", "link cause to process to outcome"], "generalFeedback": "optional broad note" }]',
     "}",
     "",
     "## Completion",
@@ -205,6 +218,11 @@ export function buildSparkSheetDashboardAgentPrompt(options?: {
     "- Work only from the provided worksheet evidence and prior dashboard snapshot.",
     "- Keep subject tags stable and broad enough for quick filtering on /spark/sheets.",
     "- Surface both strong spots and weak spots.",
+    "- Prefer precise revision guidance over generic labels: name the specific topic, question type, missing key term, or process the student should learn next.",
+    "- Topic-first wording matters: weak-spot titles and subject summaries should name the examinable content before the general skill issue whenever the evidence supports that.",
+    "- For evidence-backed weak spots and subject summaries, aim to provide at least 2 concrete `specifics` items and 2 concrete `nextSteps` items rather than a single vague point.",
+    "- Use `specifics` and `nextSteps` to hold the concrete guidance. Put broad wrap-up advice in `generalFeedback` only after the specific points.",
+    "- Treat upload mismatches or missing pages as confidence issues rather than academic weaknesses.",
     "- Keep the dashboard concise, user-facing, and evidence-backed.",
     "",
     "Deliverables:",
@@ -276,8 +294,19 @@ export async function launchSparkSheetDashboardRefresh(options: {
         run.sheet?.title?.trim() ||
         report.sheet.title,
       summaryMarkdown: run.presentation?.summaryMarkdown?.trim() ?? null,
+      awardedMarks:
+        typeof run.totals?.awardedMarks === "number"
+          ? run.totals.awardedMarks
+          : report.review.score.got,
+      maxMarks:
+        typeof run.totals?.maxMarks === "number"
+          ? run.totals.maxMarks
+          : report.review.score.total,
       percentage:
-        typeof run.totals?.percentage === "number"
+        (typeof run.totals?.maxMarks === "number" && run.totals.maxMarks <= 0) ||
+          report.review.score.total <= 0
+          ? null
+        : typeof run.totals?.percentage === "number"
           ? run.totals.percentage
           : report.review.score.total > 0
             ? (report.review.score.got / report.review.score.total) * 100
@@ -372,6 +401,8 @@ export async function launchSparkSheetDashboardRefresh(options: {
             runId: sheet.runId,
             title: sheet.title,
             summaryMarkdown: sheet.summaryMarkdown,
+            awardedMarks: sheet.awardedMarks,
+            maxMarks: sheet.maxMarks,
             percentage: sheet.percentage,
             updatedAt: sheet.updatedAt,
             reportPath: sheet.reportPath,

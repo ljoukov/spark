@@ -107,7 +107,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 									: null,
 								summary: analysis.summary ?? null,
 								strongSpots: analysis.strongSpots,
-								weakSpots: analysis.weakSpots
+								weakSpots: analysis.weakSpots,
+								specifics: analysis.specifics,
+								nextSteps: analysis.nextSteps,
+								generalFeedback: analysis.generalFeedback ?? null
 							},
 				subjectTags,
 				primarySubjectKey:

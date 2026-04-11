@@ -109,6 +109,8 @@ export type SparkSheetDashboardSubjectTag = z.infer<
   typeof SparkSheetDashboardSubjectTagSchema
 >;
 
+const dashboardDetailListSchema = z.array(trimmedString).max(6).default([]);
+
 export const SparkSheetRunAnalysisSchema = z
   .object({
     runId: trimmedString,
@@ -117,6 +119,9 @@ export const SparkSheetRunAnalysisSchema = z
     summary: trimmedString.optional(),
     strongSpots: z.array(trimmedString).max(5).default([]),
     weakSpots: z.array(trimmedString).max(5).default([]),
+    specifics: dashboardDetailListSchema,
+    nextSteps: dashboardDetailListSchema,
+    generalFeedback: trimmedString.optional(),
   })
   .superRefine((analysis, ctx) => {
     if (
@@ -141,6 +146,9 @@ export const SparkSheetDashboardFocusAreaSchema = z.object({
   summary: trimmedString,
   evidenceRunIds: z.array(trimmedString).max(12).default([]),
   subjectKeys: z.array(trimmedString).max(6).default([]),
+  specifics: dashboardDetailListSchema,
+  nextSteps: dashboardDetailListSchema,
+  generalFeedback: trimmedString.optional(),
 });
 
 export type SparkSheetDashboardFocusArea = z.infer<
@@ -155,6 +163,9 @@ export const SparkSheetDashboardSubjectSummarySchema = z.object({
   averagePercentage: z.number().min(0).max(100).nullable().optional(),
   strongSpots: z.array(trimmedString).max(4).default([]),
   weakSpots: z.array(trimmedString).max(4).default([]),
+  specifics: dashboardDetailListSchema,
+  nextSteps: dashboardDetailListSchema,
+  generalFeedback: trimmedString.optional(),
 });
 
 export type SparkSheetDashboardSubjectSummary = z.infer<

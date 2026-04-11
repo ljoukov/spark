@@ -6,6 +6,12 @@
 
 	type Sheet = PageData['sheets'][number];
 	type DashboardDetail = 'overview' | 'strengths' | 'weakSpots' | 'subjects';
+	type DashboardGuidance = {
+		specifics?: string[];
+		nextSteps?: string[];
+		generalFeedback?: string | null;
+	};
+	type GuidanceTone = 'strength' | 'weakness' | 'subject';
 	type SubjectFilter = {
 		key: string;
 		label: string;
@@ -236,6 +242,33 @@
 			}
 		}
 		return sheets;
+	}
+
+	function hasGuidance(entry: DashboardGuidance | null | undefined): boolean {
+		return (
+			(entry?.specifics?.length ?? 0) > 0 ||
+			(entry?.nextSteps?.length ?? 0) > 0 ||
+			typeof entry?.generalFeedback === 'string'
+		);
+	}
+
+	function resolveGuidanceLabel(tone: GuidanceTone, section: 'specifics' | 'nextSteps'): string {
+		if (section === 'specifics') {
+			if (tone === 'strength') {
+				return 'Specific strengths';
+			}
+			if (tone === 'subject') {
+				return 'Specific topics and patterns';
+			}
+			return 'Specific gaps';
+		}
+		if (tone === 'strength') {
+			return 'Build on this next';
+		}
+		if (tone === 'subject') {
+			return 'Learn next';
+		}
+		return 'What to learn deeper';
 	}
 
 	const sheetById = $derived.by(() => new Map(data.sheets.map((sheet) => [sheet.id, sheet])));
@@ -516,6 +549,37 @@
 									<span class="dashboard-chip dashboard-chip--warning">{spot}</span>
 								{/each}
 							</div>
+							{#if hasGuidance(activeSubjectSummary)}
+								<div class="detail-entry__guidance">
+									{#if activeSubjectSummary.specifics.length > 0}
+										<div class="detail-entry__section">
+											<p class="detail-entry__section-label">
+												{resolveGuidanceLabel('subject', 'specifics')}
+											</p>
+											<ul class="detail-entry__list">
+												{#each activeSubjectSummary.specifics as item}
+													<li>{item}</li>
+												{/each}
+											</ul>
+										</div>
+									{/if}
+									{#if activeSubjectSummary.nextSteps.length > 0}
+										<div class="detail-entry__section">
+											<p class="detail-entry__section-label">
+												{resolveGuidanceLabel('subject', 'nextSteps')}
+											</p>
+											<ul class="detail-entry__list">
+												{#each activeSubjectSummary.nextSteps as item}
+													<li>{item}</li>
+												{/each}
+											</ul>
+										</div>
+									{/if}
+									{#if activeSubjectSummary.generalFeedback}
+										<p class="detail-entry__general">{activeSubjectSummary.generalFeedback}</p>
+									{/if}
+								</div>
+							{/if}
 						{:else if data.dashboard?.summaryMarkdown}
 							<div class="markdown-content">
 								{@html renderMarkdownOptional(data.dashboard.summaryMarkdown) ?? ''}
@@ -577,6 +641,37 @@
 								<article class="detail-entry" data-tone="positive">
 									<h3>{entry.title}</h3>
 									<p>{entry.summary}</p>
+									{#if hasGuidance(entry)}
+										<div class="detail-entry__guidance">
+											{#if entry.specifics.length > 0}
+												<div class="detail-entry__section">
+													<p class="detail-entry__section-label">
+														{resolveGuidanceLabel('strength', 'specifics')}
+													</p>
+													<ul class="detail-entry__list">
+														{#each entry.specifics as item}
+															<li>{item}</li>
+														{/each}
+													</ul>
+												</div>
+											{/if}
+											{#if entry.nextSteps.length > 0}
+												<div class="detail-entry__section">
+													<p class="detail-entry__section-label">
+														{resolveGuidanceLabel('strength', 'nextSteps')}
+													</p>
+													<ul class="detail-entry__list">
+														{#each entry.nextSteps as item}
+															<li>{item}</li>
+														{/each}
+													</ul>
+												</div>
+											{/if}
+											{#if entry.generalFeedback}
+												<p class="detail-entry__general">{entry.generalFeedback}</p>
+											{/if}
+										</div>
+									{/if}
 									{#if evidenceSheets.length > 0}
 										<div class="detail-entry__links">
 											{#each evidenceSheets as sheet (sheet.id)}
@@ -603,6 +698,37 @@
 								<article class="detail-entry" data-tone="warning">
 									<h3>{entry.title}</h3>
 									<p>{entry.summary}</p>
+									{#if hasGuidance(entry)}
+										<div class="detail-entry__guidance">
+											{#if entry.specifics.length > 0}
+												<div class="detail-entry__section">
+													<p class="detail-entry__section-label">
+														{resolveGuidanceLabel('weakness', 'specifics')}
+													</p>
+													<ul class="detail-entry__list">
+														{#each entry.specifics as item}
+															<li>{item}</li>
+														{/each}
+													</ul>
+												</div>
+											{/if}
+											{#if entry.nextSteps.length > 0}
+												<div class="detail-entry__section">
+													<p class="detail-entry__section-label">
+														{resolveGuidanceLabel('weakness', 'nextSteps')}
+													</p>
+													<ul class="detail-entry__list">
+														{#each entry.nextSteps as item}
+															<li>{item}</li>
+														{/each}
+													</ul>
+												</div>
+											{/if}
+											{#if entry.generalFeedback}
+												<p class="detail-entry__general">{entry.generalFeedback}</p>
+											{/if}
+										</div>
+									{/if}
 									{#if evidenceSheets.length > 0}
 										<div class="detail-entry__links">
 											{#each evidenceSheets as sheet (sheet.id)}
@@ -642,6 +768,37 @@
 										<span class="dashboard-chip dashboard-chip--warning">{spot}</span>
 									{/each}
 								</div>
+								{#if hasGuidance(subject)}
+									<div class="detail-entry__guidance">
+										{#if subject.specifics.length > 0}
+											<div class="detail-entry__section">
+												<p class="detail-entry__section-label">
+													{resolveGuidanceLabel('subject', 'specifics')}
+												</p>
+												<ul class="detail-entry__list">
+													{#each subject.specifics as item}
+														<li>{item}</li>
+													{/each}
+												</ul>
+											</div>
+										{/if}
+										{#if subject.nextSteps.length > 0}
+											<div class="detail-entry__section">
+												<p class="detail-entry__section-label">
+													{resolveGuidanceLabel('subject', 'nextSteps')}
+												</p>
+												<ul class="detail-entry__list">
+													{#each subject.nextSteps as item}
+														<li>{item}</li>
+													{/each}
+												</ul>
+											</div>
+										{/if}
+										{#if subject.generalFeedback}
+											<p class="detail-entry__general">{subject.generalFeedback}</p>
+										{/if}
+									</div>
+								{/if}
 								{#if evidenceSheets.length > 0}
 									<div class="detail-entry__links">
 										{#each evidenceSheets as sheet (sheet.id)}
@@ -1001,6 +1158,41 @@
 		margin: 0;
 	}
 
+	.detail-entry__guidance {
+		display: grid;
+		gap: 0.7rem;
+	}
+
+	.detail-entry__section {
+		display: grid;
+		gap: 0.4rem;
+	}
+
+	.detail-entry__section-label {
+		margin: 0;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		font-size: 0.72rem;
+		font-weight: 700;
+		color: color-mix(in srgb, var(--foreground) 60%, transparent);
+	}
+
+	.detail-entry__list {
+		margin: 0;
+		padding-left: 1.1rem;
+		display: grid;
+		gap: 0.35rem;
+		color: color-mix(in srgb, var(--foreground) 78%, transparent);
+	}
+
+	.detail-entry__list li {
+		margin: 0;
+	}
+
+	.detail-entry__general {
+		color: color-mix(in srgb, var(--foreground) 72%, transparent);
+	}
+
 	.detail-entry__links {
 		display: flex;
 		flex-wrap: wrap;
@@ -1322,6 +1514,8 @@
 	:global([data-theme='dark'] .dashboard-detail__empty),
 	:global([data-theme='dark'] .dashboard-detail__overview p),
 	:global([data-theme='dark'] .detail-entry p),
+	:global([data-theme='dark'] .detail-entry__general),
+	:global([data-theme='dark'] .detail-entry__list),
 	:global([data-theme='dark'] .detail-entry__meta),
 	:global([data-theme='dark'] .filters-row__count),
 	:global(:root:not([data-theme='light']) .subtitle),
@@ -1334,6 +1528,8 @@
 	:global(:root:not([data-theme='light']) .dashboard-detail__empty),
 	:global(:root:not([data-theme='light']) .dashboard-detail__overview p),
 	:global(:root:not([data-theme='light']) .detail-entry p),
+	:global(:root:not([data-theme='light']) .detail-entry__general),
+	:global(:root:not([data-theme='light']) .detail-entry__list),
 	:global(:root:not([data-theme='light']) .detail-entry__meta),
 	:global(:root:not([data-theme='light']) .filters-row__count) {
 		color: #c5bbdf;
@@ -1351,9 +1547,11 @@
 	:global([data-theme='dark'] .dashboard-band__title),
 	:global([data-theme='dark'] .dashboard-detail__overview h3),
 	:global([data-theme='dark'] .detail-entry h3),
+	:global([data-theme='dark'] .detail-entry__section-label),
 	:global(:root:not([data-theme='light']) .dashboard-band__title),
 	:global(:root:not([data-theme='light']) .dashboard-detail__overview h3),
-	:global(:root:not([data-theme='light']) .detail-entry h3) {
+	:global(:root:not([data-theme='light']) .detail-entry h3),
+	:global(:root:not([data-theme='light']) .detail-entry__section-label) {
 		color: #f0eef8;
 	}
 
