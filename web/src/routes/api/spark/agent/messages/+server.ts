@@ -4,6 +4,7 @@ import {
 	createTask,
 	createSparkChatCreateSheetTool,
 	createSparkChatCreateGraderTool,
+	launchSparkSheetDashboardRefresh,
 	resolveSparkAgentLogsDir,
 	resolveSparkAgentWorkspaceRoot,
 	runSparkChatAgentLoop,
@@ -1306,6 +1307,34 @@ function buildSparkChatTools(options: {
 					total,
 					href: `/spark/lesson/${session.id}`
 				};
+			}
+		}),
+		refresh_sheet_dashboard: tool({
+			description: [
+				'Refresh the user’s /spark/sheets dashboard from all graded sheets.',
+				'Launches a background dashboard agent that tags sheets by subject and updates strong spots, weak spots, and subject summaries.',
+				'Use this when the user asks for a sheets dashboard refresh, subject breakdown, strong spots, weak spots, or a focused review of their graded sheets.',
+				'Set focus when the user wants the dashboard to emphasise a particular subject or weakness.'
+			].join('\n'),
+			inputSchema: z
+				.object({
+					focus: z.string().trim().min(1).optional()
+				})
+				.strict(),
+			execute: async ({ focus }) => {
+				const result = await launchSparkSheetDashboardRefresh({
+					serviceAccountJson,
+					userId,
+					focusNote: focus
+				});
+				if (result.status === 'empty') {
+					return {
+						status: 'empty' as const,
+						href: result.href,
+						message: 'No graded sheets are available yet. Grade a sheet first, then refresh the dashboard.'
+					};
+				}
+				return result;
 			}
 		}),
 		create_lesson: tool({

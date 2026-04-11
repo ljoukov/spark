@@ -26,4 +26,10 @@ describe('spark chat system prompt', () => {
 	it('requires immediate grading tool routing for explicit attachment-based requests', () => {
 		expect(sparkChatSystemPrompt).toContain('call create_grader immediately in that same response');
 	});
+
+	it('routes dashboard refresh questions through the dedicated tool', () => {
+		expect(sparkChatSystemPrompt).toContain('call refresh_sheet_dashboard');
+		expect(sparkChatSystemPrompt).toContain('strong spots');
+		expect(sparkChatSystemPrompt).toContain('weak spots');
+	});
 });

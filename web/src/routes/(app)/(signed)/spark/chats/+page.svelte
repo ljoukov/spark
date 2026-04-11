@@ -760,7 +760,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1.75rem;
-		width: min(46rem, 92vw);
+		width: min(60rem, 94vw);
 		margin: 0 auto clamp(2.5rem, 5vw, 4rem);
 		padding-top: clamp(1.8rem, 3vw, 2.75rem);
 	}
@@ -1107,18 +1107,141 @@
 	:global(:root:not([data-theme='light']) .chats-page),
 	:global([data-theme='dark'] .chats-page),
 	:global(.dark .chats-page) {
+		--spark-paper-surface: #17142a;
+		--spark-paper-surface-elevated: #201c39;
+		--spark-paper-surface-soft: #1d1934;
+		--spark-paper-divider: #3a3258;
+		--spark-paper-border: #3a3258;
+		--spark-paper-text: #e4dff5;
+		--spark-paper-text-strong: #f0eef8;
+		--spark-paper-text-soft: #a89ec4;
+		--spark-paper-text-muted: #9489b4;
+		--spark-paper-text-subtle: #7f739d;
+
+		.search-field__icon {
+			stroke: var(--spark-paper-text-subtle);
+		}
+
+		.search-field input {
+			background: color-mix(in srgb, #d6a11e 6%, var(--spark-paper-surface-soft));
+			border-color: var(--spark-paper-border);
+			color: var(--spark-paper-text);
+		}
+
+		.filter-pill {
+			background: var(--spark-paper-surface-elevated);
+			border-color: var(--spark-paper-border);
+			color: var(--spark-paper-text-soft);
+		}
+
+		.filter-pill:hover {
+			background: color-mix(in srgb, white 4%, var(--spark-paper-surface-elevated));
+			border-color: #5c517c;
+		}
+
+		.filter-pill[data-active='true'] {
+			background: color-mix(in srgb, #d6a11e 24%, var(--spark-paper-surface-soft));
+			border-color: #fbbf24;
+			color: #fde68a;
+		}
+
 		.search-field input,
 		.chat-group,
 		.state-card {
-			background: color-mix(in srgb, var(--card) 86%, rgba(15, 23, 42, 0.46));
+			border-color: var(--spark-paper-border);
+		}
+
+		.search-field input::placeholder {
+			color: var(--spark-paper-text-subtle);
+		}
+
+		.chat-group,
+		.state-card {
+			background:
+				linear-gradient(
+					180deg,
+					color-mix(in srgb, #d6a11e 4%, var(--spark-paper-surface-elevated)) 0%,
+					var(--spark-paper-surface) 100%
+				);
+			box-shadow: 0 18px 36px -28px rgba(2, 6, 23, 0.65);
 		}
 
 		.chat-row:hover {
-			background: color-mix(in srgb, white 3%, transparent);
+			background: rgba(255, 255, 255, 0.03);
 		}
 
 		.chat-row[data-selected='true'] {
-			background: rgba(180, 83, 9, 0.18);
+			background: color-mix(in srgb, #d6a11e 18%, var(--spark-paper-surface-soft));
+			box-shadow: inset 3px 0 0 #fbbf24;
+		}
+
+		.state-card h2,
+		.chat-row__titlewrap h2 {
+			color: var(--spark-paper-text-strong);
+		}
+
+		.state-card p,
+		.chat-row__preview {
+			color: var(--spark-paper-text-soft);
+		}
+
+		.chat-row__date,
+		.chat-row__meta,
+		.chat-section__header {
+			color: var(--spark-paper-text-muted);
+		}
+
+		.chat-row__divider,
+		.chat-section__rule {
+			background: var(--spark-paper-divider);
+		}
+
+		.task-pill__score {
+			opacity: 0.88;
+		}
+
+		.chat-row[data-kind='general'] {
+			--kind-fg: #c5bbdf;
+			--kind-bg: color-mix(in srgb, #c5bbdf 14%, var(--spark-paper-surface-soft));
+		}
+
+		.chat-row[data-kind='grading'] {
+			--kind-fg: #fde68a;
+			--kind-bg: color-mix(in srgb, #d6a11e 24%, var(--spark-paper-surface-soft));
+		}
+
+		.chat-row[data-kind='quiz'] {
+			--kind-fg: #ddd6fe;
+			--kind-bg: color-mix(in srgb, #8b5cf6 20%, var(--spark-paper-surface-soft));
+		}
+
+		.chat-row[data-kind='lesson'] {
+			--kind-fg: #a7f3d0;
+			--kind-bg: color-mix(in srgb, #22a66e 20%, var(--spark-paper-surface-soft));
+		}
+
+		.task-pill[data-state='pending'] {
+			--task-fg: #fde68a;
+			--task-bg: color-mix(in srgb, #d6a11e 24%, var(--spark-paper-surface-soft));
+			--task-dot: #fbbf24;
+		}
+
+		.task-pill[data-state='in_progress'] {
+			--task-fg: #dbeafe;
+			--task-bg: color-mix(in srgb, #3b82f6 20%, var(--spark-paper-surface-soft));
+			--task-dot: #93c5fd;
+		}
+
+		.task-pill[data-state='done'] {
+			--task-fg: #bbf7d0;
+			--task-bg: color-mix(in srgb, #22a66e 22%, var(--spark-paper-surface-soft));
+			--task-dot: #4ade80;
+		}
+
+		.task-pill[data-state='failed'] {
+			--task-fg: #fecaca;
+			--task-bg: color-mix(in srgb, #ef4444 20%, var(--spark-paper-surface-soft));
+			--task-dot: #f87171;
 		}
 	}
 

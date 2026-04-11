@@ -1,9 +1,29 @@
 <script lang="ts">
 	import { renderMarkdownOptional } from '$lib/markdown';
+	import { resolveSheetSubjectLabel, resolveSheetSubjectTheme } from '$lib/spark/sheetSubjects';
 	import { sumPaperSheetMarks, type PaperSheetData } from '@spark/schemas';
 	import type { PageData } from './$types';
 
+	type Sheet = PageData['sheets'][number];
+	type DashboardDetail = 'overview' | 'strengths' | 'weakSpots' | 'subjects';
+	type SubjectFilter = {
+		key: string;
+		label: string;
+		count: number;
+	};
+	type FallbackSubjectSummary = {
+		key: string;
+		label: string;
+		count: number;
+		gradedCount: number;
+		averagePercentage: number | null;
+		runIds: string[];
+		summary: string;
+	};
+
 	let { data }: { data: PageData } = $props();
+	let selectedSubjectKey = $state('all');
+	let selectedDashboardDetail = $state<DashboardDetail>('overview');
 
 	function formatDate(value: string): string {
 		const date = new Date(value);
@@ -28,6 +48,10 @@
 		return `${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)}%`;
 	}
 
+	function formatSheetCount(count: number): string {
+		return `${count.toString()} sheet${count === 1 ? '' : 's'}`;
+	}
+
 	function totalMarks(sheet: PaperSheetData | null): number {
 		if (!sheet) {
 			return 0;
@@ -42,6 +66,21 @@
 		return total;
 	}
 
+	function averagePercentage(sheets: Sheet[]): number | null {
+		const percentages = sheets
+			.map((sheet) => sheet.totals?.percentage ?? null)
+			.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+		if (percentages.length === 0) {
+			return null;
+		}
+		const total = percentages.reduce((sum, value) => sum + value, 0);
+		return total / percentages.length;
+	}
+
+	function countGradedSheets(sheets: Sheet[]): number {
+		return sheets.filter((sheet) => sheet.totals !== null).length;
+	}
+
 	function rgbaFromHex(hex: string, alpha: number): string {
 		const normalized = hex.replace('#', '');
 		const red = Number.parseInt(normalized.slice(0, 2), 16);
@@ -50,11 +89,16 @@
 		return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 	}
 
-	function buildPreviewStyle(sheet: PaperSheetData | null): string {
-		const color = sheet?.color ?? '#36587a';
-		const accent = sheet?.accent ?? '#4d7aa5';
-		const light = sheet?.light ?? '#e8f2fb';
-		const border = sheet?.border ?? '#bfd0e0';
+	function buildPreviewStyle(
+		sheet: PaperSheetData | null,
+		primarySubjectKey: string | null
+	): string {
+		const subjectTheme =
+			primarySubjectKey === null ? null : resolveSheetSubjectTheme({ key: primarySubjectKey });
+		const color = subjectTheme?.color ?? sheet?.color ?? '#36587a';
+		const accent = subjectTheme?.accent ?? sheet?.accent ?? '#4d7aa5';
+		const light = subjectTheme?.light ?? sheet?.light ?? '#e8f2fb';
+		const border = subjectTheme?.border ?? sheet?.border ?? '#bfd0e0';
 		return [
 			`--sheet-color:${color}`,
 			`--sheet-accent:${accent}`,
@@ -65,7 +109,19 @@
 		].join('; ');
 	}
 
-	function resolveMarksSummary(sheet: PageData['sheets'][number]): {
+	function buildSubjectStyle(subject: { key: string; label: string }): string {
+		const theme = resolveSheetSubjectTheme(subject);
+		return [
+			`--subject-color:${theme.color}`,
+			`--subject-accent:${theme.accent}`,
+			`--subject-light:${theme.light}`,
+			`--subject-border:${theme.border}`,
+			`--subject-light-82:${rgbaFromHex(theme.light, 0.82)}`,
+			`--subject-accent-12:${rgbaFromHex(theme.accent, 0.12)}`
+		].join('; ');
+	}
+
+	function resolveMarksSummary(sheet: Sheet): {
 		value: string;
 		detail: string | null;
 	} {
@@ -93,7 +149,7 @@
 		};
 	}
 
-	function resolveStatusLabel(sheet: PageData['sheets'][number]): string {
+	function resolveStatusLabel(sheet: Sheet): string {
 		if (sheet.status === 'failed') {
 			return 'Failed';
 		}
@@ -113,7 +169,7 @@
 	}
 
 	function resolveStatusTone(
-		sheet: PageData['sheets'][number]
+		sheet: Sheet
 	): 'queued' | 'building' | 'solving' | 'grading' | 'graded' | 'failed' | 'stopped' {
 		if (sheet.status === 'failed') {
 			return 'failed';
@@ -141,6 +197,175 @@
 			' · '
 		);
 	}
+
+	function resolveSheetTitle(sheet: Sheet): string {
+		return sheet.previewSheet?.title ?? sheet.display.title;
+	}
+
+	function resolveDashboardEntryVisible(
+		entry: { subjectKeys: string[]; evidenceRunIds: string[] },
+		subjectKey: string,
+		sheetById: Map<string, Sheet>
+	): boolean {
+		if (subjectKey === 'all') {
+			return true;
+		}
+		if (entry.subjectKeys.includes(subjectKey)) {
+			return true;
+		}
+		for (const runId of entry.evidenceRunIds) {
+			const sheet = sheetById.get(runId);
+			if (sheet?.subjectTags.some((tag) => tag.key === subjectKey)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	function resolveEvidenceSheets(runIds: string[], sheetById: Map<string, Sheet>): Sheet[] {
+		const seen = new Set<string>();
+		const sheets: Sheet[] = [];
+		for (const runId of runIds) {
+			if (seen.has(runId)) {
+				continue;
+			}
+			seen.add(runId);
+			const sheet = sheetById.get(runId);
+			if (sheet) {
+				sheets.push(sheet);
+			}
+		}
+		return sheets;
+	}
+
+	const sheetById = $derived.by(() => new Map(data.sheets.map((sheet) => [sheet.id, sheet])));
+
+	const subjectFilters = $derived.by(() => {
+		const counts = new Map<string, SubjectFilter>();
+		for (const sheet of data.sheets) {
+			for (const subject of sheet.subjectTags) {
+				const existing = counts.get(subject.key);
+				if (existing) {
+					existing.count += 1;
+					continue;
+				}
+				counts.set(subject.key, {
+					key: subject.key,
+					label: resolveSheetSubjectLabel(subject),
+					count: 1
+				});
+			}
+		}
+		return [
+			{ key: 'all', label: 'All subjects', count: data.sheets.length },
+			...[...counts.values()].sort((left, right) => left.label.localeCompare(right.label))
+		];
+	});
+	const detectedSubjectFilters = $derived.by(() =>
+		subjectFilters.filter((subject) => subject.key !== 'all')
+	);
+
+	const filteredSheets = $derived.by(() => {
+		if (selectedSubjectKey === 'all') {
+			return data.sheets;
+		}
+		return data.sheets.filter((sheet) =>
+			sheet.subjectTags.some((subject) => subject.key === selectedSubjectKey)
+		);
+	});
+
+	const filteredAverage = $derived.by(() => averagePercentage(filteredSheets));
+	const filteredGradedCount = $derived.by(() => countGradedSheets(filteredSheets));
+	const activeSubjectFilter = $derived.by(
+		() => subjectFilters.find((subject) => subject.key === selectedSubjectKey) ?? null
+	);
+	const visibleStrengths = $derived.by(() =>
+		(data.dashboard?.strengths ?? []).filter((entry) =>
+			resolveDashboardEntryVisible(entry, selectedSubjectKey, sheetById)
+		)
+	);
+	const visibleWeakSpots = $derived.by(() =>
+		(data.dashboard?.weakSpots ?? []).filter((entry) =>
+			resolveDashboardEntryVisible(entry, selectedSubjectKey, sheetById)
+		)
+	);
+	const visibleSubjects = $derived.by(() => {
+		if (!data.dashboard) {
+			return [];
+		}
+		if (selectedSubjectKey === 'all') {
+			return data.dashboard.subjects;
+		}
+		return data.dashboard.subjects.filter((subject) => subject.key === selectedSubjectKey);
+	});
+	const activeSubjectSummary = $derived.by(() =>
+		selectedSubjectKey === 'all'
+			? null
+			: (data.dashboard?.subjects.find((subject) => subject.key === selectedSubjectKey) ?? null)
+	);
+	const fallbackSubjectSummaries = $derived.by(() =>
+		detectedSubjectFilters.map<FallbackSubjectSummary>((subject) => {
+			const subjectSheets = data.sheets.filter((sheet) =>
+				sheet.subjectTags.some((tag) => tag.key === subject.key)
+			);
+			const gradedCount = countGradedSheets(subjectSheets);
+			const average = averagePercentage(subjectSheets);
+			const summaryParts = [`${formatSheetCount(subject.count)} tagged ${subject.label}`];
+			if (gradedCount > 0 && average !== null) {
+				summaryParts.push(
+					`${formatPercentage(average)} average across ${formatSheetCount(gradedCount)}`
+				);
+			} else if (gradedCount > 0) {
+				summaryParts.push(`${formatSheetCount(gradedCount)} graded`);
+			} else {
+				summaryParts.push('Awaiting grading');
+			}
+			return {
+				key: subject.key,
+				label: subject.label,
+				count: subject.count,
+				gradedCount,
+				averagePercentage: average,
+				runIds: subjectSheets.map((sheet) => sheet.id),
+				summary: summaryParts.join(' · ')
+			};
+		})
+	);
+	const activeFallbackSubjectSummary = $derived.by(() =>
+		selectedSubjectKey === 'all'
+			? null
+			: (fallbackSubjectSummaries.find((subject) => subject.key === selectedSubjectKey) ?? null)
+	);
+	const dashboardHeadline = $derived.by(() => {
+		if (data.dashboard?.headline) {
+			return data.dashboard.headline;
+		}
+		if (activeSubjectFilter && activeSubjectFilter.key !== 'all') {
+			return `${activeSubjectFilter.label} overview`;
+		}
+		if (filteredGradedCount > 0) {
+			return 'Sheets overview';
+		}
+		return 'Sheets in progress';
+	});
+	const dashboardFallbackSummary = $derived.by(() => {
+		if (filteredGradedCount === 0) {
+			return 'Marks and subject filters appear here as soon as a sheet finishes grading.';
+		}
+		if (activeFallbackSubjectSummary) {
+			return `${activeFallbackSubjectSummary.label} is already filterable. Ask Spark chat to publish strong and weak spot summaries for this subject.`;
+		}
+		return 'Average score and subject filters are already live. Ask Spark chat to refresh the dashboard to publish cross-sheet strengths, weak spots, and subject summaries.';
+	});
+	const dashboardOverviewSummary = $derived.by(() => {
+		if (detectedSubjectFilters.length === 0) {
+			return 'Sheet cards below will pick up live subject filters as soon as Spark can read them from the work.';
+		}
+		return 'Use the live subject filters below to narrow the worksheet list while you wait for the first published dashboard summary.';
+	});
+	const subjectScoreValue = $derived.by(() =>
+		data.dashboard ? visibleSubjects.length.toString() : detectedSubjectFilters.length.toString()
+	);
 </script>
 
 <svelte:head>
@@ -165,12 +390,322 @@
 			<p>Start from chat by uploading material and asking Spark to make or grade a sheet.</p>
 		</section>
 	{:else}
+		<section class="filters-row">
+			<div class="subject-filter-list">
+				{#each subjectFilters as subject (subject.key)}
+					<button
+						type="button"
+						class:subject-filter--active={selectedSubjectKey === subject.key}
+						class="subject-filter"
+						style={subject.key === 'all' ? undefined : buildSubjectStyle(subject)}
+						onclick={() => {
+							selectedSubjectKey = subject.key;
+						}}
+					>
+						<span>{subject.label}</span>
+						<span class="subject-filter__count">{subject.count.toString()}</span>
+					</button>
+				{/each}
+			</div>
+			<p class="filters-row__count">
+				Showing {filteredSheets.length.toString()} of {data.sheets.length.toString()} sheets
+			</p>
+		</section>
+
+		<section class="dashboard-shell">
+			<div class="dashboard-band">
+				<div>
+					<p class="dashboard-band__eyebrow">Score card</p>
+					<h2 class="dashboard-band__title">{dashboardHeadline}</h2>
+				</div>
+				<p class="dashboard-band__timestamp">
+					{#if data.dashboard}
+						Updated {formatDate(data.dashboard.updatedAt)}
+					{:else}
+						Bootstrap mode until the first dashboard refresh publishes cross-sheet insights
+					{/if}
+				</p>
+				{#if data.dashboard?.summaryMarkdown}
+					<div class="dashboard-band__summary markdown-content">
+						{@html renderMarkdownOptional(data.dashboard.summaryMarkdown) ?? ''}
+					</div>
+				{:else}
+					<p class="dashboard-band__summary-fallback">{dashboardFallbackSummary}</p>
+				{/if}
+			</div>
+
+			<div class="dashboard-score-grid">
+				<button
+					type="button"
+					class="dashboard-score"
+					data-active={selectedDashboardDetail === 'overview'}
+					onclick={() => {
+						selectedDashboardDetail = 'overview';
+					}}
+				>
+					<p class="dashboard-score__label">Average score</p>
+					<p class="dashboard-score__value">
+						{filteredAverage === null ? 'Pending' : formatPercentage(filteredAverage)}
+					</p>
+					<p class="dashboard-score__detail">
+						{filteredGradedCount.toString()} graded sheet{filteredGradedCount === 1 ? '' : 's'}
+					</p>
+				</button>
+
+				<button
+					type="button"
+					class="dashboard-score"
+					data-active={selectedDashboardDetail === 'strengths'}
+					onclick={() => {
+						selectedDashboardDetail = 'strengths';
+					}}
+				>
+					<p class="dashboard-score__label">Strong spots</p>
+					<p class="dashboard-score__value">
+						{data.dashboard ? visibleStrengths.length.toString() : 'Pending'}
+					</p>
+					<p class="dashboard-score__detail">
+						{data.dashboard ? 'Patterns worth keeping' : 'Publish from graded work'}
+					</p>
+				</button>
+
+				<button
+					type="button"
+					class="dashboard-score"
+					data-active={selectedDashboardDetail === 'weakSpots'}
+					onclick={() => {
+						selectedDashboardDetail = 'weakSpots';
+					}}
+				>
+					<p class="dashboard-score__label">Weak spots</p>
+					<p class="dashboard-score__value">
+						{data.dashboard ? visibleWeakSpots.length.toString() : 'Pending'}
+					</p>
+					<p class="dashboard-score__detail">
+						{data.dashboard ? 'Most repeated misses' : 'Publish from graded work'}
+					</p>
+				</button>
+
+				<button
+					type="button"
+					class="dashboard-score"
+					data-active={selectedDashboardDetail === 'subjects'}
+					onclick={() => {
+						selectedDashboardDetail = 'subjects';
+					}}
+				>
+					<p class="dashboard-score__label">Subjects</p>
+					<p class="dashboard-score__value">{subjectScoreValue}</p>
+					<p class="dashboard-score__detail">
+						{data.dashboard ? 'Tagged filters in play' : 'Detected filters'}
+					</p>
+				</button>
+			</div>
+
+			<div class="dashboard-detail">
+				{#if selectedDashboardDetail === 'overview'}
+					<div class="dashboard-detail__overview">
+						{#if data.dashboard && activeSubjectSummary}
+							<h3>{activeSubjectSummary.label}</h3>
+							<p>{activeSubjectSummary.summary}</p>
+							<div class="subject-summary__chips">
+								{#each activeSubjectSummary.strongSpots as spot}
+									<span class="dashboard-chip dashboard-chip--positive">{spot}</span>
+								{/each}
+								{#each activeSubjectSummary.weakSpots as spot}
+									<span class="dashboard-chip dashboard-chip--warning">{spot}</span>
+								{/each}
+							</div>
+						{:else if data.dashboard?.summaryMarkdown}
+							<div class="markdown-content">
+								{@html renderMarkdownOptional(data.dashboard.summaryMarkdown) ?? ''}
+							</div>
+						{:else if activeFallbackSubjectSummary}
+							{@const evidenceSheets = resolveEvidenceSheets(
+								activeFallbackSubjectSummary.runIds,
+								sheetById
+							)}
+							<h3>{activeFallbackSubjectSummary.label}</h3>
+							<p>{activeFallbackSubjectSummary.summary}</p>
+							<div class="subject-summary__chips">
+								{#if typeof activeFallbackSubjectSummary.averagePercentage === 'number'}
+									<span class="dashboard-chip dashboard-chip--positive">
+										{formatPercentage(activeFallbackSubjectSummary.averagePercentage)} average
+									</span>
+								{/if}
+								{#if activeFallbackSubjectSummary.gradedCount > 0}
+									<span class="dashboard-chip">
+										{formatSheetCount(activeFallbackSubjectSummary.gradedCount)} graded
+									</span>
+								{:else}
+									<span class="dashboard-chip">Awaiting grading</span>
+								{/if}
+							</div>
+							{#if evidenceSheets.length > 0}
+								<div class="detail-entry__links">
+									{#each evidenceSheets as sheet (sheet.id)}
+										<a href={`/spark/sheets/${sheet.id}`}>{resolveSheetTitle(sheet)}</a>
+									{/each}
+								</div>
+							{/if}
+						{:else}
+							<h3>Current worksheet activity</h3>
+							<p>{dashboardOverviewSummary}</p>
+							{#if detectedSubjectFilters.length > 0}
+								<div class="subject-summary__chips">
+									{#each detectedSubjectFilters as subject (subject.key)}
+										<span class="subject-pill" style={buildSubjectStyle(subject)}>
+											{subject.label}
+										</span>
+									{/each}
+								</div>
+							{/if}
+						{/if}
+					</div>
+				{:else if selectedDashboardDetail === 'strengths'}
+					{#if !data.dashboard}
+						<p class="dashboard-detail__empty">
+							Strong spots will appear after Spark publishes the first dashboard refresh from graded
+							sheets.
+						</p>
+					{:else if visibleStrengths.length === 0}
+						<p class="dashboard-detail__empty">No strong spots are published for this view yet.</p>
+					{:else}
+						<div class="detail-entry-list">
+							{#each visibleStrengths as entry (entry.id)}
+								{@const evidenceSheets = resolveEvidenceSheets(entry.evidenceRunIds, sheetById)}
+								<article class="detail-entry" data-tone="positive">
+									<h3>{entry.title}</h3>
+									<p>{entry.summary}</p>
+									{#if evidenceSheets.length > 0}
+										<div class="detail-entry__links">
+											{#each evidenceSheets as sheet (sheet.id)}
+												<a href={`/spark/sheets/${sheet.id}`}>{resolveSheetTitle(sheet)}</a>
+											{/each}
+										</div>
+									{/if}
+								</article>
+							{/each}
+						</div>
+					{/if}
+				{:else if selectedDashboardDetail === 'weakSpots'}
+					{#if !data.dashboard}
+						<p class="dashboard-detail__empty">
+							Weak spots will appear after Spark publishes the first dashboard refresh from graded
+							sheets.
+						</p>
+					{:else if visibleWeakSpots.length === 0}
+						<p class="dashboard-detail__empty">No weak spots are published for this view yet.</p>
+					{:else}
+						<div class="detail-entry-list">
+							{#each visibleWeakSpots as entry (entry.id)}
+								{@const evidenceSheets = resolveEvidenceSheets(entry.evidenceRunIds, sheetById)}
+								<article class="detail-entry" data-tone="warning">
+									<h3>{entry.title}</h3>
+									<p>{entry.summary}</p>
+									{#if evidenceSheets.length > 0}
+										<div class="detail-entry__links">
+											{#each evidenceSheets as sheet (sheet.id)}
+												<a href={`/spark/sheets/${sheet.id}`}>{resolveSheetTitle(sheet)}</a>
+											{/each}
+										</div>
+									{/if}
+								</article>
+							{/each}
+						</div>
+					{/if}
+				{:else if data.dashboard && visibleSubjects.length === 0}
+					<p class="dashboard-detail__empty">
+						No subject summaries are published for this view yet.
+					</p>
+				{:else if data.dashboard}
+					<div class="detail-entry-list">
+						{#each visibleSubjects as subject (subject.key)}
+							{@const evidenceSheets = resolveEvidenceSheets(subject.runIds, sheetById)}
+							<article class="detail-entry" data-tone="neutral">
+								<div class="detail-entry__subject-row">
+									<span class="subject-pill" style={buildSubjectStyle(subject)}>
+										{resolveSheetSubjectLabel(subject)}
+									</span>
+									{#if typeof subject.averagePercentage === 'number'}
+										<span class="detail-entry__meta"
+											>{formatPercentage(subject.averagePercentage)}</span
+										>
+									{/if}
+								</div>
+								<p>{subject.summary}</p>
+								<div class="subject-summary__chips">
+									{#each subject.strongSpots as spot}
+										<span class="dashboard-chip dashboard-chip--positive">{spot}</span>
+									{/each}
+									{#each subject.weakSpots as spot}
+										<span class="dashboard-chip dashboard-chip--warning">{spot}</span>
+									{/each}
+								</div>
+								{#if evidenceSheets.length > 0}
+									<div class="detail-entry__links">
+										{#each evidenceSheets as sheet (sheet.id)}
+											<a href={`/spark/sheets/${sheet.id}`}>{resolveSheetTitle(sheet)}</a>
+										{/each}
+									</div>
+								{/if}
+							</article>
+						{/each}
+					</div>
+				{:else if fallbackSubjectSummaries.length === 0}
+					<p class="dashboard-detail__empty">
+						Subject filters will appear after Spark can read a stable subject from the sheet.
+					</p>
+				{:else}
+					<div class="detail-entry-list">
+						{#each fallbackSubjectSummaries as subject (subject.key)}
+							{@const evidenceSheets = resolveEvidenceSheets(subject.runIds, sheetById)}
+							<article class="detail-entry" data-tone="neutral">
+								<div class="detail-entry__subject-row">
+									<span class="subject-pill" style={buildSubjectStyle(subject)}>
+										{subject.label}
+									</span>
+									{#if typeof subject.averagePercentage === 'number'}
+										<span class="detail-entry__meta"
+											>{formatPercentage(subject.averagePercentage)}</span
+										>
+									{:else}
+										<span class="detail-entry__meta">{formatSheetCount(subject.count)}</span>
+									{/if}
+								</div>
+								<p>{subject.summary}</p>
+								<div class="subject-summary__chips">
+									{#if subject.gradedCount > 0}
+										<span class="dashboard-chip dashboard-chip--positive">
+											{formatSheetCount(subject.gradedCount)} graded
+										</span>
+									{:else}
+										<span class="dashboard-chip">Awaiting grading</span>
+									{/if}
+								</div>
+								{#if evidenceSheets.length > 0}
+									<div class="detail-entry__links">
+										{#each evidenceSheets as sheet (sheet.id)}
+											<a href={`/spark/sheets/${sheet.id}`}>{resolveSheetTitle(sheet)}</a>
+										{/each}
+									</div>
+								{/if}
+							</article>
+						{/each}
+					</div>
+				{/if}
+			</div>
+		</section>
+
 		<div class="sheet-grid">
-			{#each data.sheets as sheet (sheet.id)}
+			{#each filteredSheets as sheet (sheet.id)}
 				{@const marksSummary = resolveMarksSummary(sheet)}
 				{@const summaryHtml = renderMarkdownOptional(sheet.display.summaryMarkdown)}
 				<a class="sheet-card" href={`/spark/sheets/${sheet.id}`} data-status={sheet.status}>
-					<div class="sheet-preview" style={buildPreviewStyle(sheet.previewSheet)}>
+					<div
+						class="sheet-preview"
+						style={buildPreviewStyle(sheet.previewSheet, sheet.primarySubjectKey)}
+					>
 						<header class="sheet-preview__header">
 							<div class="sheet-preview__header-row">
 								<div class="sheet-preview__marks-box">
@@ -190,8 +725,21 @@
 										{sheet.display.title}
 									</h2>
 									<p class="sheet-preview__subtitle">
-										{sheet.display.subtitle ?? sheet.previewSheet?.subtitle ?? 'Awaiting sheet output.'}
+										{sheet.display.subtitle ??
+											sheet.previewSheet?.subtitle ??
+											sheet.analysis?.summary ??
+											sheet.display.summaryMarkdown ??
+											'Awaiting sheet output.'}
 									</p>
+									{#if sheet.subjectTags.length > 0}
+										<div class="sheet-preview__tag-row">
+											{#each sheet.subjectTags as subject (subject.key)}
+												<span class="subject-pill" style={buildSubjectStyle(subject)}>
+													{resolveSheetSubjectLabel(subject)}
+												</span>
+											{/each}
+										</div>
+									{/if}
 								</div>
 							</div>
 						</header>
@@ -209,6 +757,17 @@
 							{:else if summaryHtml}
 								<div class="sheet-preview__summary markdown-content">
 									{@html summaryHtml}
+								</div>
+							{/if}
+
+							{#if sheet.analysis && (sheet.analysis.strongSpots.length > 0 || sheet.analysis.weakSpots.length > 0)}
+								<div class="sheet-preview__signals">
+									{#each sheet.analysis.strongSpots as spot}
+										<span class="dashboard-chip dashboard-chip--positive">{spot}</span>
+									{/each}
+									{#each sheet.analysis.weakSpots as spot}
+										<span class="dashboard-chip dashboard-chip--warning">{spot}</span>
+									{/each}
 								</div>
 							{/if}
 						</div>
@@ -272,11 +831,16 @@
 		color: inherit;
 	}
 
-	.empty-card {
-		border: 1px dashed color-mix(in srgb, var(--border) 85%, transparent);
-		border-radius: 1rem;
-		padding: 1.2rem;
+	.empty-card,
+	.dashboard-shell {
+		border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+		border-radius: 1.2rem;
 		background: color-mix(in srgb, var(--card) 96%, transparent);
+	}
+
+	.empty-card {
+		padding: 1.2rem;
+		border-style: dashed;
 	}
 
 	.empty-card h2 {
@@ -286,6 +850,281 @@
 	.empty-card p {
 		margin: 0.35rem 0 0;
 		color: color-mix(in srgb, var(--foreground) 68%, transparent);
+	}
+
+	.dashboard-shell {
+		padding: 1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		background:
+			radial-gradient(circle at top right, rgba(34, 197, 94, 0.08), transparent 28%),
+			radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 30%),
+			color-mix(in srgb, var(--card) 98%, transparent);
+	}
+
+	.dashboard-band {
+		display: grid;
+		gap: 0.5rem;
+	}
+
+	.dashboard-band__eyebrow {
+		margin: 0;
+		text-transform: uppercase;
+		letter-spacing: 0.12em;
+		font-size: 0.72rem;
+		font-weight: 700;
+		color: color-mix(in srgb, #2563eb 78%, white 8%);
+	}
+
+	.dashboard-band__title {
+		margin: 0;
+		font-size: clamp(1.2rem, 2.5vw, 1.75rem);
+	}
+
+	.dashboard-band__timestamp {
+		margin: 0;
+		font-size: 0.82rem;
+		color: color-mix(in srgb, var(--foreground) 62%, transparent);
+	}
+
+	.dashboard-band__summary :global(ul) {
+		margin: 0;
+		padding-left: 1rem;
+	}
+
+	.dashboard-band__summary-fallback {
+		margin: 0;
+		color: color-mix(in srgb, var(--foreground) 70%, transparent);
+	}
+
+	.dashboard-score-grid {
+		display: grid;
+		gap: 0.8rem;
+		grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+	}
+
+	.dashboard-score {
+		display: grid;
+		gap: 0.2rem;
+		padding: 0.9rem 1rem;
+		border-radius: 1rem;
+		border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+		background: color-mix(in srgb, white 80%, var(--card) 20%);
+		text-align: left;
+		color: inherit;
+		cursor: pointer;
+		transition:
+			transform 120ms ease,
+			border-color 120ms ease,
+			box-shadow 120ms ease;
+	}
+
+	.dashboard-score:hover,
+	.dashboard-score[data-active='true'] {
+		transform: translateY(-1px);
+		border-color: color-mix(in srgb, #2563eb 35%, var(--border));
+		box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+	}
+
+	.dashboard-score__label,
+	.dashboard-score__detail,
+	.dashboard-score__value {
+		margin: 0;
+	}
+
+	.dashboard-score__label {
+		font-size: 0.78rem;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: color-mix(in srgb, var(--foreground) 64%, transparent);
+	}
+
+	.dashboard-score__value {
+		font-size: 1.5rem;
+		font-weight: 800;
+	}
+
+	.dashboard-score__detail {
+		font-size: 0.84rem;
+		color: color-mix(in srgb, var(--foreground) 66%, transparent);
+	}
+
+	.dashboard-detail {
+		padding: 1rem;
+		border-radius: 1rem;
+		border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+		background: color-mix(in srgb, white 78%, var(--card) 22%);
+	}
+
+	.dashboard-detail__empty,
+	.dashboard-detail__overview p {
+		margin: 0;
+		color: color-mix(in srgb, var(--foreground) 72%, transparent);
+	}
+
+	.dashboard-detail__overview {
+		display: grid;
+		gap: 0.8rem;
+	}
+
+	.dashboard-detail__overview h3 {
+		margin: 0;
+	}
+
+	.detail-entry-list {
+		display: grid;
+		gap: 0.85rem;
+	}
+
+	.detail-entry {
+		display: grid;
+		gap: 0.6rem;
+		padding: 0.95rem 1rem;
+		border-radius: 0.95rem;
+		border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+		background: color-mix(in srgb, var(--card) 94%, transparent);
+	}
+
+	.detail-entry[data-tone='positive'] {
+		border-color: rgba(34, 197, 94, 0.24);
+		background: rgba(34, 197, 94, 0.06);
+	}
+
+	.detail-entry[data-tone='warning'] {
+		border-color: rgba(245, 158, 11, 0.28);
+		background: rgba(245, 158, 11, 0.08);
+	}
+
+	.detail-entry h3,
+	.detail-entry p {
+		margin: 0;
+	}
+
+	.detail-entry__links {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.detail-entry__links a {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.28rem 0.55rem;
+		border-radius: 999px;
+		background: rgba(15, 23, 42, 0.06);
+		text-decoration: none;
+		color: inherit;
+		font-size: 0.82rem;
+	}
+
+	.detail-entry__subject-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 0.6rem;
+	}
+
+	.detail-entry__meta {
+		font-size: 0.82rem;
+		font-weight: 700;
+		color: color-mix(in srgb, var(--foreground) 68%, transparent);
+	}
+
+	.subject-summary__chips,
+	.sheet-preview__signals,
+	.sheet-preview__tag-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.45rem;
+	}
+
+	.filters-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 1rem;
+		flex-wrap: wrap;
+	}
+
+	.subject-filter-list {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.55rem;
+	}
+
+	.subject-filter {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.45rem 0.75rem;
+		border-radius: 999px;
+		border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+		background: color-mix(in srgb, var(--card) 96%, transparent);
+		color: inherit;
+		cursor: pointer;
+	}
+
+	.subject-filter:not(.subject-filter--active)[style] {
+		border-color: var(--subject-border);
+		background: var(--subject-light-82);
+		color: var(--subject-color);
+	}
+
+	.subject-filter--active {
+		border-color: color-mix(in srgb, #2563eb 42%, var(--border));
+		box-shadow: 0 10px 24px rgba(37, 99, 235, 0.12);
+	}
+
+	.subject-filter__count {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 1.5rem;
+		height: 1.5rem;
+		padding: 0 0.35rem;
+		border-radius: 999px;
+		background: rgba(15, 23, 42, 0.08);
+		font-size: 0.74rem;
+		font-weight: 700;
+	}
+
+	.filters-row__count {
+		margin: 0;
+		font-size: 0.84rem;
+		color: color-mix(in srgb, var(--foreground) 68%, transparent);
+	}
+
+	.dashboard-chip,
+	.subject-pill {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.24rem 0.6rem;
+		border-radius: 999px;
+		font-size: 0.74rem;
+		font-weight: 700;
+		letter-spacing: 0.02em;
+	}
+
+	.subject-pill {
+		border: 1px solid var(--subject-border);
+		background: var(--subject-light-82);
+		color: var(--subject-color);
+	}
+
+	.dashboard-chip {
+		background: color-mix(in srgb, var(--border) 65%, transparent);
+		color: color-mix(in srgb, var(--foreground) 78%, transparent);
+	}
+
+	.dashboard-chip--positive {
+		background: rgba(34, 197, 94, 0.12);
+		color: #166534;
+	}
+
+	.dashboard-chip--warning {
+		background: rgba(245, 158, 11, 0.14);
+		color: #92400e;
 	}
 
 	.sheet-grid {
@@ -345,6 +1184,10 @@
 		color: color-mix(in srgb, var(--sheet-color) 72%, transparent);
 	}
 
+	.sheet-preview__tag-row {
+		margin-top: 0.7rem;
+	}
+
 	.sheet-preview__marks-box {
 		float: right;
 		width: 7.5rem;
@@ -388,6 +1231,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.8rem;
+		background: inherit;
 	}
 
 	.sheet-preview__meta {
@@ -456,6 +1300,247 @@
 		color: color-mix(in srgb, var(--sheet-color) 78%, transparent);
 		border-top: 1px solid var(--sheet-border);
 		background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, var(--sheet-light) 150%);
+	}
+
+	:global([data-theme='dark'] .dashboard-shell),
+	:global(:root:not([data-theme='light']) .dashboard-shell) {
+		border-color: #3a3258;
+		background:
+			radial-gradient(circle at top right, rgba(34, 197, 94, 0.14), transparent 28%),
+			radial-gradient(circle at top left, rgba(214, 161, 30, 0.16), transparent 32%),
+			#17142a;
+		box-shadow: 0 30px 80px -48px rgba(2, 6, 23, 0.9);
+	}
+
+	:global([data-theme='dark'] .subtitle),
+	:global([data-theme='dark'] .empty-card p),
+	:global([data-theme='dark'] .dashboard-band__timestamp),
+	:global([data-theme='dark'] .dashboard-band__summary-fallback),
+	:global([data-theme='dark'] .dashboard-band__summary),
+	:global([data-theme='dark'] .dashboard-score__label),
+	:global([data-theme='dark'] .dashboard-score__detail),
+	:global([data-theme='dark'] .dashboard-detail__empty),
+	:global([data-theme='dark'] .dashboard-detail__overview p),
+	:global([data-theme='dark'] .detail-entry p),
+	:global([data-theme='dark'] .detail-entry__meta),
+	:global([data-theme='dark'] .filters-row__count),
+	:global(:root:not([data-theme='light']) .subtitle),
+	:global(:root:not([data-theme='light']) .empty-card p),
+	:global(:root:not([data-theme='light']) .dashboard-band__timestamp),
+	:global(:root:not([data-theme='light']) .dashboard-band__summary-fallback),
+	:global(:root:not([data-theme='light']) .dashboard-band__summary),
+	:global(:root:not([data-theme='light']) .dashboard-score__label),
+	:global(:root:not([data-theme='light']) .dashboard-score__detail),
+	:global(:root:not([data-theme='light']) .dashboard-detail__empty),
+	:global(:root:not([data-theme='light']) .dashboard-detail__overview p),
+	:global(:root:not([data-theme='light']) .detail-entry p),
+	:global(:root:not([data-theme='light']) .detail-entry__meta),
+	:global(:root:not([data-theme='light']) .filters-row__count) {
+		color: #c5bbdf;
+	}
+
+	:global([data-theme='dark'] .empty-card),
+	:global([data-theme='dark'] .back-button),
+	:global(:root:not([data-theme='light']) .empty-card),
+	:global(:root:not([data-theme='light']) .back-button) {
+		border-color: #3a3258;
+		background: #1d1934;
+		color: #e4dff5;
+	}
+
+	:global([data-theme='dark'] .dashboard-band__title),
+	:global([data-theme='dark'] .dashboard-detail__overview h3),
+	:global([data-theme='dark'] .detail-entry h3),
+	:global(:root:not([data-theme='light']) .dashboard-band__title),
+	:global(:root:not([data-theme='light']) .dashboard-detail__overview h3),
+	:global(:root:not([data-theme='light']) .detail-entry h3) {
+		color: #f0eef8;
+	}
+
+	:global([data-theme='dark'] .dashboard-score),
+	:global(:root:not([data-theme='light']) .dashboard-score) {
+		border-color: #3a3258;
+		background: #201c39;
+		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+	}
+
+	:global([data-theme='dark'] .dashboard-score:hover),
+	:global([data-theme='dark'] .dashboard-score[data-active='true']),
+	:global(:root:not([data-theme='light']) .dashboard-score:hover),
+	:global(:root:not([data-theme='light']) .dashboard-score[data-active='true']) {
+		border-color: #5c517c;
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.04),
+			0 18px 36px -28px rgba(2, 6, 23, 0.65);
+	}
+
+	:global([data-theme='dark'] .dashboard-detail),
+	:global(:root:not([data-theme='light']) .dashboard-detail) {
+		border-color: #3a3258;
+		background: #1d1934;
+	}
+
+	:global([data-theme='dark'] .detail-entry),
+	:global(:root:not([data-theme='light']) .detail-entry) {
+		border-color: #3a3258;
+		background: #201c39;
+	}
+
+	:global([data-theme='dark'] .detail-entry[data-tone='positive']),
+	:global(:root:not([data-theme='light']) .detail-entry[data-tone='positive']) {
+		border-color: rgba(74, 222, 128, 0.24);
+		background: rgba(22, 101, 52, 0.18);
+	}
+
+	:global([data-theme='dark'] .detail-entry[data-tone='warning']),
+	:global(:root:not([data-theme='light']) .detail-entry[data-tone='warning']) {
+		border-color: rgba(251, 191, 36, 0.24);
+		background: rgba(146, 64, 14, 0.22);
+	}
+
+	:global([data-theme='dark'] .detail-entry__links a),
+	:global(:root:not([data-theme='light']) .detail-entry__links a) {
+		background: #1d1934;
+		border: 1px solid #3a3258;
+		color: #e4dff5;
+	}
+
+	:global([data-theme='dark'] .subject-filter),
+	:global(:root:not([data-theme='light']) .subject-filter) {
+		border-color: #3a3258;
+		background: #201c39;
+		color: #e4dff5;
+	}
+
+	:global([data-theme='dark'] .subject-filter:not(.subject-filter--active)[style]),
+	:global(:root:not([data-theme='light']) .subject-filter:not(.subject-filter--active)[style]) {
+		border-color: color-mix(in srgb, var(--subject-color) 32%, #3a3258);
+		background: color-mix(in srgb, var(--subject-color) 16%, #201c39);
+		color: color-mix(in srgb, var(--subject-light) 32%, #f0eef8);
+	}
+
+	:global([data-theme='dark'] .subject-filter--active),
+	:global(:root:not([data-theme='light']) .subject-filter--active) {
+		border-color: #fbbf24;
+		background: color-mix(in srgb, #d6a11e 24%, #1d1934);
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.03),
+			0 18px 36px -28px rgba(2, 6, 23, 0.65);
+	}
+
+	:global([data-theme='dark'] .subject-filter__count),
+	:global(:root:not([data-theme='light']) .subject-filter__count) {
+		background: rgba(255, 255, 255, 0.14);
+		color: #f0eef8;
+	}
+
+	:global([data-theme='dark'] .dashboard-chip),
+	:global(:root:not([data-theme='light']) .dashboard-chip) {
+		background: #1d1934;
+		color: #e4dff5;
+		border: 1px solid #3a3258;
+	}
+
+	:global([data-theme='dark'] .dashboard-chip--positive),
+	:global(:root:not([data-theme='light']) .dashboard-chip--positive) {
+		background: rgba(34, 197, 94, 0.18);
+		color: #bbf7d0;
+	}
+
+	:global([data-theme='dark'] .dashboard-chip--warning),
+	:global(:root:not([data-theme='light']) .dashboard-chip--warning) {
+		background: rgba(245, 158, 11, 0.2);
+		color: #fde68a;
+	}
+
+	:global([data-theme='dark'] .sheet-preview),
+	:global(:root:not([data-theme='light']) .sheet-preview) {
+		border-color: color-mix(in srgb, var(--sheet-color) 40%, #4a416d);
+		background: #201c39;
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.03),
+			0 28px 64px -40px rgba(2, 6, 23, 0.82);
+	}
+
+	:global([data-theme='dark'] .sheet-preview__title),
+	:global(:root:not([data-theme='light']) .sheet-preview__title) {
+		color: color-mix(in srgb, var(--sheet-color) 56%, #f0eef8);
+	}
+
+	:global([data-theme='dark'] .sheet-preview__eyebrow),
+	:global(:root:not([data-theme='light']) .sheet-preview__eyebrow) {
+		color: color-mix(in srgb, var(--sheet-accent) 42%, #f0eef8 58%);
+	}
+
+	:global([data-theme='dark'] .sheet-preview__header),
+	:global(:root:not([data-theme='light']) .sheet-preview__header) {
+		background:
+			radial-gradient(circle at 90% 20%, var(--sheet-accent-18) 0 18%, transparent 19%),
+			radial-gradient(circle at 82% 8%, var(--sheet-color-08) 0 16%, transparent 17%),
+			linear-gradient(
+				135deg,
+				color-mix(in srgb, var(--sheet-color) 18%, #201c39) 0%,
+				#17142a 100%
+			);
+		border-bottom-color: color-mix(in srgb, var(--sheet-color) 34%, #302850);
+	}
+
+	:global([data-theme='dark'] .sheet-preview__marks-box),
+	:global(:root:not([data-theme='light']) .sheet-preview__marks-box) {
+		border-color: color-mix(in srgb, var(--sheet-color) 34%, #302850);
+		background: #201c39;
+	}
+
+	:global([data-theme='dark'] .sheet-preview__body),
+	:global(:root:not([data-theme='light']) .sheet-preview__body) {
+		background: linear-gradient(180deg, #201c39 0%, #1b1732 100%);
+	}
+
+	:global([data-theme='dark'] .sheet-preview__subtitle),
+	:global([data-theme='dark'] .sheet-preview__marks-label),
+	:global([data-theme='dark'] .sheet-preview__marks-detail),
+	:global([data-theme='dark'] .sheet-preview__footer),
+	:global([data-theme='dark'] .sheet-preview__summary),
+	:global(:root:not([data-theme='light']) .sheet-preview__subtitle),
+	:global(:root:not([data-theme='light']) .sheet-preview__marks-label),
+	:global(:root:not([data-theme='light']) .sheet-preview__marks-detail),
+	:global(:root:not([data-theme='light']) .sheet-preview__footer),
+	:global(:root:not([data-theme='light']) .sheet-preview__summary) {
+		color: color-mix(in srgb, #c5bbdf 74%, var(--sheet-color) 26%);
+	}
+
+	:global([data-theme='dark'] .sheet-preview__meta),
+	:global(:root:not([data-theme='light']) .sheet-preview__meta) {
+		color: #b8aed3;
+	}
+
+	:global([data-theme='dark'] .sheet-preview__footer),
+	:global(:root:not([data-theme='light']) .sheet-preview__footer) {
+		background: linear-gradient(
+			180deg,
+			rgba(23, 20, 42, 0) 0%,
+			color-mix(in srgb, var(--sheet-color) 10%, #1d1934) 160%
+		);
+		border-top-color: color-mix(in srgb, var(--sheet-color) 36%, #3a3258);
+	}
+
+	:global([data-theme='dark'] .status-pill[data-status='solving']),
+	:global([data-theme='dark'] .status-pill[data-status='graded']),
+	:global(:root:not([data-theme='light']) .status-pill[data-status='solving']),
+	:global(:root:not([data-theme='light']) .status-pill[data-status='graded']) {
+		color: #dcfce7;
+	}
+
+	:global([data-theme='dark'] .status-pill[data-status='building']),
+	:global([data-theme='dark'] .status-pill[data-status='grading']),
+	:global(:root:not([data-theme='light']) .status-pill[data-status='building']),
+	:global(:root:not([data-theme='light']) .status-pill[data-status='grading']) {
+		color: #dbeafe;
+	}
+
+	:global([data-theme='dark'] .status-pill[data-status='queued']),
+	:global(:root:not([data-theme='light']) .status-pill[data-status='queued']) {
+		color: #fde68a;
 	}
 
 	@media (max-width: 700px) {
