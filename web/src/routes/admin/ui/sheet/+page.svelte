@@ -12,6 +12,12 @@
 			href: '/admin/ui/sheet/catalog'
 		},
 		{
+			title: 'Thumbnails',
+			description:
+				'Explorations for the /spark/sheets list card output: same shell, leaner content strategies.',
+			href: '/admin/ui/sheet/thumbnails'
+		},
+		{
 			title: 'Worksheet',
 			description:
 				'Full @ljoukov/sheet previews with seeded sample worksheets and tab switching between subjects.',

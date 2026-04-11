@@ -2,11 +2,18 @@
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils.js';
 
-	type SheetPreviewTabId = 'overview' | 'catalog' | 'worksheet' | 'feedback' | 'annotated-text';
+	type SheetPreviewTabId =
+		| 'overview'
+		| 'catalog'
+		| 'thumbnails'
+		| 'worksheet'
+		| 'feedback'
+		| 'annotated-text';
 
 	const tabs: Array<{ id: SheetPreviewTabId; href: string; label: string }> = [
 		{ id: 'overview', href: '/admin/ui/sheet', label: 'Overview' },
 		{ id: 'catalog', href: '/admin/ui/sheet/catalog', label: 'Catalog' },
+		{ id: 'thumbnails', href: '/admin/ui/sheet/thumbnails', label: 'Thumbnails' },
 		{ id: 'worksheet', href: '/admin/ui/sheet/worksheet', label: 'Worksheet' },
 		{ id: 'feedback', href: '/admin/ui/sheet/feedback', label: 'Feedback states' },
 		{

@@ -1023,6 +1023,7 @@
 				review={reviewState.review}
 				mode="review"
 				allowReplies={run.status === 'done'}
+				footerLabel={null}
 				feedbackThreads={feedbackThreads}
 				feedbackState={feedbackState}
 				onReply={(questionId, payload) => {
@@ -1037,6 +1038,7 @@
 				answers={draftAnswers}
 				mode={canEditDraftSheet() ? 'interactive' : 'readonly'}
 				grading={isDraftGradingInProgress()}
+				footerLabel={null}
 				gradeLabel={run.status === 'failed' || run.status === 'stopped' ? 'Grade Again' : 'Grade'}
 				onAnswersChange={(answers) => {
 					queueDraftSave(answers);

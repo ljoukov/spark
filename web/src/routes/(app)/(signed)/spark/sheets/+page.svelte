@@ -20,7 +20,12 @@
 	}
 
 	function formatMarks(awarded: number, max: number): string {
-		return `${awarded.toString()}/${max.toString()}`;
+		return `${awarded.toString()} / ${max.toString()}`;
+	}
+
+	function formatPercentage(percentage: number): string {
+		const rounded = Math.round(percentage * 10) / 10;
+		return `${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)}%`;
 	}
 
 	function totalMarks(sheet: PaperSheetData | null): number {
@@ -58,6 +63,34 @@
 			`--sheet-color-08:${rgbaFromHex(color, 0.08)}`,
 			`--sheet-accent-18:${rgbaFromHex(accent, 0.18)}`
 		].join('; ');
+	}
+
+	function resolveMarksSummary(sheet: PageData['sheets'][number]): {
+		value: string;
+		detail: string | null;
+	} {
+		const maxMarks = sheet.totals?.maxMarks ?? totalMarks(sheet.previewSheet);
+		if (sheet.totals) {
+			const percentage =
+				sheet.totals.percentage ??
+				(sheet.totals.maxMarks > 0
+					? (sheet.totals.awardedMarks / sheet.totals.maxMarks) * 100
+					: null);
+			return {
+				value: formatMarks(sheet.totals.awardedMarks, sheet.totals.maxMarks),
+				detail: percentage === null ? null : formatPercentage(percentage)
+			};
+		}
+		if (maxMarks > 0) {
+			return {
+				value: `— / ${maxMarks.toString()}`,
+				detail: null
+			};
+		}
+		return {
+			value: 'Not graded',
+			detail: null
+		};
 	}
 
 	function resolveStatusLabel(sheet: PageData['sheets'][number]): string {
@@ -125,10 +158,19 @@
 	{:else}
 		<div class="sheet-grid">
 			{#each data.sheets as sheet (sheet.id)}
+				{@const marksSummary = resolveMarksSummary(sheet)}
 				<a class="sheet-card" href={`/spark/sheets/${sheet.id}`} data-status={sheet.status}>
 					<div class="sheet-preview" style={buildPreviewStyle(sheet.previewSheet)}>
 						<header class="sheet-preview__header">
 							<div class="sheet-preview__header-row">
+								<div class="sheet-preview__marks-box">
+									<p class="sheet-preview__marks-label">Marks</p>
+									<p class="sheet-preview__marks-value">{marksSummary.value}</p>
+									{#if marksSummary.detail}
+										<p class="sheet-preview__marks-detail">{marksSummary.detail}</p>
+									{/if}
+								</div>
+
 								<div>
 									<p class="sheet-preview__eyebrow">
 										{sheet.previewSheet?.level ?? 'Worksheet'} ·
@@ -140,11 +182,6 @@
 									<p class="sheet-preview__subtitle">
 										{sheet.previewSheet?.subtitle ?? sheet.display.summaryMarkdown ?? 'Awaiting sheet output.'}
 									</p>
-								</div>
-
-								<div class="sheet-preview__total-box">
-									<p class="sheet-preview__total-label">Total marks</p>
-									<p class="sheet-preview__total-value">{totalMarks(sheet.previewSheet)}</p>
 								</div>
 							</div>
 						</header>
@@ -164,19 +201,6 @@
 									{@html renderMarkdown(sheet.display.summaryMarkdown)}
 								</div>
 							{/if}
-
-							{#if sheet.totals}
-								<div class="sheet-preview__stats">
-									<div>
-										<span>Marks</span>
-										<p>{formatMarks(sheet.totals.awardedMarks, sheet.totals.maxMarks)}</p>
-									</div>
-									<div>
-										<span>Score</span>
-										<p>{sheet.totals.percentage === null ? '—' : `${sheet.totals.percentage.toFixed(1)}%`}</p>
-									</div>
-								</div>
-							{/if}
 						</div>
 
 						<footer class="sheet-preview__footer">
@@ -185,7 +209,6 @@
 								{sheet.previewSheet?.subject ?? 'Submission'} ·
 								{sheet.previewSheet?.title ?? sheet.display.title}
 							</span>
-							<span>Spark Sheet</span>
 						</footer>
 					</div>
 				</a>
@@ -289,10 +312,7 @@
 	}
 
 	.sheet-preview__header-row {
-		display: flex;
-		justify-content: space-between;
-		gap: 1rem;
-		align-items: flex-start;
+		display: flow-root;
 	}
 
 	.sheet-preview__eyebrow {
@@ -317,29 +337,42 @@
 		color: color-mix(in srgb, var(--sheet-color) 72%, transparent);
 	}
 
-	.sheet-preview__total-box {
-		flex-shrink: 0;
-		min-width: 4.8rem;
-		padding: 0.72rem 0.8rem;
+	.sheet-preview__marks-box {
+		float: right;
+		width: 7.5rem;
+		min-width: 7.5rem;
+		margin: 0 0 0.55rem 0.85rem;
+		padding: 0.58rem 0.72rem;
 		text-align: center;
 		border-radius: 0.95rem;
 		background: white;
 		border: 1px solid var(--sheet-border);
 	}
 
-	.sheet-preview__total-label {
+	.sheet-preview__marks-label {
 		margin: 0;
-		font-size: 0.68rem;
+		font-size: 0.62rem;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
 		color: color-mix(in srgb, var(--sheet-color) 62%, transparent);
 	}
 
-	.sheet-preview__total-value {
-		margin: 0.2rem 0 0;
-		font-size: 1.25rem;
+	.sheet-preview__marks-value {
+		margin: 0.14rem 0 0;
+		font-size: 1rem;
 		font-weight: 800;
+		line-height: 1.1;
+		white-space: nowrap;
+		font-variant-numeric: tabular-nums;
 		color: var(--sheet-color);
+	}
+
+	.sheet-preview__marks-detail {
+		margin: 0.14rem 0 0;
+		font-size: 0.7rem;
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+		color: color-mix(in srgb, var(--sheet-color) 66%, transparent);
 	}
 
 	.sheet-preview__body {
@@ -406,30 +439,9 @@
 		color: var(--destructive);
 	}
 
-	.sheet-preview__stats {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 0.8rem;
-		padding-top: 0.2rem;
-	}
-
-	.sheet-preview__stats span {
-		display: block;
-		font-size: 0.74rem;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: color-mix(in srgb, var(--foreground) 58%, transparent);
-	}
-
-	.sheet-preview__stats p {
-		margin: 0.2rem 0 0;
-		font-size: 1rem;
-		font-weight: 700;
-	}
-
 	.sheet-preview__footer {
 		display: flex;
-		justify-content: space-between;
+		justify-content: flex-start;
 		gap: 0.8rem;
 		padding: 0.9rem 1.2rem;
 		font-size: 0.78rem;
@@ -443,9 +455,14 @@
 			flex-direction: column;
 		}
 
-		.sheet-preview__header-row,
 		.sheet-preview__footer {
 			flex-direction: column;
+		}
+
+		.sheet-preview__marks-box {
+			width: 6.8rem;
+			min-width: 6.8rem;
+			margin-left: 0.65rem;
 		}
 	}
 </style>
