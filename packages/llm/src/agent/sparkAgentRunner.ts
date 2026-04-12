@@ -1583,7 +1583,7 @@ function buildSingleUserInput(
 function recordLlmTextResult(options: {
   progress?: JobProgressReporter;
   modelId: string;
-  result: Pick<LlmTextResult, "modelVersion" | "usage">;
+  result: Pick<LlmTextResult, "modelVersion" | "usage" | "costUsd">;
 }): void {
   if (!options.progress) {
     return;
@@ -1595,6 +1595,7 @@ function recordLlmTextResult(options: {
   options.progress.recordModelUsage(handle, {
     modelVersion: options.result.modelVersion,
     ...(options.result.usage ? { tokens: options.result.usage } : {}),
+    costUsd: options.result.costUsd,
   });
   options.progress.finishModelCall(handle);
 }

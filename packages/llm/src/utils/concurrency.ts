@@ -307,7 +307,12 @@ class MetricsTracker {
       state.thinkingChars += thinkingDelta;
     }
     if (chunk.tokens) {
-      this.applyTokenUpdate(state, chunk.tokens);
+      this.applyTokenUpdate(state, chunk.tokens, chunk.costUsd);
+    } else if (
+      typeof chunk.costUsd === "number" &&
+      Number.isFinite(chunk.costUsd)
+    ) {
+      this.applyCostUpdate(state, Math.max(0, chunk.costUsd));
     }
   }
 
@@ -336,6 +341,7 @@ class MetricsTracker {
   private applyTokenUpdate(
     state: CallUsageState,
     tokens: LlmUsageTokenUpdate,
+    reportedCostUsd?: number,
   ): void {
     const previous = state.tokens;
     const resolvedPromptTokens = resolveNumber(
@@ -415,17 +421,26 @@ class MetricsTracker {
     this.tokens.toolUse += toolUseDelta;
 
     state.tokens = next;
-    const callCost = calculateCallCost({
+    const estimatedCostUsd = calculateCallCost({
       modelId: state.modelVersion ?? state.modelId,
       tokens: next,
       responseImages: state.responseImages,
       imageSize: state.requestImageSize,
     });
-    const costDelta = Math.max(0, callCost - state.appliedCostUsd);
-    if (costDelta > 0) {
-      this.costUsd += costDelta;
-      state.appliedCostUsd = callCost;
+    const callCostUsd =
+      typeof reportedCostUsd === "number" && Number.isFinite(reportedCostUsd)
+        ? Math.max(estimatedCostUsd, Math.max(0, reportedCostUsd))
+        : estimatedCostUsd;
+    this.applyCostUpdate(state, callCostUsd);
+  }
+
+  private applyCostUpdate(state: CallUsageState, callCostUsd: number): void {
+    const costDelta = Math.max(0, callCostUsd - state.appliedCostUsd);
+    if (costDelta <= 0) {
+      return;
     }
+    this.costUsd += costDelta;
+    state.appliedCostUsd = callCostUsd;
   }
 }
 

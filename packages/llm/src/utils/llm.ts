@@ -513,11 +513,17 @@ export async function generateText(options: LlmTextCallOptions): Promise<string>
         progress.recordModelUsage(handle, {
           modelVersion: event.modelVersion,
           tokens: event.usage,
+          costUsd: event.costUsd,
         });
         continue;
       }
     }
     const result = await call.result;
+    progress.recordModelUsage(handle, {
+      modelVersion: result.modelVersion,
+      ...(result.usage ? { tokens: result.usage } : {}),
+      costUsd: result.costUsd,
+    });
     await publishSparkLlmCallMetricsFromEnv({
       operation: "generate_text",
       model: options.modelId,
@@ -600,9 +606,15 @@ export async function generateJson<T>(options: LlmJsonCallOptions<T>): Promise<T
           progress.recordModelUsage(handle, {
             modelVersion: event.modelVersion,
             tokens: event.usage,
+            costUsd: event.costUsd,
           });
         }
       },
+    });
+    progress.recordModelUsage(handle, {
+      modelVersion: result.modelVersion,
+      ...(result.usage ? { tokens: result.usage } : {}),
+      costUsd: result.costUsd,
     });
     await publishSparkLlmCallMetricsFromEnv({
       operation: "generate_json",
