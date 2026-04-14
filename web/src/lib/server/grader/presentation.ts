@@ -218,7 +218,7 @@ function buildFooter(options: {
 	}
 	pushDistinct(
 		parts,
-		extractSessionLabel(options.presentation?.subtitle) ?? extractSessionLabel(options.paper?.year)
+		extractSessionLabel(options.paper?.year) ?? extractSessionLabel(options.presentation?.subtitle)
 	);
 	if (parts.length === 0) {
 		return 'Uploaded material';

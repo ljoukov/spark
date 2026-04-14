@@ -48,9 +48,11 @@
 		got: number;
 		total: number;
 	};
+	type QuestionScoreTone = 'full' | 'partial' | 'zero';
 	type QuestionMarkLabel = {
 		questionId: string;
 		text: string;
+		tone: QuestionScoreTone | null;
 	};
 
 	const userStore = getContext<Readable<ClientUser> | undefined>('spark:user');
@@ -571,6 +573,21 @@
 		return `[${options.marks.toString()} ${formatMarkNoun(options.marks)}]`;
 	}
 
+	function resolveQuestionScoreTone(
+		score: { got: number; total: number } | null | undefined
+	): QuestionScoreTone | null {
+		if (!score || score.total <= 0) {
+			return null;
+		}
+		if (score.got >= score.total) {
+			return 'full';
+		}
+		if (score.got > 0) {
+			return 'partial';
+		}
+		return 'zero';
+	}
+
 	function collectQuestionMarkLabelsFromEntries(
 		entries: readonly PaperSheetQuestionEntry[] | undefined,
 		review: PaperSheetReview | null | undefined,
@@ -582,13 +599,15 @@
 				collectQuestionMarkLabelsFromEntries(entry.questions, review, awaitingAnswers, labels);
 				continue;
 			}
+			const score = review?.questions[entry.id]?.score ?? null;
 			labels.push({
 				questionId: entry.id,
 				text: formatQuestionMarkText({
 					marks: entry.marks,
-					score: review?.questions[entry.id]?.score ?? null,
+					score,
 					awaitingAnswers
-				})
+				}),
+				tone: resolveQuestionScoreTone(score)
 			});
 		}
 	}
@@ -613,11 +632,22 @@
 		for (let index = 0; index < badges.length; index += 1) {
 			const badge = badges[index];
 			const label = labels[index];
-			if (!badge || !label || badge.textContent === label.text) {
+			if (!badge || !label) {
 				continue;
 			}
-			badge.textContent = label.text;
-			badge.setAttribute('aria-label', `Question ${label.questionId} marks ${label.text}`);
+			if (badge.textContent !== label.text) {
+				badge.textContent = label.text;
+				badge.setAttribute('aria-label', `Question ${label.questionId} marks ${label.text}`);
+			}
+			const row = badge.closest<HTMLElement>('.paper-sheet__question');
+			const numberBadge = row?.querySelector<HTMLElement>('.paper-sheet__question-number');
+			const feedbackCard = row?.querySelector<HTMLElement>('.paper-sheet-note');
+			for (const element of [row, badge, numberBadge, feedbackCard]) {
+				element?.classList.remove('is-score-full', 'is-score-partial', 'is-score-zero');
+				if (label.tone) {
+					element?.classList.add(`is-score-${label.tone}`);
+				}
+			}
 		}
 	}
 
@@ -1561,13 +1591,6 @@
 					return submitQuestionReply(questionId, payload.text, payload.attachments);
 				}}
 			/>
-			{#if sourceLinks.length > 0}
-				<nav class="sheet-source-links" aria-label="Source documents">
-					{#each sourceLinks as sourceLink (sourceLink.href)}
-						<a href={sourceLink.href} target="_blank" rel="noreferrer">{sourceLink.label}</a>
-					{/each}
-				</nav>
-			{/if}
 		</div>
 	{:else if draft && draftSheetDocument}
 		<div bind:this={sheetShellElement} class="sheet-shell">
@@ -1585,13 +1608,6 @@
 					return submitSheetForGrading(answers);
 				}}
 			/>
-			{#if sourceLinks.length > 0}
-				<nav class="sheet-source-links" aria-label="Source documents">
-					{#each sourceLinks as sourceLink (sourceLink.href)}
-						<a href={sourceLink.href} target="_blank" rel="noreferrer">{sourceLink.label}</a>
-					{/each}
-				</nav>
-			{/if}
 		</div>
 	{:else}
 		<section class="pending-card">
@@ -1622,6 +1638,23 @@
 							? 'Spark has queued this worksheet for grading and will switch into feedback mode once the report is ready.'
 							: 'The graded worksheet artifact has not been published yet. This page will refresh once grading finishes.')}
 			</p>
+		</section>
+	{/if}
+
+	{#if sourceLinks.length > 0}
+		<section class="sheet-source-card" aria-labelledby="sheet-source-card-title">
+			<div class="sheet-source-card__heading">
+				<p class="sheet-source-card__eyebrow">Original materials</p>
+				<h2 id="sheet-source-card-title" class="sheet-source-card__title">Source documents</h2>
+				<p class="sheet-source-card__description">Open the source files used for this worksheet.</p>
+			</div>
+			<nav class="sheet-source-links" aria-label="Source documents">
+				{#each sourceLinks as sourceLink (sourceLink.href)}
+					<a class={`sheet-source-link sheet-source-link--${sourceLink.kind}`} href={sourceLink.href} target="_blank" rel="noreferrer">
+						<span>{sourceLink.label}</span>
+					</a>
+				{/each}
+			</nav>
 		</section>
 	{/if}
 </section>
@@ -1690,32 +1723,169 @@
 		display: none;
 	}
 
+	.sheet-shell :global(.paper-sheet__question.is-score-full) {
+		border-bottom-color: color-mix(
+			in srgb,
+			var(--paper-review-correct-border, #22a66e) 35%,
+			var(--paper-divider, #e0e0e0)
+		);
+	}
+
+	.sheet-shell :global(.paper-sheet__question.is-score-partial) {
+		border-bottom-color: color-mix(
+			in srgb,
+			var(--paper-review-teacher-border, #d6a11e) 35%,
+			var(--paper-divider, #e0e0e0)
+		);
+	}
+
+	.sheet-shell :global(.paper-sheet__question.is-score-zero) {
+		border-bottom-color: color-mix(
+			in srgb,
+			var(--paper-review-incorrect-border, #c66317) 35%,
+			var(--paper-divider, #e0e0e0)
+		);
+	}
+
+	.sheet-shell :global(.paper-sheet__question-number.is-score-full) {
+		background: var(--paper-review-correct-border, #22a66e);
+		color: #fff;
+	}
+
+	.sheet-shell :global(.paper-sheet__question-number.is-score-partial) {
+		background: var(--paper-review-teacher-border, #d6a11e);
+		color: #1f1800;
+	}
+
+	.sheet-shell :global(.paper-sheet__question-number.is-score-zero) {
+		background: var(--paper-review-incorrect-border, #c66317);
+		color: #fff;
+	}
+
+	.sheet-shell :global(.paper-sheet__question-marks.is-score-full) {
+		color: var(--paper-review-correct-text, #1a8c5b);
+	}
+
+	.sheet-shell :global(.paper-sheet__question-marks.is-score-partial) {
+		color: var(--paper-review-teacher-text, #b07a00);
+	}
+
+	.sheet-shell :global(.paper-sheet__question-marks.is-score-zero) {
+		color: var(--paper-review-incorrect-text, #c66317);
+	}
+
+	.sheet-shell :global(.paper-sheet-note.is-score-partial) {
+		--note-bg: var(--paper-review-teacher-bg, #fff7ed);
+		--note-left: var(--paper-review-teacher-border, #d6a11e);
+		--note-badge-text: var(--paper-review-teacher-text, #b07a00);
+		--note-dot: var(--paper-review-teacher-border, #d6a11e);
+		--note-status-pending: var(--paper-review-teacher-text, #b07a00);
+		--note-status-processing: var(--paper-review-teacher-text, #b07a00);
+		--note-status-done: var(--paper-review-teacher-text, #b07a00);
+	}
+
+	.sheet-shell :global(.paper-sheet-note.is-score-zero) {
+		--note-bg: var(--paper-review-incorrect-bg, #fbefe3);
+		--note-left: var(--paper-review-incorrect-border, #c66317);
+		--note-badge-text: var(--paper-review-incorrect-text, #c66317);
+		--note-dot: var(--paper-review-incorrect-border, #c66317);
+		--note-status-pending: var(--paper-review-incorrect-text, #c66317);
+		--note-status-processing: var(--paper-review-incorrect-text, #c66317);
+		--note-status-done: var(--paper-review-incorrect-text, #c66317);
+	}
+
+	.sheet-source-card {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 0.9rem;
+		align-items: stretch;
+		border: 1px solid color-mix(in srgb, var(--sheet-color, #1f7a4d) 16%, var(--border));
+		border-radius: 1.25rem;
+		background:
+			linear-gradient(
+				135deg,
+				color-mix(in srgb, var(--sheet-color, #1f7a4d) 4%, var(--card)),
+				var(--card)
+			),
+			var(--card);
+		box-shadow: 0 12px 28px color-mix(in srgb, var(--foreground) 6%, transparent);
+		margin: 0 1rem 2rem;
+		padding: 1.05rem 1.15rem 1.15rem;
+	}
+
+	.sheet-source-card__heading {
+		min-width: 0;
+	}
+
+	.sheet-source-card__eyebrow {
+		margin: 0 0 0.2rem;
+		color: color-mix(in srgb, var(--sheet-color, #1f7a4d) 72%, var(--foreground));
+		font-size: 0.74rem;
+		font-weight: 820;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+	}
+
+	.sheet-source-card__title {
+		margin: 0;
+		color: var(--foreground);
+		font-size: clamp(1.02rem, 2.1vw, 1.2rem);
+		line-height: 1.15;
+		text-transform: none;
+	}
+
+	.sheet-source-card__description {
+		margin: 0.35rem 0 0;
+		color: color-mix(in srgb, var(--foreground) 64%, transparent);
+		font-size: 0.9rem;
+		line-height: 1.35;
+	}
+
 	.sheet-source-links {
+		align-items: center;
+		align-self: end;
 		display: flex;
 		flex-wrap: wrap;
-		justify-content: flex-end;
+		justify-content: flex-start;
 		gap: 0.5rem;
-		margin: -0.35rem 1.25rem 1.25rem;
+		margin: 0;
 		font-size: 0.92rem;
 		font-weight: 680;
 	}
 
-	.sheet-source-links a {
+	.sheet-source-link {
 		border: 1px solid color-mix(in srgb, var(--sheet-color, #1f7a4d) 28%, transparent);
 		border-radius: 999px;
-		background: color-mix(in srgb, var(--sheet-color, #1f7a4d) 8%, transparent);
+		background: color-mix(in srgb, var(--background) 90%, var(--sheet-color, #1f7a4d) 10%);
 		color: color-mix(in srgb, var(--sheet-color, #1f7a4d) 72%, var(--foreground));
 		padding: 0.35rem 0.75rem;
 		text-decoration: none;
 	}
 
-	.sheet-source-links a:hover,
-	.sheet-source-links a:focus-visible {
+	.sheet-source-link:hover,
+	.sheet-source-link:focus-visible {
 		text-decoration: underline;
 		text-underline-offset: 0.18em;
 	}
 
+	@media (min-width: 700px) {
+		.sheet-source-card {
+			grid-template-columns: minmax(0, 1fr) auto;
+			gap: 1.25rem;
+			align-items: end;
+		}
+
+		.sheet-source-links {
+			justify-content: flex-end;
+		}
+	}
+
 	@media (max-width: 520px) {
+		.sheet-source-card {
+			grid-template-columns: 1fr;
+			margin-inline: 0.5rem;
+		}
+
 		.sheet-shell :global(.paper-sheet__header) {
 			padding-right: 58px;
 		}

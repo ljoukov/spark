@@ -53,16 +53,16 @@ describe('buildGraderRunDisplay', () => {
 			paper: {
 				contextLabel: 'AQA GCSE Biology',
 				year: '2023',
-				paperName: 'Higher Tier Paper 1H'
+				paperName: '8461/1H Paper 1 Higher Tier'
 			},
 			presentation: {
-				title: 'AQA GCSE Biology Higher Tier Paper 1H',
+				title: 'AQA GCSE Biology 8461/1H Paper 1 Higher Tier',
 				subtitle: 'June 2023 source worksheet',
 				footer: 'Question paper transcription'
 			}
 		});
 
-		expect(display.footer).toBe('AQA GCSE Biology · Higher Tier Paper 1H · June 2023');
+		expect(display.footer).toBe('AQA GCSE Biology · 8461/1H Paper 1 Higher Tier · 2023');
 	});
 
 	it('uses the presentation title when process footer has no paper metadata', () => {

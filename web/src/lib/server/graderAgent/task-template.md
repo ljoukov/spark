@@ -353,7 +353,7 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
    - do not repeat `sheet.level`, `sheet.subject`, or `sheet.title`,
    - do not include marks, percentages, or status prose,
    - do not write process labels such as `Question paper transcription`, `transcription`, `OCR`, `artifact`, or similar wording,
-   - for identified public papers, prefer concise mechanical identifiers such as exam board/qualification, tier, paper code/name, and session (for example `AQA GCSE Biology · Higher Tier Paper 1H · June 2023`).
+   - for identified public papers, prefer concise mechanical identifiers such as exam board/qualification, paper code/name, tier, and year/session (for example `AQA GCSE Biology · 8461/1H Paper 1 Higher Tier · 2023`).
 - in `presentation.title`, `presentation.subtitle`, `presentation.summaryMarkdown`, and `presentation.footer`, do NOT mention:
    - run IDs, workspace IDs, file paths, tool names, source-policy labels, or implementation/process details.
 - `sheet.filePath` must be exactly `grader/output/sheet.json`.

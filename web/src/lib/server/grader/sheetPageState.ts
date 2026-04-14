@@ -30,6 +30,8 @@ const uploadManifestSchema = z.object({
 	)
 });
 
+type SourceLinkKind = SparkSheetPageState['sourceLinks'][number]['kind'];
+
 function buildSheetAttachmentUrl(options: {
 	sheetId: string;
 	filePath: string;
@@ -47,6 +49,29 @@ function isPdfUpload(attachment: { workspacePath: string; contentType?: string }
 	return contentType === 'application/pdf' || attachment.workspacePath.toLowerCase().endsWith('.pdf');
 }
 
+function classifySourcePdfUpload(attachment: { workspacePath: string; filename?: string }): {
+	kind: SourceLinkKind;
+	label: string;
+} {
+	const labelText = `${attachment.filename ?? ''} ${attachment.workspacePath}`.toLowerCase();
+	if (/(?:^|[-_\s])ms(?:[-_\s.]|$)|mark[-_\s]?scheme|marking[-_\s]?scheme/.test(labelText)) {
+		return {
+			kind: 'mark_scheme',
+			label: 'Mark scheme PDF'
+		};
+	}
+	if (/(?:^|[-_\s])qp(?:[-_\s.]|$)|question[-_\s]?paper|paper/.test(labelText)) {
+		return {
+			kind: 'paper',
+			label: 'Question paper PDF'
+		};
+	}
+	return {
+		kind: 'upload',
+		label: 'Original PDF'
+	};
+}
+
 async function loadSourceLinks(options: {
 	userId: string;
 	sheetId: string;
@@ -55,6 +80,8 @@ async function loadSourceLinks(options: {
 	sourceAttachmentIds?: readonly string[] | undefined;
 	paperUrl?: string | undefined;
 	referencePaperUrl?: string | undefined;
+	markSchemeUrl?: string | undefined;
+	referenceMarkSchemeUrl?: string | undefined;
 }): Promise<SparkSheetPageState['sourceLinks']> {
 	const links: SparkSheetPageState['sourceLinks'] = [];
 	const addLink = (link: SparkSheetPageState['sourceLinks'][number]): void => {
@@ -80,8 +107,13 @@ async function loadSourceLinks(options: {
 			const pdfUploads = parsedManifest.data.attachments.filter(isPdfUpload);
 			for (const [index, attachment] of pdfUploads.entries()) {
 				const filename = attachment.filename ?? attachment.workspacePath.split('/').at(-1) ?? 'source.pdf';
+				const classification = classifySourcePdfUpload(attachment);
 				addLink({
-					label: pdfUploads.length === 1 ? 'Original PDF' : `Original PDF ${index + 1}`,
+					kind: classification.kind,
+					label:
+						classification.kind === 'upload' && pdfUploads.length > 1
+							? `Original PDF ${index + 1}`
+							: classification.label,
 					href: buildSheetAttachmentUrl({
 						sheetId: options.sheetId,
 						filePath: attachment.workspacePath,
@@ -99,7 +131,8 @@ async function loadSourceLinks(options: {
 				fileId
 			});
 			addLink({
-				label: options.sourceAttachmentIds.length === 1 ? 'Original PDF' : `Original upload ${index + 1}`,
+				kind: 'upload',
+				label: options.sourceAttachmentIds.length === 1 ? 'Original upload' : `Original upload ${index + 1}`,
 				href: `/api/spark/agent/attachments?${params.toString()}`
 			});
 		}
@@ -108,8 +141,25 @@ async function loadSourceLinks(options: {
 	const paperUrl = options.paperUrl ?? options.referencePaperUrl;
 	if (paperUrl) {
 		addLink({
-			label: links.length > 0 ? 'Official PDF' : 'Original PDF',
+			kind: 'paper',
+			label: 'Question paper PDF',
 			href: paperUrl
+		});
+	}
+	const markSchemeUrl = options.markSchemeUrl ?? options.referenceMarkSchemeUrl;
+	if (markSchemeUrl) {
+		addLink({
+			kind: 'mark_scheme',
+			label: 'Mark scheme PDF',
+			href: markSchemeUrl
+		});
+	}
+	if (options.conversationId) {
+		const params = new URLSearchParams({ conversationId: options.conversationId });
+		addLink({
+			kind: 'chat',
+			label: 'Request chat',
+			href: `/spark?${params.toString()}`
 		});
 	}
 
@@ -224,7 +274,9 @@ export async function loadSparkSheetPageState(options: {
 		conversationId: run.conversationId,
 		sourceAttachmentIds: run.sourceAttachmentIds,
 		paperUrl: run.paper?.paperUrl,
-		referencePaperUrl: report?.references?.paperUrl ?? draft?.references?.paperUrl
+		referencePaperUrl: report?.references?.paperUrl ?? draft?.references?.paperUrl,
+		markSchemeUrl: run.paper?.markSchemeUrl,
+		referenceMarkSchemeUrl: report?.references?.markSchemeUrl ?? draft?.references?.markSchemeUrl
 	});
 
 	return {

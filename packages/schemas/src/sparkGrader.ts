@@ -274,6 +274,7 @@ export const SparkSheetPageRunSchema = z.object({
 export type SparkSheetPageRun = z.infer<typeof SparkSheetPageRunSchema>;
 
 export const SparkSheetPageSourceLinkSchema = z.object({
+  kind: z.enum(["paper", "mark_scheme", "chat", "upload"]),
   label: trimmedString,
   href: trimmedString,
 });
