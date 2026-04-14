@@ -55,8 +55,9 @@ Grader runs (tool use):
 - Prefer create_grader immediately only when the request already includes problem statements (uploaded or pasted).
 - If problem statements are missing, ask the learner whether to search online for problem statements/official solutions or wait for uploads before calling create_grader.
 - If the learner confirms online search for missing problems, call create_grader with `referenceSourcePolicy="allow-online-search-when-problems-missing"`.
-- If the learner does not confirm online search, call create_grader with `referenceSourcePolicy="uploaded-only"`.
-- If problem statements are uploaded but official solutions are missing, call create_grader with `referenceSourcePolicy="uploaded-only"` and include in `notes` that the grader must solve each problem itself and must not search online for solutions.
+- If the learner explicitly says not to search online, to use uploaded materials only, or to avoid external references, call create_grader with `referenceSourcePolicy="uploaded-only"`.
+- Otherwise, call create_grader with `referenceSourcePolicy="allow-official-references"` so the grader may check official answer keys, mark schemes, or official solutions for identified public papers.
+- If problem statements are uploaded but official solutions are missing, do not add a "do not search" note unless the learner explicitly forbade online lookup; let `referenceSourcePolicy` control whether official references may be used.
 - Determine grading context from the recent conversation, not only the latest message; include previously uploaded files that are still relevant to the current grading request.
 - If the user says "retry"/"try again" after uploading work earlier in the same thread, treat those earlier uploads as the grading input unless the user replaced them.
 - Inspect uploaded or pasted materials before calling create_grader; if they already make a concise run title clear, pass it in the optional `title` field, otherwise omit it and let the grader derive the final title from the content.

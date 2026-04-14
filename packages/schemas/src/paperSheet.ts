@@ -60,7 +60,7 @@ export type PaperSheetMcqDisplayMode = z.infer<
 export const PaperSheetMcqOptionSchema = z.object({
   id: trimmedString,
   label: trimmedString.optional(),
-  text: trimmedString,
+  text: trimmedMaybeEmptyString.default(""),
 });
 
 export type PaperSheetMcqOption = z.infer<typeof PaperSheetMcqOptionSchema>;
@@ -101,6 +101,17 @@ export const PaperSheetMcqQuestionSchema = z
           path: ["options", index, "label"],
           message:
             "MCQ options in labels_only mode need a source-faithful label such as A, B, C, or D.",
+        });
+      }
+      if (
+        question.displayMode === "full_options" &&
+        option.text.trim().length === 0
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["options", index, "text"],
+          message:
+            "MCQ options in full_options mode need source-faithful option text. Use labels_only for diagram-labelled options with no separate option text.",
         });
       }
     }
@@ -595,9 +606,10 @@ export type PaperSheetQuestionReviewStatus = z.infer<
 
 export const PaperSheetQuestionReviewSchema = z.object({
   status: PaperSheetQuestionReviewStatusSchema,
+  score: PaperSheetScoreSchema.optional(),
   label: trimmedString.optional(),
   statusLabel: trimmedString.optional(),
-  note: trimmedString,
+  note: trimmedMaybeEmptyString,
   replyPlaceholder: trimmedString.optional(),
   followUp: trimmedString.optional(),
 });
@@ -606,14 +618,22 @@ export type PaperSheetQuestionReview = z.infer<
   typeof PaperSheetQuestionReviewSchema
 >;
 
+export const PaperSheetReviewModeSchema = z.enum([
+  "graded",
+  "awaiting_answers",
+]);
+
+export type PaperSheetReviewMode = z.infer<typeof PaperSheetReviewModeSchema>;
+
 export const PaperSheetReviewSchema = z.object({
+  mode: PaperSheetReviewModeSchema.optional(),
   score: PaperSheetScoreSchema,
   objectiveQuestionCount: z.number().int().min(0).optional(),
   teacherReviewMarks: z.number().min(0).optional(),
   teacherReviewQuestionCount: z.number().int().min(0).optional(),
   label: trimmedString,
   message: trimmedString,
-  note: trimmedString,
+  note: trimmedMaybeEmptyString,
   questions: z.record(trimmedString, PaperSheetQuestionReviewSchema),
 });
 
@@ -842,22 +862,27 @@ function normalizeLegacyMcqOption(
   if (!record) {
     return null;
   }
-  const text =
-    asTrimmedStringOrNull(record.text) ??
-    asTrimmedStringOrNull(record.value) ??
-    asTrimmedStringOrNull(record.label);
-  if (!text) {
+  const text = asTrimmedStringOrNull(record.text) ?? asTrimmedStringOrNull(record.value);
+  const rawId = asTrimmedStringOrNull(record.id);
+  const rawLabel = asTrimmedStringOrNull(record.label);
+  if (!text && !rawId && !rawLabel) {
     return null;
   }
+  if (!text && rawLabel && !rawId && rawLabel.length > 2) {
+    return {
+      id: `option-${(index + 1).toString()}`,
+      text: rawLabel,
+    };
+  }
   const label =
-    asTrimmedStringOrNull(record.label) ??
-    asTrimmedStringOrNull(record.id) ??
+    rawLabel ??
+    rawId ??
     undefined;
-  const id = asTrimmedStringOrNull(record.id) ?? label ?? `option-${(index + 1).toString()}`;
+  const id = rawId ?? label ?? `option-${(index + 1).toString()}`;
   return {
     id,
     ...(label ? { label } : {}),
-    text,
+    text: text ?? "",
   };
 }
 
@@ -1508,12 +1533,32 @@ export const SparkGraderWorksheetReportSchema = z
     }
 
     for (const questionId of questionIds) {
+      const question = questions.get(questionId);
       if (!(questionId in report.review.questions)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["review", "questions"],
           message: `Missing review entry for question "${questionId}".`,
         });
+      } else if (question) {
+        const reviewEntry = report.review.questions[questionId];
+        const score = reviewEntry?.score;
+        if (score) {
+          if (score.total !== question.marks) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["review", "questions", questionId, "score", "total"],
+              message: `Question "${questionId}" review total must equal the worksheet marks (${question.marks.toString()}).`,
+            });
+          }
+          if (score.got > score.total) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["review", "questions", questionId, "score", "got"],
+              message: `Question "${questionId}" awarded marks cannot exceed its review total.`,
+            });
+          }
+        }
       }
       if (!(questionId in report.answers)) {
         ctx.addIssue({
@@ -1530,6 +1575,42 @@ export const SparkGraderWorksheetReportSchema = z
           code: z.ZodIssueCode.custom,
           path: ["review", "questions", key],
           message: `Review entry "${key}" does not match any worksheet question.`,
+        });
+      }
+    }
+
+    const scoredQuestionReviews = Object.entries(report.review.questions).filter(
+      ([, review]) => review.score !== undefined,
+    );
+    if (scoredQuestionReviews.length > 0) {
+      if (scoredQuestionReviews.length !== questionIds.length) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["review", "questions"],
+          message:
+            "If any question review includes a score, every worksheet question review must include one.",
+        });
+      }
+      const scoredGot = scoredQuestionReviews.reduce(
+        (sum, [, review]) => sum + (review.score?.got ?? 0),
+        0,
+      );
+      const scoredTotal = scoredQuestionReviews.reduce(
+        (sum, [, review]) => sum + (review.score?.total ?? 0),
+        0,
+      );
+      if (scoredGot !== report.review.score.got) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["review", "score", "got"],
+          message: `Worksheet review awarded marks must equal the sum of per-question awarded marks (${scoredGot.toString()}).`,
+        });
+      }
+      if (scoredTotal !== report.review.score.total) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["review", "score", "total"],
+          message: `Worksheet review total marks must equal the sum of per-question review totals (${scoredTotal.toString()}).`,
         });
       }
     }
@@ -1556,7 +1637,7 @@ export const SparkGraderWorksheetReportSchema = z
             path: ["answers", key],
             message: `Question "${key}" expects a string answer.`,
           });
-        } else if (question.type === "mcq") {
+        } else if (question.type === "mcq" && answer.trim().length > 0) {
           const optionIds = new Set(question.options.map((option) => option.id));
           if (!optionIds.has(answer)) {
             ctx.addIssue({
@@ -1618,6 +1699,9 @@ export const SparkGraderWorksheetReportSchema = z
               path: ["answers", key],
               message: `Answer-bank question "${key}" is missing blank "${expectedKey}".`,
             });
+            continue;
+          }
+          if (selectedOptionId.trim().length === 0) {
             continue;
           }
           if (!optionIds.has(selectedOptionId)) {

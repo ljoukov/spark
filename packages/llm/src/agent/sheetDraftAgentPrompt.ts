@@ -45,10 +45,11 @@ export function buildSparkSheetDraftAgentPrompt(options?: {
     "- For `answer_bank`, use `displayMode: \"inline_labeled\"` by default when the full labelled option such as `(A) principal amount` can sit directly inside each selector. Use `displayMode: \"banked\"` only when the source shows a separate answer bank that should stay visible below the sentence or when the full labelled option text is too long to fit cleanly in the selector.",
     "- For `mcq`, keep the question stem in `prompt`, keep the options in structured `options[]`, and choose `displayMode: \"full_options\"` by default when the selectable cards should show the full option text. Use `displayMode: \"labels_only\"` only when the source options are long enough that they should stay listed separately above compact label-only selectors.",
     "- The JSON contract is defined explicitly in sheet/task.md. Follow that contract directly and do not infer alternate keys from logs or unrelated files.",
+    "- The run summary JSON must use nested `presentation: { title, subtitle, summaryMarkdown, footer }`; do not write legacy flat keys such as `bodySummaryMarkdown` or `footerProvenance`.",
     "",
     "Deliverables:",
     `1) Write one worksheet draft JSON file at ${sheetPath}`,
-    `2) Write ${summaryPath} including a concise student-facing presentation title, subtitle, body summary markdown, and footer provenance`,
+    `2) Write ${summaryPath} with nested \`presentation: { title, subtitle, summaryMarkdown, footer }\` values`,
     "3) Call publish_sheet_draft({}) to validate and publish the worksheet draft; this only validates the artifact contract/persistence, so complete the source-fidelity check before calling it. If it fails, fix the files and retry until it succeeds",
     "4) Call done with a short summary after publish_sheet_draft succeeds",
   ].join("\n");

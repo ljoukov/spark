@@ -6,6 +6,11 @@ import {
 	safeParseSolveSheetAnswers,
 	safeParseSolveSheetDraft
 } from '$lib/server/grader/problemReport';
+import {
+	rewriteGraderWorksheetReportAssetTargets,
+	rewritePaperSheetDataAssetTargets,
+	rewriteSolveSheetDraftAssetTargets
+} from '$lib/server/grader/sheetAssets';
 import { buildGraderRunDisplay } from '$lib/server/grader/presentation';
 import { getGraderRun, getWorkspaceTextFile } from '$lib/server/grader/repo';
 import { buildInitialTutorReviewState } from '$lib/server/tutorSessions/reviewState';
@@ -46,8 +51,20 @@ export async function loadSparkSheetPageState(options: {
 
 	const reportPath = run.sheet?.filePath ?? run.sheetPath;
 	const artifactRaw = await getWorkspaceTextFile(options.userId, run.workspaceId, reportPath);
-	const report = artifactRaw ? safeParseGraderWorksheetReport(artifactRaw) : null;
-	const draft = artifactRaw ? safeParseSolveSheetDraft(artifactRaw) : null;
+	const parsedReport = artifactRaw ? safeParseGraderWorksheetReport(artifactRaw) : null;
+	const report = parsedReport
+		? rewriteGraderWorksheetReportAssetTargets({
+				sheetId: run.id,
+				report: parsedReport
+			})
+		: null;
+	const parsedDraft = artifactRaw ? safeParseSolveSheetDraft(artifactRaw) : null;
+	const draft = parsedDraft
+		? rewriteSolveSheetDraftAssetTargets({
+				sheetId: run.id,
+				draft: parsedDraft
+			})
+		: null;
 	const draftAnswersRaw =
 		run.draftAnswersPath && run.draftAnswersPath.trim().length > 0
 			? await getWorkspaceTextFile(options.userId, run.workspaceId, run.draftAnswersPath)
@@ -83,11 +100,20 @@ export async function loadSparkSheetPageState(options: {
 		});
 		const currentSession = recovered?.session ?? (await getTutorSession(options.userId, session.id)) ?? session;
 		const currentReviewState = recovered?.reviewState ?? loadedWorkspace.reviewState;
+		const renderableReviewState = currentReviewState
+			? {
+					...currentReviewState,
+					sheet: rewritePaperSheetDataAssetTargets({
+						sheetId: run.id,
+						sheet: currentReviewState.sheet
+					})
+				}
+			: currentReviewState;
 		interaction = {
 			id: currentSession.id,
 			workspaceId: currentSession.workspaceId,
 			status: currentSession.status,
-			reviewState: currentReviewState,
+			reviewState: renderableReviewState,
 			activeTurnAgentId: currentSession.activeTurnAgentId ?? null,
 			activeTurnQuestionId: currentSession.activeTurnQuestionId ?? null,
 			error: currentSession.error ?? null

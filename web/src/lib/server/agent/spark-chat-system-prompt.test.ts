@@ -7,14 +7,14 @@ describe('spark chat system prompt', () => {
 		expect(sparkChatSystemPrompt).toContain(
 			'ask one concise clarifying question instead of guessing the goal'
 		);
-		expect(sparkChatSystemPrompt).toContain(
-			'Do not proactively summarize the uploaded content'
-		);
+		expect(sparkChatSystemPrompt).toContain('Do not proactively summarize the uploaded content');
 	});
 
 	it('requires immediate worksheet tool routing for explicit attachment-based requests', () => {
 		expect(sparkChatSystemPrompt).toContain('call create_sheet immediately in that same response');
-		expect(sparkChatSystemPrompt).toContain('Do not claim the sheet is ready unless create_sheet returned status="started"');
+		expect(sparkChatSystemPrompt).toContain(
+			'Do not claim the sheet is ready unless create_sheet returned status="started"'
+		);
 	});
 
 	it('treats uploaded question sheets as canonical worksheet sources', () => {
@@ -25,6 +25,12 @@ describe('spark chat system prompt', () => {
 
 	it('requires immediate grading tool routing for explicit attachment-based requests', () => {
 		expect(sparkChatSystemPrompt).toContain('call create_grader immediately in that same response');
+	});
+
+	it('allows official grading references unless the learner forbids online lookup', () => {
+		expect(sparkChatSystemPrompt).toContain('referenceSourcePolicy="allow-official-references"');
+		expect(sparkChatSystemPrompt).toContain('explicitly says not to search online');
+		expect(sparkChatSystemPrompt).toContain('referenceSourcePolicy="uploaded-only"');
 	});
 
 	it('routes dashboard refresh questions through the dedicated tool', () => {

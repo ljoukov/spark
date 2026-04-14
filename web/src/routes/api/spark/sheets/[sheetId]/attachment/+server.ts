@@ -14,6 +14,7 @@ import { getFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken';
 import { downloadStorageObject } from '$lib/server/gcp/storageRest';
 import { getGraderRun } from '$lib/server/grader/repo';
+import { isAllowedWorksheetAssetPath } from '$lib/server/grader/sheetAssets';
 import { findTutorSessionForSheet } from '$lib/server/tutorSessions/repo';
 import { requireTutorServiceAccountJson } from '$lib/server/tutorSessions/service';
 
@@ -59,7 +60,9 @@ export const GET: RequestHandler = async ({ request, params, url }) => {
 	}
 
 	if (!isAllowedSheetAttachmentPath(parsedQuery.path)) {
-		return json({ error: 'not_found' }, { status: 404 });
+		if (!isAllowedWorksheetAssetPath(parsedQuery.path)) {
+			return json({ error: 'not_found' }, { status: 404 });
+		}
 	}
 
 	const run = await getGraderRun(userId, parsedParams.sheetId);
@@ -67,11 +70,18 @@ export const GET: RequestHandler = async ({ request, params, url }) => {
 		return json({ error: 'sheet_not_found' }, { status: 404 });
 	}
 
-	const session = await findTutorSessionForSheet({
-		userId,
-		runId: run.id
-	});
-	if (!session) {
+	const isWorksheetAsset = isAllowedWorksheetAssetPath(parsedQuery.path);
+	const session = isWorksheetAsset
+		? null
+		: await findTutorSessionForSheet({
+				userId,
+				runId: run.id
+			});
+	if (!isWorksheetAsset && !session) {
+		return json({ error: 'not_found' }, { status: 404 });
+	}
+	const workspaceId = isWorksheetAsset ? run.workspaceId : session?.workspaceId;
+	if (!workspaceId) {
 		return json({ error: 'not_found' }, { status: 404 });
 	}
 
@@ -80,7 +90,7 @@ export const GET: RequestHandler = async ({ request, params, url }) => {
 		serviceAccountJson,
 		documentPath: buildWorkspaceFileDocPath({
 			userId,
-			workspaceId: session.workspaceId,
+			workspaceId,
 			filePath: parsedQuery.path
 		})
 	});

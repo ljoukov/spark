@@ -190,6 +190,12 @@ async function loadLocalGraderAttachmentParts(options: {
       );
       continue;
     }
+    if (!attachment.contentType.startsWith("image/")) {
+      notes.push(
+        `${label} is available at workspace path ${attachment.workspacePath}; inspect it with extract_text, pdf_to_images, or file tools instead of relying on inline model attachment input.`,
+      );
+      continue;
+    }
     parts.push({
       type: "inlineData",
       data: Buffer.from(bytes).toString("base64"),
@@ -296,7 +302,7 @@ export async function runSparkGraderLocal(options: {
     options.thinkingLevel ??
     resolveSparkAgentThinkingLevel(options.modelId) ??
     null;
-  const useSubagents = options.useSubagents ?? true;
+  const useSubagents = options.useSubagents ?? false;
   const disableExtractTextTool = options.disableExtractTextTool ?? false;
 
   const workspace: SparkAgentWorkspace = {
@@ -376,7 +382,7 @@ export async function runSparkGraderLocal(options: {
       done,
     },
     rootDir: options.workspaceDir,
-    includeReferenceTextTool: false,
+    includeReferenceTextTool: true,
     onFileWritten: () => {},
   });
 

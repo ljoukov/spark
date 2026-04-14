@@ -2,7 +2,7 @@
 	import { browser } from '$app/environment';
 	import { invalidateAll } from '$app/navigation';
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
-	import { Sheet as PaperSheet, type SheetFeedbackStateMap } from '@ljoukov/sheet';
+	import { Sheet as PaperSheet, type SheetDocument, type SheetFeedbackStateMap } from '@ljoukov/sheet';
 	import type {
 		PaperSheetAnswers,
 		PaperSheetFeedbackAttachment,
@@ -39,6 +39,18 @@
 	type PendingReply = {
 		text: string;
 		attachments: PaperSheetFeedbackAttachment[];
+	};
+	type PaperSheetSection = SheetDocument['sections'][number];
+	type PaperSheetContentSection = Extract<PaperSheetSection, { id: string }>;
+	type PaperSheetQuestionEntry = NonNullable<PaperSheetContentSection['questions']>[number];
+	type PaperSheetReview = SparkGraderWorksheetReport['review'];
+	type SectionScoreSummary = {
+		got: number;
+		total: number;
+	};
+	type QuestionMarkLabel = {
+		questionId: string;
+		text: string;
 	};
 
 	const userStore = getContext<Readable<ClientUser> | undefined>('spark:user');
@@ -79,6 +91,7 @@
 	let lastSavedDraftSignature = $state(JSON.stringify(initialDraftAnswers));
 	let artifactRefreshInFlight = $state(false);
 	let artifactRefreshAttempts = $state(0);
+	let sheetShellElement = $state<HTMLElement | null>(null);
 
 	const ARTIFACT_REFRESH_MAX_ATTEMPTS = 120;
 	const ARTIFACT_REFRESH_MAX_DELAY_MS = 5000;
@@ -195,6 +208,462 @@
 			return true;
 		}
 		return run.status === 'failed' || run.status === 'stopped';
+	}
+
+	function eagerLoadSheetFigures(root: HTMLElement): void {
+		for (const image of root.querySelectorAll<HTMLImageElement>('.markdown-figure__image')) {
+			if (image.getAttribute('loading') !== 'eager') {
+				image.setAttribute('loading', 'eager');
+			}
+			image.decoding = 'async';
+		}
+	}
+
+	const FIGURE_REFERENCE_LABEL_PATTERN =
+		/\b(?:Figure|Fig\.?|Diagram)\s+(\d+(?:\.\d+)*[A-Za-z]?)\b/iu;
+	const TABLE_REFERENCE_LABEL_PATTERN = /\bTable\s+(\d+(?:\.\d+)*[A-Za-z]?)\b/iu;
+	const ARTIFACT_REFERENCE_TEXT_PATTERN =
+		/\b(?:(Figure|Fig\.?|Diagram|Table)\s+(\d+(?:\.\d+)*[A-Za-z]?))\b/giu;
+
+	function buildArtifactAnchorId(kind: 'figure' | 'table', label: string): string {
+		const normalizedLabel = label
+			.trim()
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/gu, '-')
+			.replace(/^-+|-+$/gu, '');
+		return `${kind}-${normalizedLabel}`;
+	}
+
+	function resolveArtifactReference(value: string): { kind: 'figure' | 'table'; label: string } | null {
+		const figureMatch = FIGURE_REFERENCE_LABEL_PATTERN.exec(value);
+		if (figureMatch?.[1]) {
+			return {
+				kind: 'figure',
+				label: figureMatch[1]
+			};
+		}
+		const tableMatch = TABLE_REFERENCE_LABEL_PATTERN.exec(value);
+		if (tableMatch?.[1]) {
+			return {
+				kind: 'table',
+				label: tableMatch[1]
+			};
+		}
+		return null;
+	}
+
+	function collectArtifactAnchors(root: HTMLElement): Map<string, string> {
+		const anchors = new Map<string, string>();
+
+		for (const link of root.querySelectorAll<HTMLAnchorElement>('a.markdown-figure-link')) {
+			const image = link.querySelector<HTMLImageElement>('.markdown-figure__image');
+			const reference = resolveArtifactReference(image?.alt ?? link.textContent ?? '');
+			if (!reference) {
+				continue;
+			}
+			const anchorId = buildArtifactAnchorId(reference.kind, reference.label);
+			const key = `${reference.kind}:${reference.label.toLowerCase()}`;
+			if (!anchors.has(key)) {
+				anchors.set(key, anchorId);
+				link.id = anchorId;
+				link.dataset.sheetArtifactAnchor = key;
+			} else {
+				link.removeAttribute('id');
+				link.dataset.sheetArtifactDuplicate = key;
+			}
+		}
+
+		for (const table of root.querySelectorAll<HTMLTableElement>('.markdown-content table')) {
+			const labelElement = table.previousElementSibling;
+			const reference = resolveArtifactReference(labelElement?.textContent ?? '');
+			if (!reference || reference.kind !== 'table') {
+				continue;
+			}
+			const anchorId = buildArtifactAnchorId(reference.kind, reference.label);
+			const key = `${reference.kind}:${reference.label.toLowerCase()}`;
+			if (!anchors.has(key)) {
+				anchors.set(key, anchorId);
+				if (labelElement instanceof HTMLElement) {
+					labelElement.id = anchorId;
+					labelElement.dataset.sheetArtifactAnchor = key;
+				}
+			}
+		}
+
+		return anchors;
+	}
+
+	function linkArtifactReferences(root: HTMLElement, anchors: Map<string, string>): void {
+		const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+			acceptNode(node) {
+				const parent = node.parentElement;
+				if (!parent) {
+					return NodeFilter.FILTER_REJECT;
+				}
+				if (
+					parent.closest(
+						'a, button, input, textarea, select, table, .markdown-figure, script, style'
+					)
+				) {
+					return NodeFilter.FILTER_REJECT;
+				}
+				ARTIFACT_REFERENCE_TEXT_PATTERN.lastIndex = 0;
+				if (!ARTIFACT_REFERENCE_TEXT_PATTERN.test(node.textContent ?? '')) {
+					return NodeFilter.FILTER_REJECT;
+				}
+				ARTIFACT_REFERENCE_TEXT_PATTERN.lastIndex = 0;
+				return NodeFilter.FILTER_ACCEPT;
+			}
+		});
+
+		const textNodes: Text[] = [];
+		for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+			textNodes.push(node as Text);
+		}
+
+		for (const textNode of textNodes) {
+			const text = textNode.textContent ?? '';
+			const fragment = document.createDocumentFragment();
+			let lastIndex = 0;
+			ARTIFACT_REFERENCE_TEXT_PATTERN.lastIndex = 0;
+			for (const match of text.matchAll(ARTIFACT_REFERENCE_TEXT_PATTERN)) {
+				const fullMatch = match[0] ?? '';
+				const rawKind = match[1]?.toLowerCase();
+				const label = match[2]?.toLowerCase();
+				const index = match.index ?? 0;
+				if (!rawKind || !label) {
+					continue;
+				}
+				const kind = rawKind === 'table' ? 'table' : 'figure';
+				const anchorId = anchors.get(`${kind}:${label}`);
+				if (!anchorId) {
+					continue;
+				}
+				if (index > lastIndex) {
+					fragment.append(document.createTextNode(text.slice(lastIndex, index)));
+				}
+				const anchor = document.createElement('a');
+				anchor.href = `#${anchorId}`;
+				anchor.className = 'paper-sheet__artifact-reference';
+				anchor.textContent = fullMatch;
+				fragment.append(anchor);
+				lastIndex = index + fullMatch.length;
+			}
+			if (lastIndex === 0) {
+				continue;
+			}
+			if (lastIndex < text.length) {
+				fragment.append(document.createTextNode(text.slice(lastIndex)));
+			}
+			textNode.replaceWith(fragment);
+		}
+	}
+
+	function relinkExistingArtifactReferenceAnchors(root: HTMLElement, anchors: Map<string, string>): void {
+		for (const link of root.querySelectorAll<HTMLAnchorElement>('.markdown-content a')) {
+			if (
+				link.classList.contains('markdown-figure-link') ||
+				link.querySelector('img') ||
+				link.dataset.sheetArtifactAnchor ||
+				link.dataset.sheetArtifactDuplicate
+			) {
+				continue;
+			}
+			const reference = resolveArtifactReference(link.textContent ?? '');
+			if (!reference) {
+				continue;
+			}
+			const anchorId = anchors.get(`${reference.kind}:${reference.label.toLowerCase()}`);
+			if (!anchorId) {
+				continue;
+			}
+			link.href = `#${anchorId}`;
+			link.removeAttribute('target');
+			link.removeAttribute('rel');
+			link.classList.add('paper-sheet__artifact-reference');
+		}
+	}
+
+	function annotateSheetArtifacts(root: HTMLElement): void {
+		const anchors = collectArtifactAnchors(root);
+		if (anchors.size === 0) {
+			return;
+		}
+		relinkExistingArtifactReferenceAnchors(root, anchors);
+		linkArtifactReferences(root, anchors);
+	}
+
+	const METADATA_STOP_WORDS = new Set([
+		'a',
+		'an',
+		'and',
+		'answer',
+		'answers',
+		'exam',
+		'for',
+		'mark',
+		'marks',
+		'of',
+		'paper',
+		'question',
+		'questions',
+		'review',
+		'source',
+		'submission',
+		'the',
+		'uploaded',
+		'worksheet'
+	]);
+
+	function significantMetadataTokens(value: string): Set<string> {
+		return new Set(
+			value
+				.toLowerCase()
+				.replaceAll(/[^a-z0-9]+/gu, ' ')
+				.split(/\s+/u)
+				.map((token) => token.trim())
+				.map((token) => normalizeMetadataToken(token))
+				.filter((token) => token.length > 1 && !METADATA_STOP_WORDS.has(token))
+		);
+	}
+
+	function normalizeMetadataToken(token: string): string {
+		if (token.endsWith('ical')) {
+			return token.slice(0, -2);
+		}
+		if (token.endsWith('ics')) {
+			return token.slice(0, -1);
+		}
+		if (token.endsWith('s') && token.length > 3) {
+			return token.slice(0, -1);
+		}
+		return token;
+	}
+
+	function splitMetadataParts(value: string): string[] {
+		return value
+			.split(/\s*(?:·|•|\||;|\n)\s*/u)
+			.map((part) => part.trim())
+			.filter((part) => part.length > 0);
+	}
+
+	function isRedundantMetadataPart(part: string, title: string): boolean {
+		const partTokens = significantMetadataTokens(part);
+		if (partTokens.size === 0) {
+			return false;
+		}
+		const titleTokens = significantMetadataTokens(title);
+		let overlap = 0;
+		for (const token of partTokens) {
+			if (titleTokens.has(token)) {
+				overlap += 1;
+			}
+		}
+		if (partTokens.size === 1) {
+			return overlap === 1;
+		}
+		return overlap >= 2 && overlap / partTokens.size >= 0.6;
+	}
+
+	function stripQuestionPaperSuffix(title: string): string {
+		return title
+			.replace(/\s+questions?\s+paper\s*$/iu, '')
+			.replace(/\s+worksheet\s*$/iu, '')
+			.trim();
+	}
+
+	function stripRedundantSubtitleParts(subtitle: string, title: string): string {
+		const parts = splitMetadataParts(subtitle);
+		if (parts.length <= 1) {
+			return subtitle.trim();
+		}
+		const distinctParts = parts.filter((part) => !isRedundantMetadataPart(part, title));
+		if (distinctParts.length === 0) {
+			return subtitle.trim();
+		}
+		return distinctParts.join(' · ');
+	}
+
+	function buildSubtitleWithUsefulMetadata(sheet: SheetDocument, title: string): string {
+		const subtitle = stripRedundantSubtitleParts(sheet.subtitle, title) || sheet.subtitle;
+		const subtitleParts = splitMetadataParts(subtitle);
+		const usefulMetadataParts = [sheet.level, sheet.subject]
+			.map((part) => part.trim())
+			.filter((part) => part.length > 0)
+			.filter((part) => !isRedundantMetadataPart(part, title))
+			.filter((part) => !subtitleParts.some((subtitlePart) => isRedundantMetadataPart(part, subtitlePart)));
+		return [...usefulMetadataParts, ...subtitleParts].join(' · ');
+	}
+
+	function isContentSection(section: PaperSheetSection): section is PaperSheetContentSection {
+		return 'id' in section;
+	}
+
+	function sumQuestionEntryMarks(entry: PaperSheetQuestionEntry): number {
+		if (entry.type === 'group') {
+			return sumQuestionMarks(entry.questions);
+		}
+		return entry.marks;
+	}
+
+	function sumQuestionMarks(entries: readonly PaperSheetQuestionEntry[] | undefined): number {
+		let total = 0;
+		for (const entry of entries ?? []) {
+			total += sumQuestionEntryMarks(entry);
+		}
+		return total;
+	}
+
+	function collectLeafQuestionIds(
+		entries: readonly PaperSheetQuestionEntry[] | undefined,
+		questionIds: string[]
+	): void {
+		for (const entry of entries ?? []) {
+			if (entry.type === 'group') {
+				collectLeafQuestionIds(entry.questions, questionIds);
+			} else {
+				questionIds.push(entry.id);
+			}
+		}
+	}
+
+	function sectionReviewScore(
+		section: PaperSheetContentSection,
+		review: PaperSheetReview | null | undefined
+	): SectionScoreSummary | null {
+		if (!review) {
+			return null;
+		}
+		const questionIds: string[] = [];
+		collectLeafQuestionIds(section.questions, questionIds);
+		if (questionIds.length === 0) {
+			return null;
+		}
+		let got = 0;
+		let total = 0;
+		for (const questionId of questionIds) {
+			const score = review.questions[questionId]?.score;
+			if (!score) {
+				return null;
+			}
+			got += score.got;
+			total += score.total;
+		}
+		return { got, total };
+	}
+
+	function formatMarkNoun(total: number): string {
+		return total === 1 ? 'mark' : 'marks';
+	}
+
+	function formatQuestionMarkText(options: {
+		marks: number;
+		score?: { got: number; total: number } | null;
+		awaitingAnswers?: boolean;
+	}): string {
+		const score = options.score ?? null;
+		if (score) {
+			return `[${score.got.toString()}/${score.total.toString()} ${formatMarkNoun(score.total)}]`;
+		}
+		if (options.awaitingAnswers === true) {
+			return `[—/${options.marks.toString()} ${formatMarkNoun(options.marks)}]`;
+		}
+		return `[${options.marks.toString()} ${formatMarkNoun(options.marks)}]`;
+	}
+
+	function collectQuestionMarkLabelsFromEntries(
+		entries: readonly PaperSheetQuestionEntry[] | undefined,
+		review: PaperSheetReview | null | undefined,
+		awaitingAnswers: boolean,
+		labels: QuestionMarkLabel[]
+	): void {
+		for (const entry of entries ?? []) {
+			if (entry.type === 'group') {
+				collectQuestionMarkLabelsFromEntries(entry.questions, review, awaitingAnswers, labels);
+				continue;
+			}
+			labels.push({
+				questionId: entry.id,
+				text: formatQuestionMarkText({
+					marks: entry.marks,
+					score: review?.questions[entry.id]?.score ?? null,
+					awaitingAnswers
+				})
+			});
+		}
+	}
+
+	function collectQuestionMarkLabels(
+		sheet: SheetDocument | null,
+		review: PaperSheetReview | null | undefined,
+		awaitingAnswers: boolean
+	): QuestionMarkLabel[] {
+		const labels: QuestionMarkLabel[] = [];
+		for (const section of sheet?.sections ?? []) {
+			if (!isContentSection(section)) {
+				continue;
+			}
+			collectQuestionMarkLabelsFromEntries(section.questions, review, awaitingAnswers, labels);
+		}
+		return labels;
+	}
+
+	function annotateQuestionMarkBadges(root: HTMLElement, labels: readonly QuestionMarkLabel[]): void {
+		const badges = root.querySelectorAll<HTMLElement>('.paper-sheet__question-marks');
+		for (let index = 0; index < badges.length; index += 1) {
+			const badge = badges[index];
+			const label = labels[index];
+			if (!badge || !label || badge.textContent === label.text) {
+				continue;
+			}
+			badge.textContent = label.text;
+			badge.setAttribute('aria-label', `Question ${label.questionId} marks ${label.text}`);
+		}
+	}
+
+	function stripExistingSectionMarkSuffix(label: string): string {
+		return label
+			.replace(/\s*[·•|-]\s*\d+(?:\.\d+)?\s*\/\s*\d+(?:\.\d+)?\s*marks?\s*$/iu, '')
+			.replace(/\s*[·•|-]\s*\d+(?:\.\d+)?\s*marks?\s*$/iu, '')
+			.trim();
+	}
+
+	function sectionLabelWithMarks(
+		section: PaperSheetContentSection,
+		review: PaperSheetReview | null | undefined
+	): string {
+		const baseLabel = stripExistingSectionMarkSuffix(section.label) || section.label;
+		const reviewScore = sectionReviewScore(section, review);
+		if (reviewScore) {
+			return `${baseLabel} · ${reviewScore.got}/${reviewScore.total} ${formatMarkNoun(reviewScore.total)}`;
+		}
+		const total = sumQuestionMarks(section.questions);
+		if (total <= 0) {
+			return baseLabel;
+		}
+		return `${baseLabel} · ${total} ${formatMarkNoun(total)}`;
+	}
+
+	function buildRenderableSheetDocument(
+		sheet: SheetDocument,
+		review?: PaperSheetReview | null
+	): SheetDocument {
+		const title = stripQuestionPaperSuffix(sheet.title) || sheet.title;
+		const subtitle = buildSubtitleWithUsefulMetadata(sheet, title);
+		return {
+			...sheet,
+			title,
+			subtitle,
+			sections: sheet.sections.map((section) => {
+				if (!isContentSection(section)) {
+					return section;
+				}
+				return {
+					...section,
+					label: sectionLabelWithMarks(section, review)
+				};
+			})
+		};
 	}
 
 	function applySheetPageState(next: SparkSheetPageState): void {
@@ -319,7 +788,7 @@
 		savingDraft = true;
 		draftSaveError = null;
 		try {
-			const response = await fetch(`/api/spark/sheets/${run.id}/draft`, {
+			const response = await window.fetch(`/api/spark/sheets/${run.id}/draft`, {
 				method: 'POST',
 				headers: {
 					'content-type': 'application/json'
@@ -373,7 +842,7 @@
 		gradingDraft = true;
 		requestError = null;
 		try {
-			const response = await fetch(`/api/spark/sheets/${run.id}/grade`, {
+			const response = await window.fetch(`/api/spark/sheets/${run.id}/grade`, {
 				method: 'POST',
 				headers: {
 					'content-type': 'application/json'
@@ -443,7 +912,7 @@
 			for (const attachment of attachments) {
 				formData.append('file', attachment);
 			}
-			const response = await fetch(`/api/spark/sheets/${run.id}/turn`, {
+			const response = await window.fetch(`/api/spark/sheets/${run.id}/turn`, {
 				method: 'POST',
 				body: formData
 			});
@@ -587,6 +1056,43 @@
 		}, delayMs);
 		return () => {
 			clearTimeout(timer);
+		};
+	});
+
+	$effect(() => {
+		if (!browser || !sheetShellElement) {
+			return;
+		}
+		report;
+		reviewState;
+		draft;
+		draftAnswers;
+
+		const root = sheetShellElement;
+		const markLabels = reviewSheetDocument
+			? collectQuestionMarkLabels(
+					reviewSheetDocument,
+					awaitingAnswersReport ? null : reviewState?.review,
+					awaitingAnswersReport
+				)
+			: collectQuestionMarkLabels(draftSheetDocument, null, false);
+		const refreshSheetEnhancements = () => {
+			eagerLoadSheetFigures(root);
+			annotateSheetArtifacts(root);
+			annotateQuestionMarkBadges(root, markLabels);
+		};
+		refreshSheetEnhancements();
+		const frame = window.requestAnimationFrame(refreshSheetEnhancements);
+		const observer = new MutationObserver(refreshSheetEnhancements);
+		observer.observe(root, {
+			attributeFilter: ['class', 'loading', 'src'],
+			attributes: true,
+			childList: true,
+			subtree: true
+		});
+		return () => {
+			window.cancelAnimationFrame(frame);
+			observer.disconnect();
 		};
 	});
 
@@ -765,8 +1271,8 @@
 				'context/report.json',
 				raw,
 				(value) => SparkGraderWorksheetReportSchema.parse(value),
-				(value) => {
-					report = value;
+				(_value) => {
+					void refreshSheetArtifacts();
 				}
 			);
 		});
@@ -1000,6 +1506,20 @@
 		return next;
 	});
 
+	const awaitingAnswersReport = $derived(report?.review.mode === 'awaiting_answers');
+	const reviewSheetDocument = $derived.by(() =>
+		reviewState
+			? buildRenderableSheetDocument(
+					reviewState.sheet,
+					awaitingAnswersReport ? null : reviewState.review
+				)
+			: null
+	);
+	const draftSheetDocument = $derived.by(() =>
+		draft ? buildRenderableSheetDocument(draft.sheet) : null
+	);
+	const sheetFooterLabel = $derived(run.display.footer?.trim() || null);
+
 </script>
 
 <svelte:head>
@@ -1017,30 +1537,31 @@
 		<p class="status-note">Saving answers…</p>
 	{/if}
 
-	{#if report && reviewState}
-		<div class="sheet-shell">
+	{#if report && reviewState && reviewSheetDocument}
+		<div bind:this={sheetShellElement} class="sheet-shell">
 			<PaperSheet
-				document={reviewState.sheet}
+				document={reviewSheetDocument}
 				answers={reviewState.answers}
-				review={reviewState.review}
-				mode="review"
-				allowReplies={run.status === 'done'}
-				footerLabel={null}
-				feedbackThreads={feedbackThreads}
-				feedbackState={feedbackState}
+				review={awaitingAnswersReport ? null : reviewState.review}
+				mode={awaitingAnswersReport ? 'readonly' : 'review'}
+				allowReplies={!awaitingAnswersReport && run.status === 'done'}
+				showCompletedFeedbackCards={false}
+				footerLabel={sheetFooterLabel}
+				feedbackThreads={awaitingAnswersReport ? {} : feedbackThreads}
+				feedbackState={awaitingAnswersReport ? {} : feedbackState}
 				onReply={(questionId, payload) => {
 					return submitQuestionReply(questionId, payload.text, payload.attachments);
 				}}
 			/>
 		</div>
-	{:else if draft}
-		<div class="sheet-shell">
+	{:else if draft && draftSheetDocument}
+		<div bind:this={sheetShellElement} class="sheet-shell">
 			<PaperSheet
-				document={draft.sheet}
+				document={draftSheetDocument}
 				answers={draftAnswers}
 				mode={canEditDraftSheet() ? 'interactive' : 'readonly'}
 				grading={isDraftGradingInProgress()}
-				footerLabel={null}
+				footerLabel={sheetFooterLabel}
 				gradeLabel={run.status === 'failed' || run.status === 'stopped' ? 'Grade Again' : 'Grade'}
 				onAnswersChange={(answers) => {
 					queueDraftSave(answers);
@@ -1119,6 +1640,141 @@
 	.sheet-shell {
 		overflow: auto;
 		padding-bottom: 0.2rem;
+	}
+
+	.sheet-shell :global(.paper-sheet__section-id) {
+		display: none;
+	}
+
+	.sheet-shell :global(.paper-sheet__eyebrow) {
+		display: none;
+	}
+
+	.sheet-shell :global(.paper-sheet__section-marks) {
+		display: none;
+	}
+
+	.sheet-shell :global(.paper-sheet__mcq-option-list),
+	.sheet-shell :global(.composer-leading:has(.composer-attach)),
+	.sheet-shell :global(.composer-attach) {
+		display: none;
+	}
+
+	.sheet-shell :global(.paper-sheet__footer) {
+		justify-content: flex-end;
+	}
+
+	.sheet-shell :global(.paper-sheet__footer > span:first-child) {
+		display: none;
+	}
+
+	@media (max-width: 520px) {
+		.sheet-shell :global(.paper-sheet__header) {
+			padding-right: 58px;
+		}
+
+		.sheet-shell :global(.paper-sheet__title) {
+			font-size: clamp(24px, 7vw, 28px);
+		}
+	}
+
+	.sheet-shell :global(.markdown-content a.markdown-figure-link::after) {
+		content: none;
+		display: none;
+	}
+
+	.sheet-shell :global(.markdown-content a.markdown-figure-link) {
+		width: 100%;
+		margin-block: 0.85rem 1.15rem;
+	}
+
+	.sheet-shell :global(.markdown-content a.markdown-figure-link[id]),
+	.sheet-shell :global(.markdown-content [data-sheet-artifact-anchor]) {
+		scroll-margin-top: 1.5rem;
+	}
+
+	.sheet-shell :global(.markdown-content .paper-sheet__artifact-reference) {
+		color: color-mix(in srgb, var(--sheet-color, currentColor) 82%, var(--foreground));
+		font-weight: 760;
+		text-decoration: none;
+		text-decoration-thickness: 0.08em;
+		text-underline-offset: 0.18em;
+	}
+
+	.sheet-shell :global(.markdown-content .paper-sheet__artifact-reference:hover),
+	.sheet-shell :global(.markdown-content .paper-sheet__artifact-reference:focus-visible) {
+		text-decoration: underline;
+	}
+
+	.sheet-shell :global(.markdown-content .markdown-figure) {
+		margin: 0;
+		border-radius: 0.9rem;
+		border-color: color-mix(in srgb, var(--sheet-border, currentColor) 70%, transparent);
+		background: color-mix(in srgb, var(--sheet-light, transparent) 62%, white);
+	}
+
+	.sheet-shell :global(.markdown-content .markdown-figure__image) {
+		display: block;
+		max-height: min(70vh, 760px);
+		object-fit: contain;
+	}
+
+	.sheet-shell :global(.markdown-content .markdown-figure__caption) {
+		margin-top: 0.55rem;
+		font-weight: 650;
+		color: color-mix(in srgb, var(--sheet-color, currentColor) 78%, var(--foreground));
+	}
+
+	.sheet-shell :global(.markdown-content p:has(+ table)),
+	.sheet-shell :global(.markdown-content p:has(+ a.markdown-figure-link)) {
+		margin-block: 1.15rem 0.35rem;
+		font-weight: 720;
+		color: color-mix(in srgb, var(--sheet-color, currentColor) 76%, var(--foreground));
+	}
+
+	.sheet-shell :global(.markdown-content table) {
+		width: 100%;
+		margin-block: 0.35rem 1.35rem;
+		overflow: hidden;
+		border: 1px solid color-mix(in srgb, var(--sheet-border, currentColor) 74%, transparent);
+		border-collapse: separate;
+		border-spacing: 0;
+		border-radius: 0.9rem;
+		background: color-mix(in srgb, var(--background) 92%, var(--sheet-light, transparent));
+		box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--sheet-color, #111827) 52%, transparent);
+	}
+
+	.sheet-shell :global(.markdown-content th) {
+		background: color-mix(in srgb, var(--sheet-light, transparent) 72%, white);
+		color: color-mix(in srgb, var(--sheet-color, currentColor) 72%, var(--foreground));
+		font-weight: 760;
+	}
+
+	.sheet-shell :global(.markdown-content th),
+	.sheet-shell :global(.markdown-content td) {
+		border-bottom: 1px solid color-mix(in srgb, var(--sheet-border, currentColor) 56%, transparent);
+		padding: 0.85rem 1rem;
+		vertical-align: top;
+	}
+
+	.sheet-shell :global(.markdown-content tr:last-child th),
+	.sheet-shell :global(.markdown-content tr:last-child td) {
+		border-bottom: 0;
+	}
+
+	.sheet-shell :global(.paper-sheet__calc-row) {
+		flex-wrap: wrap;
+		align-items: baseline;
+		row-gap: 0.4rem;
+	}
+
+	.sheet-shell :global(.paper-sheet__inline-input--compact) {
+		width: auto;
+		min-width: 100px;
+		max-width: min(100%, 36rem);
+		overflow: visible;
+		text-overflow: clip;
+		field-sizing: content;
 	}
 
 	.pending-card h2 {

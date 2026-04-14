@@ -1,9 +1,13 @@
 import path from "node:path";
+import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { promisify } from "node:util";
 
 import { tool, type LlmToolSet } from "@ljoukov/llm";
 import { z } from "zod";
 import { getSharp } from "../../utils/sharp";
+
+const execFileAsync = promisify(execFile);
 
 export const PDF_TRANSCRIPTION_SKILL_TEXT = `\
 ---
@@ -20,7 +24,8 @@ Use this workflow for high-fidelity PDF transcription with diagrams.
 - Render PDF pages to images first. Do not rely on raw PDF bytes alone for final transcription decisions.
 - For final problem text and diagram correctness, page images are the source of truth.
 - If 'extract_pdf_reference_text' is available, use it as an aid only.
-- Keep diagram crops tight and clean: include all labels, exclude unrelated text/graphics.
+- For text-selectable PDFs, use 'extract_pdf_reference_text' once before bulk page viewing; it is a cheap navigation/transcription aid, not a replacement for visual checks of diagrams, tables, labels, or layout.
+- Keep diagram crops tight and clean: include all labels, leave a small clean margin around required ink, and exclude unrelated text/graphics where practical.
 
 ## Page Discovery
 
@@ -29,6 +34,7 @@ Use this workflow for high-fidelity PDF transcription with diagrams.
   - Extract once into 'output/reference/pdf-text.md'.
   - Read tool response metadata ('problemPages' and 'pages') to prioritize likely relevant pages.
   - Start visual inspection on those pages first; inspect additional pages only if needed.
+  - Do not compensate for text extraction failures by loading many high-resolution pages or crops into the main context; use page overviews plus targeted crops, and delegate bulk crop validation through 'validate_crop_with_fresh_agent' when it is available.
 - If 'extract_pdf_reference_text' is unavailable:
   - Inspect every rendered page with 'view_image'.
 
@@ -38,31 +44,38 @@ Use this workflow for high-fidelity PDF transcription with diagrams.
 - Use '*-grid.png' naming (example: 'page-0003-grid.png').
 - Always inspect the grid image with 'view_image' before choosing crop coordinates.
 - Do not start diagram crops from non-grid page inspection.
+- For crop refinement, do not do mask segmentation. Isolate one clean rectangular crop per target figure. Start from a previous bad crop if it contains the whole figure; use the full source page only if the bad crop clips part of the figure. Inspect both the selected base image and its coordinate-grid overlay with 'view_image'. Choose a pixel bounding box in the selected base image coordinate space, with origin at top-left and right/bottom as exclusive crop boundaries.
+- Prefer a small safe white margin over any clipping. Reject crops that include surrounding question text, mark text, answer lines, page borders, next-question content, or standalone figure/table captions already rendered by the worksheet.
+- When documenting a crop-refinement decision, use JSON shape { "cropBase": "badCrop" | "fullPage", "bbox": { "left": number, "top": number, "right": number, "bottom": number }, "reasoning": "brief edge-by-edge explanation", "risks": [] }. Apply the box with 'crop_image' using 'bboxPixels' on the selected base image.
 
 ## Diagram Crop Loop
 
-Use at most two attempts per diagram.
+Use at most two attempts per diagram in the main agent, and never more than six 'crop_image' calls for the same output asset before switching strategy.
+If one manual crop-and-view correction for the same target is still clipped, noisy, or uncertain, call 'propose_crop_bbox_with_fresh_agent' when available, or 'extract_pdf_diagrams' for that source page and target label, before spending more turns on hand-tuned crop boxes.
 
 - Attempt pattern:
-  - 'crop_image' with 'bbox1000' from the original page image
+  - 'crop_image' with 'bboxPixels' from the original page image or selected complete bad crop
   - 'view_image' on crop output
   - 'trim_image' for content-aware tightening
   - 'view_image' on trimmed output
   - Re-crop from original full page if needed, then trim/view again
 - 'crop_image' requirements:
-  - Always use 'bbox1000' integer coordinates.
-  - Do not omit bbox fields.
+  - Always use 'bboxPixels' integer coordinates.
+  - Do not omit bboxPixels.
   - Do not use 'fullImage: true' for diagram extraction.
-- If a crop clips any label/geometry, re-crop from the original full page.
+- If a crop clips any label/geometry or leaves required ink touching an edge, re-crop from the original full page and expand in the clipped direction before tightening any other side.
 - If a crop contains unrelated text/graphics, re-crop tighter.
+- Use pad_image only after a crop has passed fresh visual validation and only needs a clean white border. Do not use padding to fix a failed crop review, clipping, missing content, unrelated text, or duplicated standalone captions.
+- For grading tasks, missing required labels, table cells, option text, axes, or annotations is worse than slight extra whitespace. Do not publish a tight crop that removes information needed by the question.
+- For objective questions whose choices are diagrams, crop one complete options block or separate complete option crops. Every candidate label and every option diagram/shape must be fully visible; do not let a candidate option be cut at the crop edge.
+- For worksheet/grading outputs, source/reference markdown is only an audit trail. If a problem statement mentions a diagram, figure, graph, chart, map, network, photo, or other answer-critical visual, the final visible worksheet prompt must include the linked crop near that text; do not hide the visual in references.
+- If 'view_image' fails on any workspace image or rendered PDF page because file upload/canonical-file configuration is unavailable, use 'crop_image' to create a local PNG overview or relevant crop under the output/assets directory, then inspect that generated image with 'view_image' before grading or publishing. Do not switch to 'extract_pdf_diagrams' as a fallback for 'view_image' failures.
 
 ## Subagent and Non-Subagent Execution
 
-- If subagent tools are available ('spawn_agent', 'send_input', 'wait'), process independent diagrams/problems in parallel.
-- Each subagent instruction should require:
-  - step 1 is 'view_image' on the assigned '*-grid.png' page,
-  - then crop/view/trim/view refinement loop.
-- If subagent tools are unavailable, run the same workflow sequentially in the main agent.
+- Process page/diagram discovery in the main agent. Generic 'spawn_agent' may be unavailable in grader runs and must not be used for intake or file summaries.
+- For long papers with many final crops, keep the main context small: spot-check at most 4 representative final crops in the main agent, then call 'validate_crop_with_fresh_agent' once per final linked figure/image crop with workspace paths and question context instead of opening every final crop in the main agent.
+- If 'validate_crop_with_fresh_agent' is unavailable, run the same visual check sequentially in the main agent.
 
 ## Quality Gate Before Completion
 
@@ -71,6 +84,8 @@ For each final diagram, verify:
 - all required labels/annotations are visible,
 - no unrelated text fragments are present,
 - crop bounds are tight around the diagram.
+- for grading outputs, have 'validate_crop_with_fresh_agent' inspect each final linked figure/image crop with the question context and 'view_image' before completion.
+- write 'grader/output/crop-validation.md' (or the caller's requested validation path) listing each final linked crop path, source question/figure/table label, 'fresh-context subagent checked: yes', reviewer-visible text transcribed from the crop, exact pass/fail, whether all required content is visible, whether unrelated visible text/non-target ink is present, whether required content touches or clips at an edge, and whether page borders/separator lines/answer lines/neighbouring-question fragments are present.
 
 Then re-read each problem statement with its diagram and resolve any inconsistencies against page images.
 
@@ -93,7 +108,7 @@ const PDF_REFERENCE_PROMPT = [
 
 const PDF_REFERENCE_PROMPT_GEMINI = [
   PDF_REFERENCE_PROMPT,
-  "For formulas/equations, use embedded LaTeX: inline '\\(...\\)', display '\\[...\\]'.",
+  "For formulas/equations, use embedded LaTeX: inline '\\(...\\)', display '\\[...\\]'. Use real Markdown line breaks, never literal escaped newline text like '\\n'. For arranged arithmetic, grids, or layout-critical text, prefer a Markdown table or a clean crop over raw LaTeX array/tabular environments.",
 ].join("\n");
 
 type RgbaColor = {
@@ -113,7 +128,13 @@ type ReferencePageSummary = {
 type CropImageInput = {
   sourcePath: string;
   outputPath: string;
-  bbox1000: {
+  bbox1000?: {
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+  };
+  bboxPixels?: {
     left: number;
     top: number;
     right: number;
@@ -187,6 +208,69 @@ function parseReferencePages(options: {
     });
   }
   return summaries;
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+function normalizeLocalPdfText(options: {
+  rawText: string;
+  maxChars: number;
+}): { text: string; pageCount: number; truncated: boolean } {
+  const normalized = options.rawText.replace(/\r\n?/gu, "\n");
+  const rawPages = normalized.split("\f");
+  const pageSections: string[] = [];
+
+  for (const [index, rawPage] of rawPages.entries()) {
+    const pageText = rawPage.replace(/[ \t]+\n/gu, "\n").trim();
+    const isTrailingFormFeed =
+      index === rawPages.length - 1 &&
+      pageText.length === 0 &&
+      rawPages.length > 1;
+    if (isTrailingFormFeed) {
+      continue;
+    }
+    pageSections.push(`## Page ${index + 1}\n\n${pageText}`.trimEnd());
+  }
+
+  const fullText = pageSections.join("\n\n").trim();
+  const text =
+    fullText.length > options.maxChars
+      ? fullText.slice(0, options.maxChars)
+      : fullText;
+  return {
+    text,
+    pageCount: pageSections.length,
+    truncated: text.length < fullText.length,
+  };
+}
+
+async function extractReferenceTextWithPdftotext(options: {
+  pdfPath: string;
+  maxChars: number;
+}): Promise<{ text: string; pageCount: number; truncated: boolean }> {
+  const maxBuffer = Math.min(
+    Math.max(options.maxChars * 8, 1024 * 1024),
+    24 * 1024 * 1024,
+  );
+  const { stdout } = await execFileAsync(
+    "pdftotext",
+    ["-layout", "-enc", "UTF-8", options.pdfPath, "-"],
+    { maxBuffer },
+  );
+  const rawText = stdout;
+  const normalized = normalizeLocalPdfText({
+    rawText,
+    maxChars: options.maxChars,
+  });
+  if (normalized.text.trim().length === 0) {
+    throw new Error("pdftotext produced no text.");
+  }
+  return normalized;
 }
 
 function clampChannel(value: number): number {
@@ -420,25 +504,48 @@ export function applyPdfTranscriptionSkillTools(options: {
     throw new Error("Required crop_image tool is not executable.");
   }
 
+  const strictCropBboxPixelsSchema = z
+    .object({
+      left: z.number().int().min(0),
+      top: z.number().int().min(0),
+      right: z.number().int().min(0),
+      bottom: z.number().int().min(0),
+    })
+    .superRefine((bbox, context) => {
+      if (bbox.right <= bbox.left) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "bboxPixels.right must be greater than left.",
+          path: ["right"],
+        });
+      }
+      if (bbox.bottom <= bbox.top) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "bboxPixels.bottom must be greater than top.",
+          path: ["bottom"],
+        });
+      }
+    });
+  const strictCropInputSchema = z
+    .object({
+      sourcePath: z.string().trim().min(1),
+      outputPath: z.string().trim().min(1),
+      bboxPixels: strictCropBboxPixelsSchema,
+    })
+    .strict();
+
   const strictCropImageTool = tool({
     description: [
-      "Crop an image (JPG/PNG/WEBP/GIF/HEIC/HEIF) using required bbox1000 integer coordinates.",
-      "The cropped output is written as PNG.",
-      "Always provide bbox1000; do not call this tool without bbox values.",
+      "Crop an image (JPG/PNG/WEBP/GIF/HEIC/HEIF) using a required bboxPixels rectangle.",
+      "Use bboxPixels for crop-refinement JSON based on a rendered page or bad-crop coordinate grid: origin is top-left and right/bottom are exclusive.",
+      "The cropped output is written as PNG with the exact bboxPixels rectangle by default; include the intended safe white margin in bboxPixels.",
+      "Always provide bboxPixels; do not call this tool without bbox values.",
+      "Do not pass null, zero, or tiny placeholder coordinates.",
+      "If a crop is clipped or ink touches an edge, expand the bbox outward from the source page; do not tighten the bbox to silence edge checks.",
     ].join("\n"),
-    inputSchema: z
-      .object({
-        sourcePath: z.string().trim().min(1),
-        outputPath: z.string().trim().min(1),
-        bbox1000: z.object({
-          left: z.number().int().min(0).max(1000),
-          top: z.number().int().min(0).max(1000),
-          right: z.number().int().min(0).max(1000),
-          bottom: z.number().int().min(0).max(1000),
-        }),
-      })
-      .strict(),
-    execute: async ({ sourcePath, outputPath, bbox1000 }) => {
+    inputSchema: strictCropInputSchema,
+    execute: async ({ sourcePath, outputPath, bboxPixels }) => {
       const delegate = cropToolCandidate as {
         execute: (input: CropImageInput) => unknown;
       };
@@ -446,7 +553,7 @@ export function applyPdfTranscriptionSkillTools(options: {
         delegate.execute({
           sourcePath,
           outputPath,
-          bbox1000,
+          bboxPixels,
         }),
       );
     },
@@ -517,7 +624,8 @@ export function applyPdfTranscriptionSkillTools(options: {
     description: [
       "Content-aware trim for images (JPG/PNG/WEBP/GIF/HEIC/HEIF): removes near-background margins and keeps a small border.",
       "The trimmed output is written as PNG.",
-      "Use after crop_image to tighten diagram bounds while preserving labels.",
+      "Use only after a complete crop is known; trim_image cannot recover labels, options, axes, or table cells that crop_image already clipped.",
+      "After trimming, inspect with view_image. If required ink touches an edge, recrop from the original page or rerun trim_image with larger padding.",
     ].join("\n"),
     inputSchema: z
       .object({
@@ -592,19 +700,18 @@ export function applyPdfTranscriptionSkillTools(options: {
 
   if (options.includeReferenceTextTool) {
     const readPdfToolCandidate = toolsRecord.read_pdf;
-    if (
-      !readPdfToolCandidate ||
-      typeof readPdfToolCandidate !== "object" ||
-      !("execute" in readPdfToolCandidate) ||
-      typeof (readPdfToolCandidate as { execute?: unknown }).execute !== "function"
-    ) {
-      throw new Error("Required read_pdf tool is not executable.");
-    }
+    const hasReadPdfDelegate =
+      readPdfToolCandidate !== null &&
+      readPdfToolCandidate !== undefined &&
+      typeof readPdfToolCandidate === "object" &&
+      "execute" in readPdfToolCandidate &&
+      typeof (readPdfToolCandidate as { execute?: unknown }).execute ===
+        "function";
 
     const extractPdfReferenceTextTool = tool({
       description: [
-        "Extract faithful reference text from a workspace PDF into markdown.",
-        "Use this before transcription so image-based reading can be cross-checked against PDF text.",
+        "Extract faithful reference text from a workspace PDF into markdown using local PDF text when available.",
+        "Use this before transcription so image-based reading can be cross-checked against PDF text without loading every page image into the main context.",
       ].join("\n"),
       inputSchema: z
         .object({
@@ -631,33 +738,73 @@ export function applyPdfTranscriptionSkillTools(options: {
         })
         .strict(),
       execute: async ({ pdfPath, outputPath, maxChars, modelId }) => {
-        const useGeminiPrompt =
-          typeof modelId === "string"
-            ? modelId.toLowerCase().startsWith("gemini-")
-            : true;
-        const promptText = useGeminiPrompt
-          ? PDF_REFERENCE_PROMPT_GEMINI
-          : PDF_REFERENCE_PROMPT;
-
-        const delegate = readPdfToolCandidate as {
-          execute: (input: ReadPdfInput) => unknown;
-        };
-        const delegateResult = await Promise.resolve(
-          delegate.execute({
-            pdfPath,
-            prompt: promptText,
-            outputPath,
-            ...(typeof maxChars === "number" ? { maxChars } : {}),
-            ...(typeof modelId === "string" ? { modelId } : {}),
-          }),
+        const safeMaxChars = maxChars ?? 180_000;
+        const resolvedOutputPath = resolveWorkspacePath(
+          options.rootDir,
+          outputPath,
         );
+        let resultRecord: Record<string, unknown>;
+        let extractedReferenceText: string;
 
-        const resultRecord =
-          delegateResult && typeof delegateResult === "object" && !Array.isArray(delegateResult)
-            ? (delegateResult as Record<string, unknown>)
-            : {};
-        const resolvedOutputPath = resolveWorkspacePath(options.rootDir, outputPath);
-        const extractedReferenceText = await readFile(resolvedOutputPath, "utf8");
+        try {
+          const resolvedPdfPath = resolveWorkspacePath(options.rootDir, pdfPath);
+          const localExtraction = await extractReferenceTextWithPdftotext({
+            pdfPath: resolvedPdfPath,
+            maxChars: safeMaxChars,
+          });
+          await mkdir(path.dirname(resolvedOutputPath), { recursive: true });
+          await writeFile(resolvedOutputPath, localExtraction.text, "utf8");
+          onFileWritten(outputPath);
+          extractedReferenceText = localExtraction.text;
+          resultRecord = {
+            status: "written",
+            extractionMode: "pdftotext",
+            outputPath,
+            textChars: localExtraction.text.length,
+            pageCount: localExtraction.pageCount,
+            ...(localExtraction.truncated ? { truncated: true } : {}),
+          };
+        } catch (localError) {
+          if (!hasReadPdfDelegate) {
+            throw new Error(
+              `extract_pdf_reference_text could not run local pdftotext and no read_pdf fallback is available: ${errorMessage(localError)}`,
+            );
+          }
+
+          const useGeminiPrompt =
+            typeof modelId === "string"
+              ? modelId.toLowerCase().startsWith("gemini-")
+              : true;
+          const promptText = useGeminiPrompt
+            ? PDF_REFERENCE_PROMPT_GEMINI
+            : PDF_REFERENCE_PROMPT;
+
+          const delegate = readPdfToolCandidate as {
+            execute: (input: ReadPdfInput) => unknown;
+          };
+          const delegateResult = await Promise.resolve(
+            delegate.execute({
+              pdfPath,
+              prompt: promptText,
+              outputPath,
+              maxChars: safeMaxChars,
+              ...(typeof modelId === "string" ? { modelId } : {}),
+            }),
+          );
+
+          const delegateRecord =
+            delegateResult &&
+            typeof delegateResult === "object" &&
+            !Array.isArray(delegateResult)
+              ? (delegateResult as Record<string, unknown>)
+              : {};
+          extractedReferenceText = await readFile(resolvedOutputPath, "utf8");
+          resultRecord = {
+            ...delegateRecord,
+            extractionMode: "read_pdf_fallback",
+            localExtractionError: errorMessage(localError),
+          };
+        }
         const pages = parseReferencePages({
           referenceText: extractedReferenceText,
           targetProblemIds: options.targetProblemIds,

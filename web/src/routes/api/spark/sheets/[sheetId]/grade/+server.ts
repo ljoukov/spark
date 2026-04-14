@@ -137,10 +137,12 @@ export const POST: RequestHandler = async ({ request, params }) => {
 			run.workspaceId,
 			SPARK_GRADER_UPLOADS_MANIFEST_PATH
 		);
-		const uploads = uploadsRaw ? uploadManifestSchema.parse(JSON.parse(uploadsRaw)).attachments : [];
+		const uploads = uploadsRaw
+			? uploadManifestSchema.parse(JSON.parse(uploadsRaw)).attachments
+			: [];
 		const agentId = randomUUID();
 		const input = {
-			referenceSourcePolicy: 'uploaded-only' as const,
+			referenceSourcePolicy: 'allow-official-references' as const,
 			notes:
 				'The worksheet draft already exists in sheet/output/draft.json and the recorded answers are in sheet/state/answers.json. Preserve that student-facing structure when building the graded sheet.'
 		};

@@ -100,7 +100,7 @@
         "@connectrpc/connect-node": "^2.1.1",
         "@connectrpc/connect-web": "^2.1.1",
         "@ljoukov/llm": "7.0.0",
-        "@ljoukov/sheet": "0.2.0",
+        "@ljoukov/sheet": "0.3.0",
         "@spark/llm": "workspace:*",
         "@spark/proto": "workspace:*",
         "@spark/schemas": "workspace:*",
@@ -478,7 +478,7 @@
 
     "@ljoukov/llm": ["@ljoukov/llm@7.0.0", "", { "dependencies": { "@alcyone-labs/zod-to-json-schema": "^4.0.10", "@google-cloud/storage": "^7.19.0", "@google/genai": "^1.45.0", "ajv": "^8.18.0", "ajv-formats": "^3.0.1", "google-auth-library": "^10.5.0", "mime": "^4.1.0", "openai": "^6.29.0", "undici": "^7.21.0", "ws": "^8.19.0", "zod": "^4.3.6" } }, "sha512-2CuF+geMHy0dGJH1jHUWJMAVijcpf8eKXWUZebNl8/v97apGb9HGMoVUBXRRpfejdh3OsRx12xGq66YBpjz0MQ=="],
 
-    "@ljoukov/sheet": ["@ljoukov/sheet@0.2.0", "", { "dependencies": { "@lucide/svelte": "^0.562.0", "esm-env": "^1.2.2", "highlight.js": "^11.11.1", "katex": "^0.16.27", "marked": "^17.0.5", "marked-katex-extension": "^5.1.7", "zod": "^4.3.6" }, "peerDependencies": { "svelte": "^5.0.0" } }, "sha512-r/Vk/c1RLeV4h8W7ux/nupUdY4bh7qTbKhZ3yZ3ik5VipndT84USJypBLa3xTwCjbyphN7qqYE7yEPhWjv2KUQ=="],
+    "@ljoukov/sheet": ["@ljoukov/sheet@0.3.0", "", { "dependencies": { "@lucide/svelte": "^0.562.0", "esm-env": "^1.2.2", "highlight.js": "^11.11.1", "katex": "^0.16.27", "marked": "^17.0.5", "marked-katex-extension": "^5.1.7", "zod": "^4.3.6" }, "peerDependencies": { "svelte": "^5.0.0" } }, "sha512-n0dfcP3F7feQTEdDlvN1MYlhDtMuhcbhkYnwmENZNDxr02TCg+0DmxyAdL7VBR90fa71lAKYFkxzQz8STlLnCg=="],
 
     "@lucide/svelte": ["@lucide/svelte@0.562.0", "", { "peerDependencies": { "svelte": "^5" } }, "sha512-wDMULwtTFN2Sc/TFBm6gfuVCNb4Y5P9LDrwxNnUbV52+IEU7NXZmvxwXoz+vrrpad6Xupq+Hw5eUlqIHEGhouw=="],
 

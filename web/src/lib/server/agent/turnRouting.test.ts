@@ -73,6 +73,12 @@ describe('resolveForcedSparkChatToolForTurn', () => {
 				hasAttachmentContext: true
 			})
 		).toBe('create_grader');
+		expect(
+			resolveForcedSparkChatToolForTurn({
+				text: 'Please grade and mark this uploaded Junior Mathematical Challenge question paper as a source-faithful worksheet in the graded sheet UI.',
+				hasAttachmentContext: true
+			})
+		).toBe('create_grader');
 	});
 
 	it('does not force routing without attachment context or explicit action phrasing', () => {

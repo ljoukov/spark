@@ -1348,6 +1348,7 @@ function loadAgentEnv(): void {
   const fileDir = path.dirname(currentFile);
   const repoRoot = path.resolve(fileDir, "..", "..", "..", "..");
   loadEnvFromFile(path.join(repoRoot, ".env.local"), { override: false });
+  loadEnvFromFile(path.join(repoRoot, "web", ".env.local"), { override: false });
 }
 
 function buildSessionAgentTools(options: {

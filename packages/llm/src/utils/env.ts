@@ -9,8 +9,28 @@ export function loadLocalEnv(): void {
   }
   const envPath = path.join(process.cwd(), ".env.local");
   loadEnvFromFile(envPath, { override: false });
+  preferGoogleServiceAccountAuth();
   applyDefaultLlmTransportEnv();
   envLoaded = true;
+}
+
+export function preferGoogleServiceAccountAuth(): void {
+  const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim();
+  if (!serviceAccountJson) {
+    return;
+  }
+  delete process.env.GOOGLE_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+
+  if (
+    process.env.LLM_FILES_GCS_BUCKET === undefined &&
+    process.env.VERTEX_GCS_BUCKET === undefined
+  ) {
+    const projectId = parseServiceAccountProjectId(serviceAccountJson);
+    if (projectId !== null) {
+      process.env.LLM_FILES_GCS_BUCKET = `${projectId}.firebasestorage.app`;
+    }
+  }
 }
 
 export function loadEnvFromFile(
@@ -37,6 +57,8 @@ export function loadEnvFromFile(
       process.env[key] = value;
     }
   }
+
+  preferGoogleServiceAccountAuth();
 }
 
 function parseEnvLine(line: string): [string, string] | null {
@@ -71,6 +93,24 @@ function parseEnvLine(line: string): [string, string] | null {
     value = value.trim();
   }
   return [key, value];
+}
+
+function parseServiceAccountProjectId(serviceAccountJson: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(serviceAccountJson);
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== "object") {
+    return null;
+  }
+  const projectId = (parsed as { project_id?: unknown }).project_id;
+  if (typeof projectId !== "string") {
+    return null;
+  }
+  const trimmed = projectId.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 function applyDefaultLlmTransportEnv(): void {

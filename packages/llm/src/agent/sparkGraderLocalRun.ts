@@ -106,7 +106,7 @@ export async function launchSparkLocalGraderRun(options: {
     modelId,
     thinkingLevel: resolveSparkAgentThinkingLevel(modelId),
     maxSteps: options.maxSteps ?? DEFAULT_LOCAL_GRADER_MAX_STEPS,
-    useSubagents: options.useSubagents ?? true,
+    useSubagents: options.useSubagents ?? false,
     grader: {
       summaryPath: options.plan.summaryPath,
       sheetPath: options.plan.sheetPath,
@@ -118,7 +118,7 @@ export async function launchSparkLocalGraderRun(options: {
     systemPrompt,
     modelId,
     maxSteps: options.maxSteps ?? DEFAULT_LOCAL_GRADER_MAX_STEPS,
-    useSubagents: options.useSubagents ?? true,
+    useSubagents: options.useSubagents ?? false,
     userId: options.userId ?? "local-cli-grader",
   });
   return {
