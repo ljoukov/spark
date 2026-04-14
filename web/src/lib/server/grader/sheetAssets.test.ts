@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
 	buildSheetWorkspaceAssetUrl,
+	isAllowedSourceAttachmentPath,
 	isAllowedWorksheetAssetPath,
 	rewriteGraderWorksheetReportAssetTargets,
 	rewriteSolveSheetDraftAssetTargets
@@ -12,6 +13,8 @@ describe('sheet asset rewriting', () => {
 		expect(isAllowedWorksheetAssetPath('grader/output/assets/q1-figure.png')).toBe(true);
 		expect(isAllowedWorksheetAssetPath('/sheet/output/assets/q2-table.png')).toBe(true);
 		expect(isAllowedWorksheetAssetPath('grader/uploads/source.pdf')).toBe(false);
+		expect(isAllowedSourceAttachmentPath('grader/uploads/source.pdf')).toBe(true);
+		expect(isAllowedSourceAttachmentPath('grader/output/assets/q1-figure.png')).toBe(false);
 	});
 
 	it('builds attachment URLs for worksheet assets', () => {

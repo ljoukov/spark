@@ -1526,6 +1526,7 @@
 		draft ? buildRenderableSheetDocument(draft.sheet) : null
 	);
 	const sheetFooterLabel = $derived(run.display.footer?.trim() || null);
+	const sourceLinks = $derived(data.sourceLinks ?? []);
 
 </script>
 
@@ -1560,6 +1561,13 @@
 					return submitQuestionReply(questionId, payload.text, payload.attachments);
 				}}
 			/>
+			{#if sourceLinks.length > 0}
+				<nav class="sheet-source-links" aria-label="Source documents">
+					{#each sourceLinks as sourceLink (sourceLink.href)}
+						<a href={sourceLink.href} target="_blank" rel="noreferrer">{sourceLink.label}</a>
+					{/each}
+				</nav>
+			{/if}
 		</div>
 	{:else if draft && draftSheetDocument}
 		<div bind:this={sheetShellElement} class="sheet-shell">
@@ -1577,6 +1585,13 @@
 					return submitSheetForGrading(answers);
 				}}
 			/>
+			{#if sourceLinks.length > 0}
+				<nav class="sheet-source-links" aria-label="Source documents">
+					{#each sourceLinks as sourceLink (sourceLink.href)}
+						<a href={sourceLink.href} target="_blank" rel="noreferrer">{sourceLink.label}</a>
+					{/each}
+				</nav>
+			{/if}
 		</div>
 	{:else}
 		<section class="pending-card">
@@ -1673,6 +1688,31 @@
 
 	.sheet-shell :global(.paper-sheet__footer > span:first-child) {
 		display: none;
+	}
+
+	.sheet-source-links {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		gap: 0.5rem;
+		margin: -0.35rem 1.25rem 1.25rem;
+		font-size: 0.92rem;
+		font-weight: 680;
+	}
+
+	.sheet-source-links a {
+		border: 1px solid color-mix(in srgb, var(--sheet-color, #1f7a4d) 28%, transparent);
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--sheet-color, #1f7a4d) 8%, transparent);
+		color: color-mix(in srgb, var(--sheet-color, #1f7a4d) 72%, var(--foreground));
+		padding: 0.35rem 0.75rem;
+		text-decoration: none;
+	}
+
+	.sheet-source-links a:hover,
+	.sheet-source-links a:focus-visible {
+		text-decoration: underline;
+		text-underline-offset: 0.18em;
 	}
 
 	@media (max-width: 520px) {

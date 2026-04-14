@@ -1,6 +1,13 @@
 import os from "node:os";
 import path from "node:path";
-import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 
 import { PNG } from "pngjs";
 import { describe, expect, it, vi } from "vitest";
@@ -20,7 +27,9 @@ vi.mock("../src/utils/gcp/firestoreRest", () => {
 });
 
 async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "spark-sheet-publish-test-"));
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), "spark-sheet-publish-test-"),
+  );
   try {
     return await fn(dir);
   } finally {
@@ -37,23 +46,25 @@ async function writeValidSheetArtifacts(rootDir: string): Promise<void> {
         contextLabel: "Section 2 Test 5",
         presentation: {
           title: "English grammar worksheet Section 2 Test 5",
-          subtitle: "Student answers checked against the uploaded worksheet page.",
-          summaryMarkdown: "Checked the visible worksheet page and prepared the first feedback notes.",
-          footer: "Section 2 Test 5 · uploaded worksheet"
+          subtitle:
+            "Student answers checked against the uploaded worksheet page.",
+          summaryMarkdown:
+            "Checked the visible worksheet page and prepared the first feedback notes.",
+          footer: "Section 2 Test 5 · uploaded worksheet",
         },
         totals: {
           awardedMarks: 1,
-          maxMarks: 1
+          maxMarks: 1,
         },
         sheet: {
           title: "English grammar worksheet Section 2 Test 5",
-          filePath: "grader/output/sheet.json"
-        }
+          filePath: "grader/output/sheet.json",
+        },
       },
       null,
-      2
+      2,
     ).concat("\n"),
-    { encoding: "utf8" }
+    { encoding: "utf8" },
   );
   await writeFile(
     path.join(rootDir, "grader/output/sheet.json"),
@@ -81,21 +92,21 @@ async function writeValidSheetArtifacts(rootDir: string): Promise<void> {
                   marks: 1,
                   prompt: "The",
                   blanks: [{ placeholder: "word" }],
-                  after: "cat slept."
-                }
-              ]
-            }
-          ]
+                  after: "cat slept.",
+                },
+              ],
+            },
+          ],
         },
         answers: {
           q1: {
-            "0": "black"
-          }
+            "0": "black",
+          },
         },
         review: {
           score: {
             got: 1,
-            total: 1
+            total: 1,
           },
           label: "1/1",
           message: "Solid start.",
@@ -108,14 +119,14 @@ async function writeValidSheetArtifacts(rootDir: string): Promise<void> {
                 total: 1,
               },
               note: "",
-            }
-          }
-        }
+            },
+          },
+        },
       },
       null,
-      2
+      2,
     ).concat("\n"),
-    { encoding: "utf8" }
+    { encoding: "utf8" },
   );
 }
 
@@ -170,26 +181,26 @@ async function writeMockPublishArtifacts(options: {
           summaryMarkdown:
             options.summaryMarkdown ??
             "Checked the visible worksheet page and prepared feedback notes.",
-          footer: options.footer ?? "Uploaded worksheet"
+          footer: options.footer ?? "Uploaded worksheet",
         },
         totals: {
           awardedMarks: options.awardedMarks,
-          maxMarks: options.maxMarks
+          maxMarks: options.maxMarks,
         },
         sheet: {
           title: options.title,
-          filePath: "grader/output/sheet.json"
-        }
+          filePath: "grader/output/sheet.json",
+        },
       },
       null,
-      2
+      2,
     ).concat("\n"),
-    { encoding: "utf8" }
+    { encoding: "utf8" },
   );
   await writeFile(
     path.join(options.rootDir, "grader/output/sheet.json"),
     JSON.stringify(options.report, null, 2).concat("\n"),
-    { encoding: "utf8" }
+    { encoding: "utf8" },
   );
 }
 
@@ -277,14 +288,16 @@ async function writeValidatedCropAsset(options: {
   rootDir: string;
   assetPath: string;
   sourceLabel: string;
+  width?: number;
+  height?: number;
 }): Promise<void> {
   await mkdir(path.dirname(path.join(options.rootDir, options.assetPath)), {
     recursive: true,
   });
   await writeTestPng({
     filePath: path.join(options.rootDir, options.assetPath),
-    width: 20,
-    height: 20,
+    width: options.width ?? 20,
+    height: options.height ?? 20,
   });
   await writeFile(
     path.join(options.rootDir, "grader/output/crop-validation.md"),
@@ -344,8 +357,7 @@ async function writeFreshCropReviewToolCall(options: {
 
 async function writeSourceProblemStatementTranscription(
   rootDir: string,
-  markdown =
-    "## Source problem-statement transcription\n\n**Question 1** What is shown in the source paper?\n",
+  markdown = "## Source problem-statement transcription\n\n**Question 1** What is shown in the source paper?\n",
 ): Promise<void> {
   await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
   await writeFile(
@@ -358,9 +370,8 @@ async function writeSourceProblemStatementTranscription(
 describe("Spark agent tool: publish_sheet guards", () => {
   it("requires grader/output/run-summary.json", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       const tools = buildSparkAgentTools({
         workspace: {
@@ -388,9 +399,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects publish when the worksheet artifact fails schema validation", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
       await writeFile(
@@ -399,23 +409,24 @@ describe("Spark agent tool: publish_sheet guards", () => {
           {
             presentation: {
               title: "English grammar worksheet Section 2 Test 5",
-              subtitle: "Student answers checked against the uploaded worksheet page.",
+              subtitle:
+                "Student answers checked against the uploaded worksheet page.",
               summaryMarkdown: "Checked the visible worksheet page.",
-              footer: "Section 2 Test 5 · uploaded worksheet"
+              footer: "Section 2 Test 5 · uploaded worksheet",
             },
             totals: {
               awardedMarks: 1,
-              maxMarks: 1
+              maxMarks: 1,
             },
             sheet: {
               title: "English grammar worksheet Section 2 Test 5",
-              filePath: "grader/output/sheet.json"
-            }
+              filePath: "grader/output/sheet.json",
+            },
           },
           null,
-          2
+          2,
         ).concat("\n"),
-        { encoding: "utf8" }
+        { encoding: "utf8" },
       );
       await writeFile(
         path.join(rootDir, "grader/output/sheet.json"),
@@ -442,21 +453,21 @@ describe("Spark agent tool: publish_sheet guards", () => {
                       type: "spelling",
                       marks: 1,
                       prompt: "Fix the spelling.",
-                      words: ["teh"]
-                    }
-                  ]
-                }
-              ]
+                      words: ["teh"],
+                    },
+                  ],
+                },
+              ],
             },
             answers: {
               q1: {
-                "0": "the"
-              }
+                "0": "the",
+              },
             },
             review: {
               score: {
                 got: 1,
-                total: 1
+                total: 1,
               },
               label: "1/1",
               message: "Solid start.",
@@ -464,15 +475,15 @@ describe("Spark agent tool: publish_sheet guards", () => {
               questions: {
                 q1: {
                   status: "correct",
-                  note: "That fixes the spelling."
-                }
-              }
-            }
+                  note: "That fixes the spelling.",
+                },
+              },
+            },
           },
           null,
-          2
+          2,
         ).concat("\n"),
-        { encoding: "utf8" }
+        { encoding: "utf8" },
       );
 
       const tools = buildSparkAgentTools({
@@ -501,9 +512,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("publishes a valid worksheet artifact in mock mode", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeValidSheetArtifacts(rootDir);
       let published = false;
@@ -544,9 +554,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("publishes a source-paper-only unanswered MCQ worksheet with blank answers", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -645,9 +654,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects source-paper-only unanswered worksheets with per-question zero scores", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -759,9 +767,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("publishes source-paper-only label-only MCQ options without invented option text", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -862,11 +869,89 @@ describe("Spark agent tool: publish_sheet guards", () => {
     });
   });
 
+  it("normalizes linked worksheet crop assets to 512px JPEGs on publish", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+      const { getSharp } = await import("../src/utils/sharp");
+      const assetPath = "grader/output/assets/figure-1.png";
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "Science worksheet",
+        awardedMarks: 1,
+        maxMarks: 1,
+        report: buildSingleImageQuestionReport(assetPath),
+      });
+      await writeValidatedCropAsset({
+        rootDir,
+        assetPath,
+        sourceLabel: "Figure 1",
+        width: 1600,
+        height: 900,
+      });
+
+      const scheduledPaths: string[] = [];
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: (filePath) => {
+            scheduledPaths.push(filePath);
+          },
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).resolves.toMatchObject({
+        status: "published",
+        awardedMarks: 1,
+        maxMarks: 1,
+      });
+
+      const jpgPath = "grader/output/assets/figure-1.jpg";
+      const sheetRaw = await readFile(
+        path.join(rootDir, "grader/output/sheet.json"),
+        { encoding: "utf8" },
+      );
+      expect(sheetRaw).toContain(jpgPath);
+      expect(sheetRaw).not.toContain(assetPath);
+      const cropValidationRaw = await readFile(
+        path.join(rootDir, "grader/output/crop-validation.md"),
+        { encoding: "utf8" },
+      );
+      expect(cropValidationRaw).toContain(jpgPath);
+      expect(cropValidationRaw).not.toContain(assetPath);
+      const metadata = await getSharp()(
+        await readFile(path.join(rootDir, jpgPath)),
+      ).metadata();
+      expect(metadata.format).toBe("jpeg");
+      expect(
+        Math.max(metadata.width ?? 0, metadata.height ?? 0),
+      ).toBeLessThanOrEqual(512);
+      expect(scheduledPaths).toEqual(
+        expect.arrayContaining([
+          jpgPath,
+          "grader/output/crop-validation.md",
+          "grader/output/sheet.json",
+        ]),
+      );
+    });
+  });
+
   it("rejects visual prompts that defer the crop to references", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -957,10 +1042,9 @@ describe("Spark agent tool: publish_sheet guards", () => {
   });
 
   it("uses the structured source-paper-only flag even when request text is neutral", async () => {
-	    await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -1066,9 +1150,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects source-paper-only no-student runs that add fake blank MCQ options", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -1157,9 +1240,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects source-paper-only no-student runs that invent placeholder option text", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -1188,7 +1270,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
                     type: "mcq",
                     displayNumber: "1",
                     marks: 5,
-                    prompt: "The diagram labels the possible positions A, B, C, D and E.",
+                    prompt:
+                      "The diagram labels the possible positions A, B, C, D and E.",
                     displayMode: "full_options",
                     options: [
                       { id: "A", label: "A", text: "Option A" },
@@ -1250,9 +1333,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects fake no-answer labels in source-paper-only label-only MCQs", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -1341,9 +1423,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects source-paper-only no-student runs that record solved answers", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -1452,9 +1533,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects source-paper-only no-student runs with answer-bearing reference fields", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -1546,9 +1626,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects flattened worksheet structure that should stay grouped or structured", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
       await writeFile(
@@ -1558,22 +1637,23 @@ describe("Spark agent tool: publish_sheet guards", () => {
             presentation: {
               title: "GCSE Biology worksheet",
               subtitle: "Student answers checked against the uploaded paper.",
-              summaryMarkdown: "Prepared a worksheet review from the uploaded paper.",
-              footer: "Uploaded paper"
+              summaryMarkdown:
+                "Prepared a worksheet review from the uploaded paper.",
+              footer: "Uploaded paper",
             },
             totals: {
               awardedMarks: 1,
-              maxMarks: 3
+              maxMarks: 3,
             },
             sheet: {
               title: "GCSE Biology worksheet",
-              filePath: "grader/output/sheet.json"
-            }
+              filePath: "grader/output/sheet.json",
+            },
           },
           null,
-          2
+          2,
         ).concat("\n"),
-        { encoding: "utf8" }
+        { encoding: "utf8" },
       );
       await writeFile(
         path.join(rootDir, "grader/output/sheet.json"),
@@ -1600,7 +1680,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
                       type: "lines",
                       marks: 1,
                       prompt: "01.1 What is a tissue?",
-                      lines: 2
+                      lines: 2,
                     },
                     {
                       id: "q2",
@@ -1609,7 +1689,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
                       displayNumber: "01.2",
                       prompt:
                         "Name the type of tissue in plants that contains stem cells. Options: meristem, xylem, phloem.",
-                      lines: 2
+                      lines: 2,
                     },
                     {
                       id: "q3",
@@ -1617,21 +1697,21 @@ describe("Spark agent tool: publish_sheet guards", () => {
                       marks: 1,
                       displayNumber: "01.3",
                       prompt: "Which plant does aspirin originate from?",
-                      lines: 2
-                    }
-                  ]
-                }
-              ]
+                      lines: 2,
+                    },
+                  ],
+                },
+              ],
             },
             answers: {
               q1: "A group of similar cells.",
               q2: "meristem",
-              q3: "willow"
+              q3: "willow",
             },
             review: {
               score: {
                 got: 1,
-                total: 3
+                total: 3,
               },
               label: "1/3",
               message: "Needs revision.",
@@ -1641,33 +1721,33 @@ describe("Spark agent tool: publish_sheet guards", () => {
                   status: "correct",
                   score: {
                     got: 1,
-                    total: 1
+                    total: 1,
                   },
-                  note: "Correct."
+                  note: "Correct.",
                 },
                 q2: {
                   status: "incorrect",
                   score: {
                     got: 0,
-                    total: 1
+                    total: 1,
                   },
-                  note: "Use the correct tissue name."
+                  note: "Use the correct tissue name.",
                 },
                 q3: {
                   status: "incorrect",
                   score: {
                     got: 0,
-                    total: 1
+                    total: 1,
                   },
-                  note: "Check the plant source again."
-                }
-              }
-            }
+                  note: "Check the plant source again.",
+                },
+              },
+            },
           },
           null,
-          2
+          2,
         ).concat("\n"),
-        { encoding: "utf8" }
+        { encoding: "utf8" },
       );
 
       const tools = buildSparkAgentTools({
@@ -1696,9 +1776,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects lone subpart numbering without an explicit parent/group entry", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -1728,19 +1807,19 @@ describe("Spark agent tool: publish_sheet guards", () => {
                     marks: 1,
                     displayNumber: "01.1",
                     prompt: "What is a tissue?",
-                    lines: 2
-                  }
-                ]
-              }
-            ]
+                    lines: 2,
+                  },
+                ],
+              },
+            ],
           },
           answers: {
-            q1: "A group of similar cells."
+            q1: "A group of similar cells.",
           },
           review: {
             score: {
               got: 1,
-              total: 1
+              total: 1,
             },
             label: "1/1",
             message: "Solid start.",
@@ -1750,13 +1829,13 @@ describe("Spark agent tool: publish_sheet guards", () => {
                 status: "correct",
                 score: {
                   got: 1,
-                  total: 1
+                  total: 1,
                 },
-                note: "Correct."
-              }
-            }
-          }
-        }
+                note: "Correct.",
+              },
+            },
+          },
+        },
       });
       await mkdir(path.join(rootDir, "grader/output/assets"), {
         recursive: true,
@@ -1793,9 +1872,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects flattened MCQ prompts even without a literal Options label", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -1826,19 +1904,19 @@ describe("Spark agent tool: publish_sheet guards", () => {
                     displayNumber: "01",
                     prompt:
                       "Which one of the following tissues contains stem cells? (A) Meristem (B) Xylem (C) Phloem",
-                    lines: 2
-                  }
-                ]
-              }
-            ]
+                    lines: 2,
+                  },
+                ],
+              },
+            ],
           },
           answers: {
-            q1: "Meristem"
+            q1: "Meristem",
           },
           review: {
             score: {
               got: 0,
-              total: 1
+              total: 1,
             },
             label: "0/1",
             message: "Needs revision.",
@@ -1848,13 +1926,13 @@ describe("Spark agent tool: publish_sheet guards", () => {
                 status: "incorrect",
                 score: {
                   got: 0,
-                  total: 1
+                  total: 1,
                 },
-                note: "This should stay as MCQ."
-              }
-            }
-          }
-        }
+                note: "This should stay as MCQ.",
+              },
+            },
+          },
+        },
       });
 
       const tools = buildSparkAgentTools({
@@ -1883,9 +1961,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects worksheets that drop figures or tables preserved in official references", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -1915,19 +1992,19 @@ describe("Spark agent tool: publish_sheet guards", () => {
                     marks: 1,
                     displayNumber: "01",
                     prompt: "Use the source material to answer the question.",
-                    lines: 2
-                  }
-                ]
-              }
-            ]
+                    lines: 2,
+                  },
+                ],
+              },
+            ],
           },
           answers: {
-            q1: "Meristem"
+            q1: "Meristem",
           },
           review: {
             score: {
               got: 1,
-              total: 1
+              total: 1,
             },
             label: "1/1",
             message: "Solid start.",
@@ -1937,17 +2014,17 @@ describe("Spark agent tool: publish_sheet guards", () => {
                 status: "correct",
                 score: {
                   got: 1,
-                  total: 1
+                  total: 1,
                 },
-                note: "Correct."
-              }
-            }
+                note: "Correct.",
+              },
+            },
           },
           references: {
             officialProblemMarkdown:
-              "Figure 1 shows a root tip.\n\n| Tissue | Cells |\n| --- | --- |\n| Meristem | Stem cells |"
-          }
-        }
+              "Figure 1 shows a root tip.\n\n| Tissue | Cells |\n| --- | --- |\n| Meristem | Stem cells |",
+          },
+        },
       });
 
       const tools = buildSparkAgentTools({
@@ -1976,9 +2053,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects named source figures and transcribed tables omitted from the worksheet", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -2079,9 +2155,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects transcribed tables represented only as an image crop", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -2196,9 +2271,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects figures whose caption is separated from the crop by a table", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
       const assetPath = "grader/output/assets/figure-10.png";
 
       await writeMockPublishArtifacts({
@@ -2228,8 +2302,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
                     type: "lines",
                     displayNumber: "6.8",
                     marks: 1,
-                    prompt:
-                      `Figure 10 shows chlorophyll absorption.\n\nTable 6\n\n| Colour | Range |\n| --- | --- |\n| blue | 450-499 |\n\n[![Figure 10](${assetPath})](${assetPath})\n\nSuggest one advantage.`,
+                    prompt: `Figure 10 shows chlorophyll absorption.\n\nTable 6\n\n| Colour | Range |\n| --- | --- |\n| blue | 450-499 |\n\n[![Figure 10](${assetPath})](${assetPath})\n\nSuggest one advantage.`,
                     lines: 2,
                     renderMode: "markdown",
                   },
@@ -2293,9 +2366,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects prompts that repeat source tables instead of referring above", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -2384,9 +2456,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects repeated linked crop images for later references", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       const assetPath = "grader/output/assets/figure-3.png";
       await writeMockPublishArtifacts({
@@ -2491,16 +2562,15 @@ describe("Spark agent tool: publish_sheet guards", () => {
       requireFunctionTool(publishSheetTool);
 
       await expect(publishSheetTool.execute({})).rejects.toThrow(
-        /failed publish guards.*repeats linked crop image.*figure-3\.png/iu,
+        /failed publish guards.*repeats linked crop image.*figure-3\.jpg/iu,
       );
     });
   });
 
   it("rejects the same named figure linked twice under different asset files", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       const firstAsset = "grader/output/assets/figure-3-a.png";
       const secondAsset = "grader/output/assets/figure-3-b.png";
@@ -2675,9 +2745,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("accepts later figure references that link to the first crop anchor", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       const assetPath = "grader/output/assets/figure-3.png";
       await writeMockPublishArtifacts({
@@ -2716,7 +2785,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
                     type: "lines",
                     displayNumber: "2",
                     marks: 1,
-                    prompt: "Predict the blood flow.\n\nUse [Figure 3](#figure-3).",
+                    prompt:
+                      "Predict the blood flow.\n\nUse [Figure 3](#figure-3).",
                     lines: 1,
                     renderMode: "markdown",
                   },
@@ -2791,9 +2861,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("recognizes abbreviated figure labels and decimal table labels in source transcripts", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -2894,9 +2963,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("requires fresh-context crop validation for linked image assets", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -2984,9 +3052,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("accepts fresh-context crop validation that says required content is not clipped", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -3100,9 +3167,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("accepts fresh crop validation recorded in llm_calls tool logs", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       const assetPath = "grader/output/assets/figure-1.png";
       await writeMockPublishArtifacts({
@@ -3190,9 +3256,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("accepts block-style crop validation for each linked image asset", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -3325,9 +3390,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("accepts crop validation risk fields explicitly marked absent", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       const assetPath = "grader/output/assets/figure-1.png";
       await writeMockPublishArtifacts({
@@ -3406,9 +3470,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects crop validation records with explicit visible:no fields", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       const assetPath = "grader/output/assets/figure-1.png";
       await writeMockPublishArtifacts({
@@ -3475,9 +3538,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects crop validation records with explicit pass/fail: fail fields", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       const assetPath = "grader/output/assets/figure-1.png";
       await writeMockPublishArtifacts({
@@ -3545,9 +3607,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects crop validation records with unrelated visible crop content", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       const assetPath = "grader/output/assets/figure-1.png";
       await writeMockPublishArtifacts({
@@ -3619,9 +3680,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects full-page crop fallbacks linked as worksheet figures", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -3714,9 +3774,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects stale crop validation after a final crop_image edit", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       const assetPath = "grader/output/assets/figure-1.png";
       await writeMockPublishArtifacts({
@@ -3799,9 +3858,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("allows pad_image after crop validation without requiring a fresh subagent pass", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       const assetPath = "grader/output/assets/figure-1.png";
       await writeMockPublishArtifacts({
@@ -3886,9 +3944,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects option diagram crops recorded as partial split fragments", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -3954,7 +4011,10 @@ describe("Spark agent tool: publish_sheet guards", () => {
         recursive: true,
       });
       await writeTestPng({
-        filePath: path.join(rootDir, "grader/output/assets/q15-options-top.png"),
+        filePath: path.join(
+          rootDir,
+          "grader/output/assets/q15-options-top.png",
+        ),
         width: 20,
         height: 20,
       });
@@ -3996,9 +4056,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects linked crop images with content touching the crop edge", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -4106,9 +4165,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects one giant section for many root questions", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -4200,9 +4258,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects numeric-range sections that group several multi-part roots", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -4337,9 +4394,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects figure/table artifacts hoisted into section theory", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       const assetPath = "grader/output/assets/figure-3.png";
       await writeMockPublishArtifacts({
@@ -4434,9 +4490,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects grouped subparts whose parent prompt is only a stub label", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -4549,9 +4604,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects child-specific figures hoisted into the parent group prompt", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -4671,9 +4725,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects parent figures tied to a later child in the source transcript", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -4797,9 +4850,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects parent tables tied to a later child in the source transcript", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -4918,9 +4970,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects MCQ prompts that repeat bare option labels already in options", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -5014,9 +5065,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects MCQ prompts that duplicate structured option text", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -5105,9 +5155,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects literal escaped newlines in visible worksheet prompts", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -5204,9 +5253,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects raw LaTeX layout environments in visible worksheet prompts", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -5304,9 +5352,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects visible cover-page administration boilerplate", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -5394,9 +5441,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects redundant question-paper worksheet titles", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -5486,9 +5532,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects presentation footers that repeat visible sheet metadata", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -5577,11 +5622,55 @@ describe("Spark agent tool: publish_sheet guards", () => {
     });
   });
 
+  it("rejects presentation metadata that exposes transcription process labels", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeValidSheetArtifacts(rootDir);
+      const summaryPath = path.join(rootDir, "grader/output/run-summary.json");
+      const summary = JSON.parse(
+        await readFile(summaryPath, { encoding: "utf8" }),
+      ) as {
+        presentation: {
+          footer: string;
+        };
+      };
+      summary.presentation.footer = "Question paper transcription";
+      await writeFile(
+        summaryPath,
+        JSON.stringify(summary, null, 2).concat("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /failed publish guards.*presentation\.footer contains process wording/iu,
+      );
+    });
+  });
+
   it("rejects score summary messages that only repeat the numeric score", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeValidSheetArtifacts(rootDir);
       const sheetPath = path.join(rootDir, "grader/output/sheet.json");
@@ -5593,11 +5682,9 @@ describe("Spark agent tool: publish_sheet guards", () => {
         };
       };
       report.review.message = "1 / 1";
-      await writeFile(
-        sheetPath,
-        JSON.stringify(report, null, 2).concat("\n"),
-        { encoding: "utf8" },
-      );
+      await writeFile(sheetPath, JSON.stringify(report, null, 2).concat("\n"), {
+        encoding: "utf8",
+      });
 
       const tools = buildSparkAgentTools({
         workspace: {
@@ -5625,9 +5712,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("requires source problem-statement transcription for structure-sensitive paper runs", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeValidSheetArtifacts(rootDir);
       await writeFile(
@@ -5681,9 +5767,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects worksheet images linked outside guarded crop assets", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -5771,9 +5856,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects unresolved review notes that reveal the answer immediately", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -5870,9 +5954,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
     for (const note of answerRevealNotes) {
       await withTempDir(async (rootDir) => {
-        const { buildSparkAgentTools } = await import(
-          "../src/agent/sparkAgentRunner"
-        );
+        const { buildSparkAgentTools } =
+          await import("../src/agent/sparkAgentRunner");
 
         await writeMockPublishArtifacts({
           rootDir,
@@ -5960,9 +6043,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects unresolved feedback that repeats objective option text", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,
@@ -6061,9 +6143,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
   it("rejects unresolved follow-up text that reveals the answer immediately", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeMockPublishArtifacts({
         rootDir,

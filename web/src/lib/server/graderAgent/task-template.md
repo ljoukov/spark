@@ -202,7 +202,7 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
    - keep labels attached to their own artifacts: put `Figure N` caption text immediately adjacent to the `Figure N` crop, and put `Table N` caption text immediately adjacent to the `Table N` Markdown table. Do not place a table between a figure caption and the figure image.
    - do not repeat the same figure/table image in later subquestions; render it once at the first source-faithful location and refer to it with an anchor link such as `[Figure N](#figure-n)` / `[Table N](#table-n)` or with `Figure N above` / `Table N above` when the artifact is directly above.
    - before publishing, compare named references in `grader/output/transcription.md` against the worksheet: every included `Figure N` must have a linked crop near that label, and every extracted text/numeric `Table N` must have a Markdown table near that label.
-   - when a figure, photo, graph, or diagram matters to the question, crop it from the source into `grader/output/assets/...` and reference it from worksheet Markdown using a workspace-relative clickable image link such as `[![Figure 1](grader/output/assets/q1-figure-1.png)](grader/output/assets/q1-figure-1.png)`.
+   - when a figure, photo, graph, or diagram matters to the question, crop it from the source into `grader/output/assets/...` and reference the final worksheet crop from worksheet Markdown using a workspace-relative clickable image link with a `.jpg` target such as `[![Figure 1](grader/output/assets/q1-figure-1.jpg)](grader/output/assets/q1-figure-1.jpg)`. `publish_sheet` normalizes linked worksheet crops to JPEG with max 512 px on either axis.
    - references and transcription files are audit trails only. If a student needs a diagram, figure, graph, chart, map, network, photo, or other visual to answer a question, that visible worksheet prompt/group prompt must link the final crop near the question text. Do not write `see source transcription` or `included in references` instead of showing the visual.
    - for objective questions whose answer choices are diagrams, treat the option image as high-risk: either crop one complete options block or separate complete option crops, but every candidate label and every option diagram/shape must be fully visible. Do not publish crops where a candidate option is cut off at the crop edge or where the crop includes clipped neighbouring prompt text that should instead be transcribed.
    - never validate option-diagram crops as `top/bottom portions`, `used together`, or partial fragments. A final option crop must contain whole candidate labels and whole candidate diagrams; if a row does not fit, recrop a larger complete options block or create one complete crop per candidate.
@@ -347,11 +347,13 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
    - one short paragraph or 2-3 short bullet points,
    - focus on what was graded, what happened, or what the student should notice next,
    - do not repeat marks / question counts / percent because the UI shows those separately.
-- `presentation.footer` is required and should be a terse provenance/retrieval line for the card footer:
+- `presentation.footer` is required and must be source/provenance identity only, as a terse provenance/retrieval line for the card footer:
    - source context, paper label, or upload cue only,
    - do not repeat the full title,
    - do not repeat `sheet.level`, `sheet.subject`, or `sheet.title`,
-   - do not include marks, percentages, or status prose.
+   - do not include marks, percentages, or status prose,
+   - do not write process labels such as `Question paper transcription`, `transcription`, `OCR`, `artifact`, or similar wording,
+   - for identified public papers, prefer concise mechanical identifiers such as exam board/qualification, tier, paper code/name, and session (for example `AQA GCSE Biology · Higher Tier Paper 1H · June 2023`).
 - in `presentation.title`, `presentation.subtitle`, `presentation.summaryMarkdown`, and `presentation.footer`, do NOT mention:
    - run IDs, workspace IDs, file paths, tool names, source-policy labels, or implementation/process details.
 - `sheet.filePath` must be exactly `grader/output/sheet.json`.

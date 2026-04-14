@@ -47,6 +47,37 @@ describe('buildGraderRunDisplay', () => {
 		expect(display.footer).toBe('Uploaded material');
 	});
 
+	it('drops process-language footers and rebuilds source identity', () => {
+		const display = buildGraderRunDisplay({
+			status: 'done',
+			paper: {
+				contextLabel: 'AQA GCSE Biology',
+				year: '2023',
+				paperName: 'Higher Tier Paper 1H'
+			},
+			presentation: {
+				title: 'AQA GCSE Biology Higher Tier Paper 1H',
+				subtitle: 'June 2023 source worksheet',
+				footer: 'Question paper transcription'
+			}
+		});
+
+		expect(display.footer).toBe('AQA GCSE Biology · Higher Tier Paper 1H · June 2023');
+	});
+
+	it('uses the presentation title when process footer has no paper metadata', () => {
+		const display = buildGraderRunDisplay({
+			status: 'done',
+			presentation: {
+				title: 'AQA GCSE Biology Higher Tier Paper 1H',
+				subtitle: 'June 2023 source worksheet',
+				footer: 'Question paper transcription'
+			}
+		});
+
+		expect(display.footer).toBe('AQA GCSE Biology Higher Tier Paper 1H · June 2023');
+	});
+
 	it('describes an active grading state without old problem wording', () => {
 		const display = buildGraderRunDisplay({
 			status: 'executing'

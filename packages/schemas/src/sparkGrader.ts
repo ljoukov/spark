@@ -273,6 +273,15 @@ export const SparkSheetPageRunSchema = z.object({
 
 export type SparkSheetPageRun = z.infer<typeof SparkSheetPageRunSchema>;
 
+export const SparkSheetPageSourceLinkSchema = z.object({
+  label: trimmedString,
+  href: trimmedString,
+});
+
+export type SparkSheetPageSourceLink = z.infer<
+  typeof SparkSheetPageSourceLinkSchema
+>;
+
 export const SparkSheetPageArtifactPathsSchema = z.object({
   draft: trimmedString,
   report: trimmedString,
@@ -305,6 +314,7 @@ export const SparkSheetPageStateSchema = z.object({
   report: SparkGraderWorksheetReportSchema.nullable(),
   initialReviewState: SparkTutorReviewStateSchema.nullable(),
   interaction: SparkSheetPageInteractionSchema.nullable(),
+  sourceLinks: z.array(SparkSheetPageSourceLinkSchema),
 });
 
 export type SparkSheetPageState = z.infer<typeof SparkSheetPageStateSchema>;

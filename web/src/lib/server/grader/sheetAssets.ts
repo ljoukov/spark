@@ -17,6 +17,7 @@ const WORKSHEET_ASSET_PATH_PREFIXES = [
 	'sheet/assets/',
 	'sheet/output/assets/'
 ] as const;
+const SOURCE_ATTACHMENT_PATH_PREFIXES = ['grader/uploads/'] as const;
 
 function normalizeAssetPath(filePath: string): string {
 	return filePath.replace(/\\/g, '/').replace(/^\/+/u, '').trim();
@@ -25,6 +26,11 @@ function normalizeAssetPath(filePath: string): string {
 export function isAllowedWorksheetAssetPath(filePath: string): boolean {
 	const normalized = normalizeAssetPath(filePath);
 	return WORKSHEET_ASSET_PATH_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
+
+export function isAllowedSourceAttachmentPath(filePath: string): boolean {
+	const normalized = normalizeAssetPath(filePath);
+	return SOURCE_ATTACHMENT_PATH_PREFIXES.some((prefix) => normalized.startsWith(prefix));
 }
 
 export function buildSheetWorkspaceAssetUrl(options: {

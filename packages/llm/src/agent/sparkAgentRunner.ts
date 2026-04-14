@@ -80,7 +80,11 @@ import {
 } from "@spark/schemas";
 
 import { errorAsString } from "../utils/error";
-import { loadEnvFromFile, loadLocalEnv, preferGoogleServiceAccountAuth } from "../utils/env";
+import {
+  loadEnvFromFile,
+  loadLocalEnv,
+  preferGoogleServiceAccountAuth,
+} from "../utils/env";
 import { formatByteSize, formatMillis } from "../utils/format";
 import {
   deleteFirestoreDocument,
@@ -1155,7 +1159,9 @@ function loadAgentEnv(): void {
   loadLocalEnv();
   const repoRoot = resolveSparkRepoRoot();
   loadEnvFromFile(path.join(repoRoot, ".env.local"), { override: false });
-  loadEnvFromFile(path.join(repoRoot, "web", ".env.local"), { override: false });
+  loadEnvFromFile(path.join(repoRoot, "web", ".env.local"), {
+    override: false,
+  });
   preferGoogleServiceAccountAuth();
 }
 
@@ -1741,8 +1747,7 @@ const ANCHORED_VISUAL_REFERENCE_PATTERN =
 const MARKDOWN_TABLE_PATTERN = /^\s*\|?(?:\s*:?-{3,}:?\s*\|){2,}\s*$/mu;
 const NAMED_FIGURE_REFERENCE_PATTERN =
   /\b(?:Figure|Fig\.?|Diagram)\s+(\d+(?:\.\d+)*[A-Za-z]?)\b/giu;
-const NAMED_TABLE_REFERENCE_PATTERN =
-  /\bTable\s+(\d+(?:\.\d+)*[A-Za-z]?)\b/giu;
+const NAMED_TABLE_REFERENCE_PATTERN = /\bTable\s+(\d+(?:\.\d+)*[A-Za-z]?)\b/giu;
 const REPEATED_SOURCE_ARTIFACT_PATTERN =
   /\b(?:Figure|Fig\.?|Diagram|Table)\s+\d+(?:\.\d+)*[A-Za-z]?\s+(?:is\s+)?(?:repeated|shown\s+again|copied\s+again)\s+(?:below|here|again)\b/iu;
 const RAW_ESCAPED_NEWLINE_PATTERN = /\\n/u;
@@ -1781,6 +1786,8 @@ const PARTIAL_OPTION_CROP_VALIDATION_PATTERN =
   /\b(?:partial(?:ly)?|portion|fragment|split\s+across|used\s+together\s+with|continued|continues|top\s+of|bottom\s+of|upper\s+part|lower\s+part)\b/iu;
 const ADMIN_BOILERPLATE_PATTERN =
   /\b(?:do not open the paper until|invigilator|use\s+B\s+or\s+HB\s+pencil|answer sheet will be read|candidates in england|calculators and measuring instruments are forbidden|rough paper is allowed)\b/iu;
+const USER_VISIBLE_PROCESS_METADATA_PATTERN =
+  /\b(?:question\s+paper\s+transcription|transcription|transcribed|ocr|extracted\s+text|source\s+transcript|worksheet\s+json|artifact|publish(?:ed)?\s+sheet)\b/iu;
 const ANSWER_REVEAL_NOTE_PATTERN = new RegExp(
   [
     String.raw`\b(?:the\s+)?correct\s+(?:answer|response|option|choice|cell\s+type|term|value)\s+is\b`,
@@ -1797,7 +1804,8 @@ const ANSWER_REVEAL_NOTE_PATTERN = new RegExp(
   ].join("|"),
   "iu",
 );
-const SCORE_ONLY_REVIEW_MESSAGE_PATTERN = /^\s*\d+(?:\.\d+)?\s*\/\s*\d+(?:\.\d+)?\s*(?:marks?)?\s*$/iu;
+const SCORE_ONLY_REVIEW_MESSAGE_PATTERN =
+  /^\s*\d+(?:\.\d+)?\s*\/\s*\d+(?:\.\d+)?\s*(?:marks?)?\s*$/iu;
 const NO_STUDENT_ANSWERS_REQUEST_PATTERN =
   /\b(?:no\s+student\s+answers?\s+(?:were\s+)?provided|no\s+student\s+submission|no\s+submitted\s+answers?|unanswered\s+worksheet|leave\s+answers?\s+blank|awaiting\s+student\s+work)\b/iu;
 const QUESTION_STRUCTURE_REQUEST_PATTERN =
@@ -1813,8 +1821,7 @@ const FAKE_OBJECTIVE_OPTION_TEXT_PATTERN =
 const WORKSHEET_CROP_ASSET_PATH_PATTERN =
   /^(?:grader\/(?:output\/)?assets\/|sheet\/(?:output\/)?assets\/)/u;
 const MARKDOWN_IMAGE_TARGET_PATTERN = /!\[[^\]]*\]\(<?([^)>\s]+)>?\)/gu;
-const MARKDOWN_IMAGE_OCCURRENCE_PATTERN =
-  /!\[([^\]]*)\]\(<?([^)>\s]+)>?\)/gu;
+const MARKDOWN_IMAGE_OCCURRENCE_PATTERN = /!\[([^\]]*)\]\(<?([^)>\s]+)>?\)/gu;
 const AGENT_LOG_IMAGE_EDIT_STARTED_PATTERN =
   /^(?:\[[^\]]+\]\s+)?(?<timestamp>\d{4}-\d{2}-\d{2}T[^\s]+)\s+\[[^\]]+\]\s+tool_call_started:.*\btool=(?<tool>crop_image|trim_image|pad_image)\b/iu;
 const AGENT_LOG_TOOL_INPUT_PREFIX = "tool_call_input:";
@@ -1822,6 +1829,8 @@ const CROP_EDGE_BAND_PX = 20;
 const CROP_EDGE_DARK_PIXEL_THRESHOLD = 245;
 const CROP_EDGE_TOUCH_RATIO_THRESHOLD = 0.001;
 const DEFAULT_CROP_IMAGE_MARGIN_PX = 18;
+const GRADER_WORKSHEET_ASSET_MAX_DIMENSION = 512;
+const GRADER_WORKSHEET_ASSET_JPEG_QUALITY = 82;
 
 type SparkGraderWorksheetContentSection = Extract<
   SparkGraderWorksheetReport["sheet"]["sections"][number],
@@ -1977,7 +1986,10 @@ function hasNearbyMarkdownTable(text: string, label: string): boolean {
   return false;
 }
 
-function hasNearbyTableImageWithoutMarkdown(text: string, label: string): boolean {
+function hasNearbyTableImageWithoutMarkdown(
+  text: string,
+  label: string,
+): boolean {
   if (hasNearbyMarkdownTable(text, label)) {
     return false;
   }
@@ -2061,7 +2073,10 @@ function promptNeedsVisibleImage(promptText: string): boolean {
   return !MARKDOWN_IMAGE_PATTERN.test(promptText);
 }
 
-function formatArtifactAnchorFragment(kind: "figure" | "table", label: string): string {
+function formatArtifactAnchorFragment(
+  kind: "figure" | "table",
+  label: string,
+): string {
   const normalizedLabel = label
     .trim()
     .toLowerCase()
@@ -2073,16 +2088,17 @@ function formatArtifactAnchorFragment(kind: "figure" | "table", label: string): 
 function collectRepeatedCropImageIssues(markdown: string): string[] {
   const issues: string[] = [];
   const firstByTarget = new Map<string, string>();
-  const firstByArtifactLabel = new Map<string, { target: string; label: string }>();
+  const firstByArtifactLabel = new Map<
+    string,
+    { target: string; label: string }
+  >();
   for (const match of markdown.matchAll(MARKDOWN_IMAGE_OCCURRENCE_PATTERN)) {
     const rawAlt = match[1]?.trim() ?? "";
     const target = match[2]?.trim();
     if (!target) {
       continue;
     }
-    const normalizedTarget = target
-      .replace(/\\/gu, "/")
-      .replace(/^\/+/u, "");
+    const normalizedTarget = target.replace(/\\/gu, "/").replace(/^\/+/u, "");
     if (!WORKSHEET_CROP_ASSET_PATH_PATTERN.test(normalizedTarget)) {
       continue;
     }
@@ -2091,10 +2107,7 @@ function collectRepeatedCropImageIssues(markdown: string): string[] {
       Math.max(0, occurrenceIndex - 350),
       occurrenceIndex,
     );
-    const contextAfter = markdown.slice(
-      occurrenceIndex,
-      occurrenceIndex + 120,
-    );
+    const contextAfter = markdown.slice(occurrenceIndex, occurrenceIndex + 120);
     const contextLabel = [contextBefore, rawAlt, contextAfter].join("\n");
     const artifactLabel = (() => {
       const figure = Array.from(
@@ -2139,9 +2152,10 @@ function collectRepeatedCropImageIssues(markdown: string): string[] {
     }
     const label = rawAlt || firstAlt || normalizedTarget;
     const anchorSuggestion = (() => {
-      const figure = /\b(?:Figure|Fig\.?|Diagram)\s+(\d+(?:\.\d+)*[A-Za-z]?)\b/iu.exec(
-        label,
-      )?.[1];
+      const figure =
+        /\b(?:Figure|Fig\.?|Diagram)\s+(\d+(?:\.\d+)*[A-Za-z]?)\b/iu.exec(
+          label,
+        )?.[1];
       if (figure) {
         return `[Figure ${figure}](${formatArtifactAnchorFragment("figure", figure)})`;
       }
@@ -2310,12 +2324,15 @@ function isBlankWorksheetAnswer(
 }
 
 function collectObjectiveOptionLabels(promptText: string): number {
-  return promptText.match(new RegExp(OBJECTIVE_OPTION_LABEL_PATTERN, "gu"))?.length ?? 0;
+  return (
+    promptText.match(new RegExp(OBJECTIVE_OPTION_LABEL_PATTERN, "gu"))
+      ?.length ?? 0
+  );
 }
 
-function objectiveQuestionHasFakeBlankOption(
-  question: { options: readonly { id: string; text: string; label?: string }[] },
-): boolean {
+function objectiveQuestionHasFakeBlankOption(question: {
+  options: readonly { id: string; text: string; label?: string }[];
+}): boolean {
   return question.options.some((option) => {
     return (
       FAKE_BLANK_OBJECTIVE_OPTION_PATTERN.test(option.id.trim()) ||
@@ -2358,7 +2375,9 @@ function reviewFeedbackRepeatsObjectiveOptionText(
   return false;
 }
 
-function mcqPromptRepeatsStructuredOptionText(question: PaperSheetQuestion): boolean {
+function mcqPromptRepeatsStructuredOptionText(
+  question: PaperSheetQuestion,
+): boolean {
   if (question.type !== "mcq" || question.displayMode === "labels_only") {
     return false;
   }
@@ -2380,7 +2399,10 @@ function mcqPromptRepeatsStructuredOptionText(question: PaperSheetQuestion): boo
   return false;
 }
 
-function isStubGroupPrompt(promptText: string, displayNumber: string | undefined): boolean {
+function isStubGroupPrompt(
+  promptText: string,
+  displayNumber: string | undefined,
+): boolean {
   const withoutImages = promptText
     .replace(MARKDOWN_IMAGE_TARGET_PATTERN, "")
     .replace(/\|[^\n]*\|/gu, "")
@@ -2395,7 +2417,10 @@ function isStubGroupPrompt(promptText: string, displayNumber: string | undefined
     : null;
   const genericQuestionPattern =
     displayRoot !== null
-      ? new RegExp(`^(?:question|q)\\s*0?${escapeRegExpLiteral(displayRoot)}\\.?$`, "iu")
+      ? new RegExp(
+          `^(?:question|q)\\s*0?${escapeRegExpLiteral(displayRoot)}\\.?$`,
+          "iu",
+        )
       : /^(?:question|q)\s*\d+\.?$/iu;
   return (
     genericQuestionPattern.test(withoutImages) ||
@@ -2571,9 +2596,62 @@ function collectLinkedCropAssetPaths(markdown: string): string[] {
   );
 }
 
-function parseAgentLogImageEditEvents(
-  agentLogMarkdown: string,
-): Array<{
+function isJpegWorksheetAssetPath(assetPath: string): boolean {
+  return /\.jpe?g$/iu.test(assetPath);
+}
+
+function resolveWorksheetJpegAssetPath(assetPath: string): string {
+  return assetPath.replace(/\.[^/.]+$/u, ".jpg");
+}
+
+function resolveEquivalentCropReviewPaths(assetPath: string): string[] {
+  const jpgPath = resolveWorksheetJpegAssetPath(assetPath);
+  const extensionCandidates = [".jpg", ".jpeg", ".png", ".webp"];
+  const basePath = jpgPath.replace(/\.jpg$/iu, "");
+  return [
+    ...new Set([
+      assetPath,
+      ...extensionCandidates.map((ext) => `${basePath}${ext}`),
+    ]),
+  ];
+}
+
+function replaceStringReferences(
+  value: string,
+  replacements: ReadonlyMap<string, string>,
+): string {
+  let next = value;
+  for (const [from, to] of replacements) {
+    next = next.split(from).join(to);
+  }
+  return next;
+}
+
+function replaceJsonStringReferences(
+  value: unknown,
+  replacements: ReadonlyMap<string, string>,
+): unknown {
+  if (typeof value === "string") {
+    return replaceStringReferences(value, replacements);
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) =>
+      replaceJsonStringReferences(entry, replacements),
+    );
+  }
+  if (value !== null && typeof value === "object") {
+    const next: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(
+      value as Record<string, unknown>,
+    )) {
+      next[key] = replaceJsonStringReferences(entry, replacements);
+    }
+    return next;
+  }
+  return value;
+}
+
+function parseAgentLogImageEditEvents(agentLogMarkdown: string): Array<{
   timestampMs: number | null;
   toolName: "crop_image" | "trim_image" | "pad_image";
   outputPath: string;
@@ -2583,12 +2661,10 @@ function parseAgentLogImageEditEvents(
     toolName: "crop_image" | "trim_image" | "pad_image";
     outputPath: string;
   }> = [];
-  let pending:
-    | {
-        timestampMs: number | null;
-        toolName: "crop_image" | "trim_image" | "pad_image";
-      }
-    | null = null;
+  let pending: {
+    timestampMs: number | null;
+    toolName: "crop_image" | "trim_image" | "pad_image";
+  } | null = null;
 
   for (const rawLine of agentLogMarkdown.split(/\r?\n/gu)) {
     const startedMatch = AGENT_LOG_IMAGE_EDIT_STARTED_PATTERN.exec(rawLine);
@@ -2699,7 +2775,9 @@ async function readAgentToolCallLogMarkdown(rootDir: string): Promise<string> {
   return lines.join("\n");
 }
 
-function collectFreshCropReviewToolCallPaths(agentLogMarkdown: string): Set<string> {
+function collectFreshCropReviewToolCallPaths(
+  agentLogMarkdown: string,
+): Set<string> {
   const paths = new Set<string>();
   let pendingFreshCropReview = false;
 
@@ -2763,9 +2841,11 @@ function collectCropValidationAssetIssues(options: {
     .map((block) => block.trim())
     .filter((block) => block.length > 0);
   for (const assetPath of assetPaths) {
-    if (!freshReviewPaths.has(assetPath)) {
+    const equivalentCropReviewPaths =
+      resolveEquivalentCropReviewPaths(assetPath);
+    if (!equivalentCropReviewPaths.some((path) => freshReviewPaths.has(path))) {
       issues.push(
-        `crop image "${assetPath}" is linked in the worksheet but the agent log has no validate_crop_with_fresh_agent call for that exact final crop path`,
+        `crop image "${assetPath}" is linked in the worksheet but the agent log has no validate_crop_with_fresh_agent call for that final crop path`,
       );
     }
     const matchingBlocks = validationBlocks.filter((block) =>
@@ -2975,7 +3055,9 @@ async function collectCropEdgeTouchIssues(options: {
       continue;
     }
 
-    const countDarkPixels = (side: "top" | "right" | "bottom" | "left"): {
+    const countDarkPixels = (
+      side: "top" | "right" | "bottom" | "left",
+    ): {
       dark: number;
       total: number;
     } => {
@@ -3041,6 +3123,135 @@ async function collectCropEdgeTouchIssues(options: {
   return issues;
 }
 
+async function normalizeGraderWorksheetImageAssets(options: {
+  rootDir: string;
+  sheetPath: string;
+  sheetRaw: string;
+  report: SparkGraderWorksheetReport;
+  onWorkspaceFileChanged?: (filePath: string) => void;
+}): Promise<{
+  sheetRaw: string;
+  report: SparkGraderWorksheetReport;
+}> {
+  const renderedSheetMarkdown = collectSheetMarkdown(options.report);
+  const assetPaths = collectLinkedCropAssetPaths(renderedSheetMarkdown);
+  if (assetPaths.length === 0) {
+    return {
+      sheetRaw: options.sheetRaw,
+      report: options.report,
+    };
+  }
+
+  const cropValidationPath = "grader/output/crop-validation.md";
+  const cropValidationFullPath = resolveWorkspacePath(
+    options.rootDir,
+    cropValidationPath,
+  );
+  const cropValidationRaw = await readFile(cropValidationFullPath, {
+    encoding: "utf8",
+  }).catch(() => null);
+  if (cropValidationRaw === null) {
+    return {
+      sheetRaw: options.sheetRaw,
+      report: options.report,
+    };
+  }
+
+  const replacements = new Map<string, string>();
+  let wroteImageAsset = false;
+  const sharp = getSharp();
+
+  for (const assetPath of assetPaths) {
+    const sourceAssetPath = resolveWorkspacePath(options.rootDir, assetPath);
+    const assetBytes = await readFile(sourceAssetPath).catch((error) => {
+      throw new Error(
+        `Linked worksheet image "${assetPath}" could not be read before publish: ${errorAsString(error)}`,
+      );
+    });
+    const metadata = await sharp(assetBytes)
+      .metadata()
+      .catch((error) => {
+        throw new Error(
+          `Linked worksheet image "${assetPath}" could not be decoded before publish: ${errorAsString(error)}`,
+        );
+      });
+    const width = metadata.width ?? 0;
+    const height = metadata.height ?? 0;
+    if (width <= 0 || height <= 0) {
+      throw new Error(
+        `Linked worksheet image "${assetPath}" has invalid dimensions before publish.`,
+      );
+    }
+
+    const jpegAssetPath = resolveWorksheetJpegAssetPath(assetPath);
+    const alreadyPublishJpeg =
+      isJpegWorksheetAssetPath(assetPath) &&
+      metadata.format === "jpeg" &&
+      Math.max(width, height) <= GRADER_WORKSHEET_ASSET_MAX_DIMENSION;
+    if (alreadyPublishJpeg) {
+      continue;
+    }
+
+    const jpegBytes = await sharp(assetBytes)
+      .rotate()
+      .resize({
+        width: GRADER_WORKSHEET_ASSET_MAX_DIMENSION,
+        height: GRADER_WORKSHEET_ASSET_MAX_DIMENSION,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .flatten({ background: "#ffffff" })
+      .jpeg({
+        quality: GRADER_WORKSHEET_ASSET_JPEG_QUALITY,
+        mozjpeg: true,
+      })
+      .toBuffer();
+    const outputPath = resolveWorkspacePath(options.rootDir, jpegAssetPath);
+    await ensureDir(path.dirname(outputPath));
+    await writeFile(outputPath, jpegBytes);
+    options.onWorkspaceFileChanged?.(jpegAssetPath);
+    wroteImageAsset = true;
+
+    if (jpegAssetPath !== assetPath) {
+      replacements.set(assetPath, jpegAssetPath);
+    }
+  }
+
+  if (replacements.size > 0 || wroteImageAsset) {
+    const nextCropValidationRaw = replaceStringReferences(
+      cropValidationRaw,
+      replacements,
+    );
+    await writeFile(cropValidationFullPath, nextCropValidationRaw, {
+      encoding: "utf8",
+    });
+    options.onWorkspaceFileChanged?.(cropValidationPath);
+  }
+
+  if (replacements.size === 0) {
+    return {
+      sheetRaw: options.sheetRaw,
+      report: options.report,
+    };
+  }
+
+  const replacedReport = replaceJsonStringReferences(
+    options.report,
+    replacements,
+  );
+  const report = SparkGraderWorksheetReportSchema.parse(replacedReport);
+  const sheetRaw = `${JSON.stringify(report, null, 2)}\n`;
+  await writeFile(
+    resolveWorkspacePath(options.rootDir, options.sheetPath),
+    sheetRaw,
+    {
+      encoding: "utf8",
+    },
+  );
+  options.onWorkspaceFileChanged?.(options.sheetPath);
+  return { sheetRaw, report };
+}
+
 function collectGraderWorksheetPublishIssues(
   report: SparkGraderWorksheetReport,
   options?: {
@@ -3059,16 +3270,24 @@ function collectGraderWorksheetPublishIssues(
     report.references?.problemMarkdown,
     report.references?.officialProblemMarkdown,
   ]
-    .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+    .filter(
+      (part): part is string =>
+        typeof part === "string" && part.trim().length > 0,
+    )
     .join("\n\n");
-  const sheetHasLinkedFigure = MARKDOWN_IMAGE_PATTERN.test(renderedSheetMarkdown);
-  const sheetHasMarkdownTable = MARKDOWN_TABLE_PATTERN.test(renderedSheetMarkdown);
+  const sheetHasLinkedFigure = MARKDOWN_IMAGE_PATTERN.test(
+    renderedSheetMarkdown,
+  );
+  const sheetHasMarkdownTable = MARKDOWN_TABLE_PATTERN.test(
+    renderedSheetMarkdown,
+  );
   const sourcePaperOnlyNoStudent = isSourcePaperOnlyNoStudentRequest(
     options?.requestPayload,
   );
   const needsProblemStatementTranscription =
     requestRequiresProblemStatementTranscription(options?.requestPayload);
-  const sourceTranscriptMarkdown = options?.sourceTranscriptMarkdown?.trim() ?? "";
+  const sourceTranscriptMarkdown =
+    options?.sourceTranscriptMarkdown?.trim() ?? "";
   const sourceFigureOwnersByLabel = collectSpecificSourceReferenceOwners(
     sourceTranscriptMarkdown,
     NAMED_FIGURE_REFERENCE_PATTERN,
@@ -3080,6 +3299,7 @@ function collectGraderWorksheetPublishIssues(
   const contentSections = report.sheet.sections.filter(
     (section): section is SparkGraderWorksheetContentSection => "id" in section,
   );
+  const runSummary = options?.runSummary;
 
   if (/\bquestions?\s+paper\s*$/iu.test(report.sheet.title)) {
     issues.push(
@@ -3093,16 +3313,34 @@ function collectGraderWorksheetPublishIssues(
     );
   }
 
+  const presentationFields = [
+    ["title", runSummary?.presentation?.title],
+    ["subtitle", runSummary?.presentation?.subtitle],
+    ["summaryMarkdown", runSummary?.presentation?.summaryMarkdown],
+    ["footer", runSummary?.presentation?.footer],
+  ] as const;
+  for (const [fieldName, fieldValue] of presentationFields) {
+    if (
+      typeof fieldValue === "string" &&
+      USER_VISIBLE_PROCESS_METADATA_PATTERN.test(fieldValue)
+    ) {
+      issues.push(
+        `presentation.${fieldName} contains process wording ("${fieldValue}"); use student-facing source identity/provenance such as exam board, tier, paper code, session, or upload source, not transcription/OCR/artifact labels`,
+      );
+    }
+  }
+
   if (
     needsProblemStatementTranscription &&
-    !PROBLEM_STATEMENT_TRANSCRIPTION_HEADING_PATTERN.test(sourceTranscriptMarkdown)
+    !PROBLEM_STATEMENT_TRANSCRIPTION_HEADING_PATTERN.test(
+      sourceTranscriptMarkdown,
+    )
   ) {
     issues.push(
       "grader/output/transcription.md does not include a source problem-statement transcription section; include the printed root stems, interstitial context, subquestions, table labels, and figure labels so worksheet structure can be audited",
     );
   }
 
-  const runSummary = options?.runSummary;
   const presentationFooter = runSummary?.presentation?.footer?.trim();
   if (presentationFooter) {
     const repeatedFields = [
@@ -3117,7 +3355,10 @@ function collectGraderWorksheetPublishIssues(
       .filter((value) => {
         return (
           metadataTextContains(presentationFooter, value) ||
-          metadataTextContains(presentationFooter, stripQuestionPaperSuffix(value))
+          metadataTextContains(
+            presentationFooter,
+            stripQuestionPaperSuffix(value),
+          )
         );
       });
     if (repeatedFields.length > 0) {
@@ -3226,8 +3467,8 @@ function collectGraderWorksheetPublishIssues(
         MARKDOWN_IMAGE_PATTERN.test(fieldValue) ||
         collectNamedReferences(fieldValue, NAMED_FIGURE_REFERENCE_PATTERN)
           .size > 0 ||
-        collectNamedReferences(fieldValue, NAMED_TABLE_REFERENCE_PATTERN)
-          .size > 0
+        collectNamedReferences(fieldValue, NAMED_TABLE_REFERENCE_PATTERN).size >
+          0
       ) {
         issues.push(
           `section "${section.id}" ${fieldName} contains a named figure/table or linked crop; place source artifacts in the relevant group or question prompt so they render near the source question, not at the collapsible section top`,
@@ -3357,7 +3598,10 @@ function collectGraderWorksheetPublishIssues(
             isSubpartDisplayNumber(question.displayNumber)
           );
         });
-        if (childHasMatchingSubpart && isStubGroupPrompt(entry.prompt, entry.displayNumber)) {
+        if (
+          childHasMatchingSubpart &&
+          isStubGroupPrompt(entry.prompt, entry.displayNumber)
+        ) {
           issues.push(
             `group question "${entry.id}" has subparts but its prompt is only a generic label; keep the real shared source stem/table/figure in group.prompt`,
           );
@@ -3377,7 +3621,9 @@ function collectGraderWorksheetPublishIssues(
             `group question "${entry.id}" contains a raw LaTeX layout environment in visible prompt Markdown; use a Markdown table or a clean crop for layout-critical source text instead`,
           );
         }
-        for (const orderingIssue of collectFigureImageOrderingIssues(entry.prompt)) {
+        for (const orderingIssue of collectFigureImageOrderingIssues(
+          entry.prompt,
+        )) {
           issues.push(`group question "${entry.id}" ${orderingIssue}`);
         }
         continue;
@@ -3490,7 +3736,10 @@ function collectGraderWorksheetPublishIssues(
         review !== undefined &&
         review.status !== "correct" &&
         (ANSWER_REVEAL_NOTE_PATTERN.test(reviewFeedbackText) ||
-          reviewFeedbackRepeatsObjectiveOptionText(question, reviewFeedbackText))
+          reviewFeedbackRepeatsObjectiveOptionText(
+            question,
+            reviewFeedbackText,
+          ))
       ) {
         issues.push(
           `question "${question.id}" review feedback gives away the answer before tutoring; start unresolved feedback with a cue or next step instead`,
@@ -3518,7 +3767,10 @@ function collectGraderWorksheetPublishIssues(
         );
       }
 
-      if (question.type === "mcq" && containsStandaloneOptionLabelList(promptText)) {
+      if (
+        question.type === "mcq" &&
+        containsStandaloneOptionLabelList(promptText)
+      ) {
         issues.push(
           `question "${question.id}" repeats standalone option labels in the prompt while also defining structured MCQ options; remove redundant (A)/(B)/(C) lines from prompt text and keep choices in options[]`,
         );
@@ -3546,7 +3798,9 @@ function collectGraderWorksheetPublishIssues(
         );
       }
 
-      for (const orderingIssue of collectFigureImageOrderingIssues(promptText)) {
+      for (const orderingIssue of collectFigureImageOrderingIssues(
+        promptText,
+      )) {
         issues.push(`question "${question.id}" ${orderingIssue}`);
       }
 
@@ -3607,9 +3861,7 @@ function collectGraderWorksheetPublishIssues(
         );
         continue;
       }
-      if (
-        hasNearbyTableImageWithoutMarkdown(renderedSheetMarkdown, label)
-      ) {
+      if (hasNearbyTableImageWithoutMarkdown(renderedSheetMarkdown, label)) {
         issues.push(
           `source transcription mentions Table ${label} but the worksheet renders that table as an image crop instead of a Markdown table`,
         );
@@ -3637,7 +3889,8 @@ function collectGraderWorksheetPublishIssues(
         );
       }
     }
-    const cropValidationMarkdown = options?.cropValidationMarkdown?.trim() ?? "";
+    const cropValidationMarkdown =
+      options?.cropValidationMarkdown?.trim() ?? "";
     if (cropValidationMarkdown.length === 0) {
       issues.push(
         "worksheet contains linked crop image assets but is missing grader/output/crop-validation.md; ask a fresh-context subagent to validate final crops and record the result before publishing",
@@ -3667,12 +3920,18 @@ function collectGraderWorksheetPublishIssues(
     }
   }
 
-  if (!sourcePaperOnlyNoStudent && scoredQuestionMarks !== report.review.score.got) {
+  if (
+    !sourcePaperOnlyNoStudent &&
+    scoredQuestionMarks !== report.review.score.got
+  ) {
     issues.push(
       `review.score.got ${report.review.score.got.toString()} does not equal the sum of per-question awarded marks ${scoredQuestionMarks.toString()}`,
     );
   }
-  if (!sourcePaperOnlyNoStudent && scoredQuestionTotals !== report.review.score.total) {
+  if (
+    !sourcePaperOnlyNoStudent &&
+    scoredQuestionTotals !== report.review.score.total
+  ) {
     issues.push(
       `review.score.total ${report.review.score.total.toString()} does not equal the sum of per-question totals ${scoredQuestionTotals.toString()}`,
     );
@@ -3685,6 +3944,7 @@ async function validateGraderWorkspaceForPublish(options: {
   rootDir: string;
   summaryPath: string;
   sheetPath: string;
+  onWorkspaceFileChanged?: (filePath: string) => void;
 }): Promise<PublishedGraderSheetArtifacts> {
   const normalizeWorkspacePath = (value: string): string =>
     value.replace(/\\/gu, "/").trim();
@@ -3754,7 +4014,7 @@ async function validateGraderWorkspaceForPublish(options: {
     );
   }
 
-  const sheetRaw = await readFile(
+  let sheetRaw = await readFile(
     resolveWorkspacePath(options.rootDir, resolvedSheetPath),
     {
       encoding: "utf8",
@@ -3778,7 +4038,40 @@ async function validateGraderWorkspaceForPublish(options: {
       `Worksheet artifact "${resolvedSheetPath}" failed schema validation: ${formatZodIssueSummary(parsedSheet.error)}`,
     );
   }
-  const report = parsedSheet.data;
+  let report = parsedSheet.data;
+  const preNormalizationRawAgentLogMarkdown = await readFile(
+    resolveWorkspacePath(options.rootDir, "logs/agent/agent.log"),
+    { encoding: "utf8" },
+  ).catch(() => "");
+  const preNormalizationAgentToolCallLogMarkdown =
+    await readAgentToolCallLogMarkdown(options.rootDir);
+  const preNormalizationAgentLogMarkdown = [
+    preNormalizationRawAgentLogMarkdown,
+    preNormalizationAgentToolCallLogMarkdown,
+  ]
+    .filter((part) => part.trim().length > 0)
+    .join("\n");
+  const staleCropIssuesBeforeNormalization =
+    await collectStaleCropValidationIssues({
+      rootDir: options.rootDir,
+      renderedSheetMarkdown: collectSheetMarkdown(report),
+      cropValidationPath: "grader/output/crop-validation.md",
+      agentLogMarkdown: preNormalizationAgentLogMarkdown,
+    });
+  if (staleCropIssuesBeforeNormalization.length > 0) {
+    throw new Error(
+      `Worksheet artifact "${resolvedSheetPath}" failed publish guards: ${staleCropIssuesBeforeNormalization.slice(0, 10).join("; ")}`,
+    );
+  }
+  const normalizedImages = await normalizeGraderWorksheetImageAssets({
+    rootDir: options.rootDir,
+    sheetPath: resolvedSheetPath,
+    sheetRaw,
+    report,
+    onWorkspaceFileChanged: options.onWorkspaceFileChanged,
+  });
+  sheetRaw = normalizedImages.sheetRaw;
+  report = normalizedImages.report;
   const sourceTranscriptMarkdown = await readFile(
     resolveWorkspacePath(options.rootDir, "grader/output/transcription.md"),
     { encoding: "utf8" },
@@ -3848,11 +4141,13 @@ async function validateGraderWorkspaceForPublish(options: {
   if (summary.paperName) {
     paper.paperName = summary.paperName;
   }
-  if (summary.paperUrl) {
-    paper.paperUrl = summary.paperUrl;
+  const paperUrl = summary.paperUrl ?? report.references?.paperUrl;
+  if (paperUrl) {
+    paper.paperUrl = paperUrl;
   }
-  if (summary.markSchemeUrl) {
-    paper.markSchemeUrl = summary.markSchemeUrl;
+  const markSchemeUrl = summary.markSchemeUrl ?? report.references?.markSchemeUrl;
+  if (markSchemeUrl) {
+    paper.markSchemeUrl = markSchemeUrl;
   }
 
   return {
@@ -3990,12 +4285,18 @@ async function validateSheetDraftWorkspaceForPublish(options: {
   }
 
   let questionCount = 0;
-  for (let sectionIndex = 0; sectionIndex < draft.sheet.sections.length; sectionIndex += 1) {
+  for (
+    let sectionIndex = 0;
+    sectionIndex < draft.sheet.sections.length;
+    sectionIndex += 1
+  ) {
     const section = draft.sheet.sections[sectionIndex];
     if (!("id" in section)) {
       continue;
     }
-    const currentSectionQuestionCount = countPaperSheetQuestions(section.questions);
+    const currentSectionQuestionCount = countPaperSheetQuestions(
+      section.questions,
+    );
     questionCount += currentSectionQuestionCount;
     const hasTheory =
       typeof section.theory === "string" && section.theory.trim().length > 0;
@@ -4752,20 +5053,16 @@ async function cropImageToPngBuffer(options: {
   const cropWidth = Math.max(1, options.right - options.left);
   const cropHeight = Math.max(1, options.bottom - options.top);
   const sharp = getSharp();
-  const image = sharp(options.source)
-    .extract({
-      left: options.left,
-      top: options.top,
-      width: cropWidth,
-      height: cropHeight,
-    });
+  const image = sharp(options.source).extract({
+    left: options.left,
+    top: options.top,
+    width: cropWidth,
+    height: cropHeight,
+  });
   const extend = options.extend;
   if (
     extend &&
-    (extend.top > 0 ||
-      extend.right > 0 ||
-      extend.bottom > 0 ||
-      extend.left > 0)
+    (extend.top > 0 || extend.right > 0 || extend.bottom > 0 || extend.left > 0)
   ) {
     return await image
       .extend({
@@ -7170,7 +7467,11 @@ function buildAgentTools(options: {
           }),
         ),
       })
-      .safeParse(JSON.parse(await readFile(resolveWorkspacePath(rootDir, manifestPath), "utf8")));
+      .safeParse(
+        JSON.parse(
+          await readFile(resolveWorkspacePath(rootDir, manifestPath), "utf8"),
+        ),
+      );
     if (!manifest.success) {
       return null;
     }
@@ -7191,7 +7492,10 @@ function buildAgentTools(options: {
     prompt?: string;
     promptPath?: string;
   }): Promise<string> => {
-    if (typeof options.prompt === "string" && options.prompt.trim().length > 0) {
+    if (
+      typeof options.prompt === "string" &&
+      options.prompt.trim().length > 0
+    ) {
       return options.prompt.trim();
     }
     if (
@@ -7205,32 +7509,36 @@ function buildAgentTools(options: {
     }
     const defaultPromptPath = "grader/output/diagram-prompt.md";
     if (await workspaceFileExists(defaultPromptPath)) {
-      return await readFile(resolveWorkspacePath(rootDir, defaultPromptPath), "utf8");
+      return await readFile(
+        resolveWorkspacePath(rootDir, defaultPromptPath),
+        "utf8",
+      );
     }
     return DEFAULT_PDF_DIAGRAM_EXTRACTION_PROMPT;
   };
 
-  const checkGraderPrePublishDiagramExtractionAllowed =
-    async (): Promise<string | null> => {
-      if (!isGraderPublishingRun || (await graderArtifactsExist())) {
-        return null;
-      }
-      prePublishDiagramExtractionCount += 1;
-      const loggedDiagramExtractionCount = (
-        await readLoggedToolCalls()
-      ).filter((call) => call.name === "extract_pdf_diagrams").length;
-      const effectiveDiagramExtractionCount = Math.max(
-        prePublishDiagramExtractionCount,
-        loggedDiagramExtractionCount,
-      );
-      if (
-        effectiveDiagramExtractionCount <=
-        GRADER_PRE_PUBLISH_DIAGRAM_EXTRACTION_BUDGET
-      ) {
-        return null;
-      }
-      return "extract_pdf_diagrams pre-publish attempt budget exceeded. No diagram proposal was written. Stop requesting more coarse boxes before the worksheet exists: use the existing page images, grid overlays, and propose_crop_bbox_with_fresh_agent if available. Do not link full-page fallbacks or publish a crop-validation file that records unresolved failures.";
-    };
+  const checkGraderPrePublishDiagramExtractionAllowed = async (): Promise<
+    string | null
+  > => {
+    if (!isGraderPublishingRun || (await graderArtifactsExist())) {
+      return null;
+    }
+    prePublishDiagramExtractionCount += 1;
+    const loggedDiagramExtractionCount = (await readLoggedToolCalls()).filter(
+      (call) => call.name === "extract_pdf_diagrams",
+    ).length;
+    const effectiveDiagramExtractionCount = Math.max(
+      prePublishDiagramExtractionCount,
+      loggedDiagramExtractionCount,
+    );
+    if (
+      effectiveDiagramExtractionCount <=
+      GRADER_PRE_PUBLISH_DIAGRAM_EXTRACTION_BUDGET
+    ) {
+      return null;
+    }
+    return "extract_pdf_diagrams pre-publish attempt budget exceeded. No diagram proposal was written. Stop requesting more coarse boxes before the worksheet exists: use the existing page images, grid overlays, and propose_crop_bbox_with_fresh_agent if available. Do not link full-page fallbacks or publish a crop-validation file that records unresolved failures.";
+  };
 
   const checkGraderPrePublishImageEditAllowed = async (
     toolName: "crop_image" | "trim_image",
@@ -7261,8 +7569,7 @@ function buildAgentTools(options: {
       }).length;
       const effectiveAttempts = Math.max(attempts, loggedAttempts);
       if (
-        effectiveAttempts >
-        GRADER_PRE_PUBLISH_CROP_ATTEMPTS_PER_OUTPUT_BUDGET
+        effectiveAttempts > GRADER_PRE_PUBLISH_CROP_ATTEMPTS_PER_OUTPUT_BUDGET
       ) {
         if (prePublishCropRecoveryCredits > 0) {
           prePublishCropRecoveryCredits -= 1;
@@ -8885,9 +9192,12 @@ function buildAgentTools(options: {
         .strict(),
       execute: async ({ directoryPath }) => {
         const resolvedDirectory = directoryPath ?? ".";
-        const entries = await readdir(resolveWorkspacePath(rootDir, resolvedDirectory), {
-          withFileTypes: true,
-        });
+        const entries = await readdir(
+          resolveWorkspacePath(rootDir, resolvedDirectory),
+          {
+            withFileTypes: true,
+          },
+        );
         return entries
           .map((entry) => ({
             name: entry.name,
@@ -10382,9 +10692,7 @@ function buildAgentTools(options: {
                     ? resolvedMaxDimension
                     : undefined,
                 height:
-                  outputHeight > outputWidth
-                    ? resolvedMaxDimension
-                    : undefined,
+                  outputHeight > outputWidth ? resolvedMaxDimension : undefined,
                 fit: "inside",
                 withoutEnlargement: true,
               })
@@ -10441,7 +10749,12 @@ function buildAgentTools(options: {
         fullImage?: boolean;
         bbox1000?: { left: number; top: number; right: number; bottom: number };
         bboxNorm?: { left: number; top: number; width: number; height: number };
-        bboxPixels?: { left: number; top: number; right: number; bottom: number };
+        bboxPixels?: {
+          left: number;
+          top: number;
+          right: number;
+          bottom: number;
+        };
         paddingPx?: number;
       }) => {
         const {
@@ -10846,8 +11159,7 @@ function buildAgentTools(options: {
           !viewImageTool ||
           typeof viewImageTool !== "object" ||
           !("execute" in viewImageTool) ||
-          typeof (viewImageTool as { execute?: unknown }).execute !==
-            "function"
+          typeof (viewImageTool as { execute?: unknown }).execute !== "function"
         ) {
           throw new Error(
             "propose_crop_bbox_with_fresh_agent requires view_image.",
@@ -11022,10 +11334,11 @@ function buildAgentTools(options: {
           !viewImageTool ||
           typeof viewImageTool !== "object" ||
           !("execute" in viewImageTool) ||
-          typeof (viewImageTool as { execute?: unknown }).execute !==
-            "function"
+          typeof (viewImageTool as { execute?: unknown }).execute !== "function"
         ) {
-          throw new Error("validate_crop_with_fresh_agent requires view_image.");
+          throw new Error(
+            "validate_crop_with_fresh_agent requires view_image.",
+          );
         }
 
         const reviewPrompt = [
@@ -11121,6 +11434,9 @@ function buildAgentTools(options: {
           rootDir,
           summaryPath: summaryPath ?? "grader/output/run-summary.json",
           sheetPath: sheetPath ?? "grader/output/sheet.json",
+          onWorkspaceFileChanged: (filePath) => {
+            workspace.scheduleUpdate(filePath);
+          },
         });
         await beforePublishSheet?.();
 
@@ -12610,8 +12926,7 @@ export async function runSparkAgentTask(
                   pdfToolCostUsd += costUsd;
                 },
                 enforceLessonPipeline: isLessonRun,
-                allowPythonExec:
-                  graderRunId === null && sheetRunId === null,
+                allowPythonExec: graderRunId === null && sheetRunId === null,
                 ...(sheetRunId
                   ? {
                       sheetDraftPublish: {

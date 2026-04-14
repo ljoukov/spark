@@ -144,6 +144,8 @@ describe("grader agent prompt", () => {
     expect(task).toContain("remove bare `(A)`, `(B)`, `(C)`, `(D)` lines");
     expect(task).toContain("Keep worksheet metadata natural and non-redundant");
     expect(task).toContain("compact tier/level");
+    expect(task).toContain("source/provenance identity only");
+    expect(prompt).toContain("Question paper transcription");
     expect(task).toContain("not a mid-diagram fragment");
     expect(prompt).toContain("propose_crop_bbox_with_fresh_agent");
     expect(task).toContain("propose_crop_bbox_with_fresh_agent");

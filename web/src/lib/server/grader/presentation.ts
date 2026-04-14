@@ -31,6 +31,10 @@ const PLACEHOLDER_TEXT_PATTERN =
 	/^(unknown\b|unidentified\b|year pending\b|paper pending\b|not specified\b)/i;
 const MACHINE_SUMMARY_PATTERN =
 	/(completed grader run\b|grader\/output\/|run-summary\.json\b|transcription-first\b|workspace(?:id)?\b|uploaded-only\b|line-by-line annotation\b|tool names?\b|run ids?\b|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+const USER_VISIBLE_PROCESS_PATTERN =
+	/\b(?:question\s+paper\s+transcription|transcription|transcribed|ocr|extracted\s+text|source\s+transcript|worksheet\s+json|artifact|publish(?:ed)?\s+sheet)\b/i;
+const SESSION_LABEL_PATTERN =
+	/\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{4}\b/i;
 
 function getMeaningfulText(value: string | null | undefined): string | null {
 	const trimmed = value?.trim();
@@ -41,6 +45,33 @@ function getMeaningfulText(value: string | null | undefined): string | null {
 		return null;
 	}
 	return trimmed;
+}
+
+function getStudentFacingText(value: string | null | undefined): string | null {
+	const meaningful = getMeaningfulText(value);
+	if (!meaningful || USER_VISIBLE_PROCESS_PATTERN.test(meaningful)) {
+		return null;
+	}
+	return meaningful;
+}
+
+function extractSessionLabel(value: string | null | undefined): string | null {
+	const meaningful = getMeaningfulText(value);
+	if (!meaningful) {
+		return null;
+	}
+	const match = SESSION_LABEL_PATTERN.exec(meaningful);
+	return match?.[0] ?? meaningful;
+}
+
+function pushDistinct(parts: string[], value: string | null): void {
+	if (!value) {
+		return;
+	}
+	const normalized = value.toLowerCase();
+	if (!parts.some((part) => part.toLowerCase() === normalized)) {
+		parts.push(value);
+	}
 }
 
 function buildFallbackTitle(options: { paperName: string | null }): string {
@@ -172,27 +203,27 @@ function getPreferredSummary(options: {
 }
 
 function buildFooter(options: {
-	title: string;
 	presentation?: GraderRunPresentationInput | null;
 	paper?: GraderRunPaperInput | null;
 }): string | null {
-	const explicitFooter = getMeaningfulText(options.presentation?.footer);
+	const explicitFooter = getStudentFacingText(options.presentation?.footer);
 	if (explicitFooter) {
 		return explicitFooter;
 	}
-	const parts = [
-		getMeaningfulText(options.paper?.contextLabel),
-		getMeaningfulText(options.paper?.year)
-	].filter((value): value is string => value !== null);
+	const parts: string[] = [];
+	pushDistinct(parts, getMeaningfulText(options.paper?.contextLabel));
+	pushDistinct(parts, getMeaningfulText(options.paper?.paperName));
+	if (parts.length === 0) {
+		pushDistinct(parts, getStudentFacingText(options.presentation?.title));
+	}
+	pushDistinct(
+		parts,
+		extractSessionLabel(options.presentation?.subtitle) ?? extractSessionLabel(options.paper?.year)
+	);
 	if (parts.length === 0) {
 		return 'Uploaded material';
 	}
-	const titleLower = options.title.toLowerCase();
-	const distinctParts = parts.filter((part) => !titleLower.includes(part.toLowerCase()));
-	if (distinctParts.length === 0) {
-		return 'Uploaded material';
-	}
-	return distinctParts.join(' • ');
+	return parts.join(' · ');
 }
 
 export function buildGraderRunDisplay(input: GraderRunDisplayInput): GraderRunDisplay {
@@ -226,7 +257,6 @@ export function buildGraderRunDisplay(input: GraderRunDisplayInput): GraderRunDi
 		metaLine,
 		summaryMarkdown,
 		footer: buildFooter({
-			title,
 			presentation: input.presentation,
 			paper: input.paper
 		})

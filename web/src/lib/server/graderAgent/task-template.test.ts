@@ -70,6 +70,8 @@ describe('grader task template', () => {
 		expect(graderTaskTemplate).toContain('remove bare `(A)`, `(B)`, `(C)`, `(D)` lines');
 		expect(graderTaskTemplate).toContain('metadata natural and non-redundant');
 		expect(graderTaskTemplate).toContain('compact tier/level');
+		expect(graderTaskTemplate).toContain('source/provenance identity only');
+		expect(graderTaskTemplate).toContain('Question paper transcription');
 		expect(graderTaskTemplate).toContain('propose_crop_bbox_with_fresh_agent');
 		expect(graderTaskTemplate).toContain('do not publish known-failed crop validation');
 		expect(graderTaskTemplate).toContain('do not work around the budget by linking full-page/page fallback images');
