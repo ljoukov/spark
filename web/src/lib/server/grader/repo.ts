@@ -10,6 +10,7 @@ import {
 	SPARK_GRADER_SHEET_PATH,
 	SPARK_GRADER_SUMMARY_PATH
 } from '@spark/llm';
+import { SparkAgentConversationSchema, type SparkAgentConversation } from '@spark/schemas';
 import { z } from 'zod';
 
 export const DEFAULT_GRADER_RUN_KEY = 'uploaded_work' as const;
@@ -20,6 +21,7 @@ export const GRADER_SHEET_PATH = SPARK_GRADER_SHEET_PATH;
 const userIdSchema = z.string().trim().min(1, 'userId is required');
 const runIdSchema = z.string().trim().min(1, 'runId is required');
 const trimmedString = z.string().trim().min(1);
+const CONVERSATION_LOOKUP_LIMIT = 200;
 
 const firestoreTimestampSchema = z.preprocess((value) => {
 	if (value instanceof Date) {
@@ -210,6 +212,49 @@ export async function getGraderRun(userId: string, runId: string): Promise<Spark
 		return null;
 	}
 	return parsed.data;
+}
+
+function conversationReferencesGraderRun(conversation: SparkAgentConversation, runId: string): boolean {
+	const sheetHref = `/spark/sheets/${runId}`;
+	for (const message of conversation.messages) {
+		for (const part of message.content) {
+			if (part.type === 'agent_run' && part.runCard.kind === 'grader' && part.runCard.runId === runId) {
+				return true;
+			}
+			if (part.type === 'text' && part.text.includes(sheetHref)) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+export async function findConversationIdForGraderRun(
+	userId: string,
+	runId: string
+): Promise<string | null> {
+	const parsedUserId = userIdSchema.parse(userId);
+	const parsedRunId = runIdSchema.parse(runId);
+	const docs = await listFirestoreDocuments({
+		serviceAccountJson: requireServiceAccountJson(),
+		collectionPath: `${parsedUserId}/client/conversations`,
+		limit: CONVERSATION_LOOKUP_LIMIT,
+		orderBy: 'lastMessageAt desc'
+	});
+	for (const doc of docs) {
+		const conversationId = docIdFromPath(doc.documentPath);
+		const parsed = SparkAgentConversationSchema.safeParse({
+			id: conversationId,
+			...doc.data
+		});
+		if (!parsed.success) {
+			continue;
+		}
+		if (conversationReferencesGraderRun(parsed.data, parsedRunId)) {
+			return parsed.data.id;
+		}
+	}
+	return null;
 }
 
 export async function getWorkspaceTextFile(

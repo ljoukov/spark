@@ -1557,6 +1557,7 @@
 	);
 	const sheetFooterLabel = $derived(run.display.footer?.trim() || null);
 	const sourceLinks = $derived(data.sourceLinks ?? []);
+	const hasSourceChatLink = $derived(sourceLinks.some((sourceLink) => sourceLink.kind === 'chat'));
 
 </script>
 
@@ -1646,7 +1647,11 @@
 			<div class="sheet-source-card__heading">
 				<p class="sheet-source-card__eyebrow">Original materials</p>
 				<h2 id="sheet-source-card-title" class="sheet-source-card__title">Source documents</h2>
-				<p class="sheet-source-card__description">Open the source files used for this worksheet.</p>
+				<p class="sheet-source-card__description">
+					{hasSourceChatLink
+						? 'Open the source files and request chat used for this worksheet.'
+						: 'Open the source files used for this worksheet.'}
+				</p>
 			</div>
 			<nav class="sheet-source-links" aria-label="Source documents">
 				{#each sourceLinks as sourceLink (sourceLink.href)}

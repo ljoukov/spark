@@ -13,7 +13,11 @@ import {
 	rewriteSolveSheetDraftAssetTargets
 } from '$lib/server/grader/sheetAssets';
 import { buildGraderRunDisplay } from '$lib/server/grader/presentation';
-import { getGraderRun, getWorkspaceTextFile } from '$lib/server/grader/repo';
+import {
+	findConversationIdForGraderRun,
+	getGraderRun,
+	getWorkspaceTextFile
+} from '$lib/server/grader/repo';
 import { buildInitialTutorReviewState } from '$lib/server/tutorSessions/reviewState';
 import { getTutorSession, findTutorSessionForSheet } from '$lib/server/tutorSessions/repo';
 import { recoverTutorSessionIfStale } from '$lib/server/tutorSessions/recovery';
@@ -166,6 +170,26 @@ async function loadSourceLinks(options: {
 	return links;
 }
 
+async function resolveSheetConversationId(options: {
+	userId: string;
+	runId: string;
+	conversationId?: string | undefined;
+}): Promise<string | undefined> {
+	if (options.conversationId) {
+		return options.conversationId;
+	}
+	try {
+		return (await findConversationIdForGraderRun(options.userId, options.runId)) ?? undefined;
+	} catch (error) {
+		console.warn('Unable to resolve source chat for sheet', {
+			userId: options.userId,
+			runId: options.runId,
+			error
+		});
+		return undefined;
+	}
+}
+
 function resolveSheetPhase(options: {
 	status: 'created' | 'executing' | 'stopped' | 'failed' | 'done';
 	explicitPhase?: 'building' | 'solving' | 'grading' | 'graded';
@@ -267,11 +291,17 @@ export async function loadSparkSheetPageState(options: {
 		};
 	}
 
+	const conversationId = await resolveSheetConversationId({
+		userId: options.userId,
+		runId: run.id,
+		conversationId: run.conversationId
+	});
+
 	const sourceLinks = await loadSourceLinks({
 		userId: options.userId,
 		sheetId: run.id,
 		workspaceId: run.workspaceId,
-		conversationId: run.conversationId,
+		conversationId,
 		sourceAttachmentIds: run.sourceAttachmentIds,
 		paperUrl: run.paper?.paperUrl,
 		referencePaperUrl: report?.references?.paperUrl ?? draft?.references?.paperUrl,
