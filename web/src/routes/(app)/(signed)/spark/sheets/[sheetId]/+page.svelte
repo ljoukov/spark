@@ -1076,22 +1076,29 @@
 					awaitingAnswersReport
 				)
 			: collectQuestionMarkLabels(draftSheetDocument, null, false);
+		let frame: number | null = null;
 		const refreshSheetEnhancements = () => {
+			frame = null;
 			eagerLoadSheetFigures(root);
 			annotateSheetArtifacts(root);
 			annotateQuestionMarkBadges(root, markLabels);
 		};
-		refreshSheetEnhancements();
-		const frame = window.requestAnimationFrame(refreshSheetEnhancements);
-		const observer = new MutationObserver(refreshSheetEnhancements);
+		const scheduleSheetEnhancements = () => {
+			if (frame !== null) {
+				return;
+			}
+			frame = window.requestAnimationFrame(refreshSheetEnhancements);
+		};
+		scheduleSheetEnhancements();
+		const observer = new MutationObserver(scheduleSheetEnhancements);
 		observer.observe(root, {
-			attributeFilter: ['class', 'loading', 'src'],
-			attributes: true,
 			childList: true,
 			subtree: true
 		});
 		return () => {
-			window.cancelAnimationFrame(frame);
+			if (frame !== null) {
+				window.cancelAnimationFrame(frame);
+			}
 			observer.disconnect();
 		};
 	});
