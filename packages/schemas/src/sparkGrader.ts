@@ -84,7 +84,9 @@ export const SparkGraderPaperSchema = z
   })
   .transform(({ contextLabel, olympiad, ...rest }) => ({
     ...rest,
-    ...(contextLabel ?? olympiad ? { contextLabel: contextLabel ?? olympiad } : {}),
+    ...((contextLabel ?? olympiad)
+      ? { contextLabel: contextLabel ?? olympiad }
+      : {}),
   }));
 
 export type SparkGraderPaper = z.infer<typeof SparkGraderPaperSchema>;
@@ -100,117 +102,6 @@ export type SparkGraderPresentation = z.infer<
   typeof SparkGraderPresentationSchema
 >;
 
-export const SparkSheetDashboardSubjectTagSchema = z.object({
-  key: trimmedString,
-  label: trimmedString,
-});
-
-export type SparkSheetDashboardSubjectTag = z.infer<
-  typeof SparkSheetDashboardSubjectTagSchema
->;
-
-const dashboardDetailListSchema = z.array(trimmedString).max(6).default([]);
-
-export const SparkSheetRunAnalysisSchema = z
-  .object({
-    runId: trimmedString,
-    subjectTags: z.array(SparkSheetDashboardSubjectTagSchema).min(1).max(4),
-    primarySubjectKey: trimmedString.optional(),
-    summary: trimmedString.optional(),
-    strongSpots: z.array(trimmedString).max(5).default([]),
-    weakSpots: z.array(trimmedString).max(5).default([]),
-    specifics: dashboardDetailListSchema,
-    nextSteps: dashboardDetailListSchema,
-    generalFeedback: trimmedString.optional(),
-  })
-  .superRefine((analysis, ctx) => {
-    if (
-      analysis.primarySubjectKey &&
-      !analysis.subjectTags.some((tag) => tag.key === analysis.primarySubjectKey)
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["primarySubjectKey"],
-        message: "primarySubjectKey must match one of subjectTags[].key.",
-      });
-    }
-  });
-
-export type SparkSheetRunAnalysis = z.infer<
-  typeof SparkSheetRunAnalysisSchema
->;
-
-export const SparkSheetDashboardFocusAreaSchema = z.object({
-  id: trimmedString,
-  title: trimmedString,
-  summary: trimmedString,
-  evidenceRunIds: z.array(trimmedString).max(12).default([]),
-  subjectKeys: z.array(trimmedString).max(6).default([]),
-  specifics: dashboardDetailListSchema,
-  nextSteps: dashboardDetailListSchema,
-  generalFeedback: trimmedString.optional(),
-});
-
-export type SparkSheetDashboardFocusArea = z.infer<
-  typeof SparkSheetDashboardFocusAreaSchema
->;
-
-export const SparkSheetDashboardSubjectSummarySchema = z.object({
-  key: trimmedString,
-  label: trimmedString,
-  summary: trimmedString,
-  runIds: z.array(trimmedString).max(24).default([]),
-  averagePercentage: z.number().min(0).max(100).nullable().optional(),
-  strongSpots: z.array(trimmedString).max(4).default([]),
-  weakSpots: z.array(trimmedString).max(4).default([]),
-  specifics: dashboardDetailListSchema,
-  nextSteps: dashboardDetailListSchema,
-  generalFeedback: trimmedString.optional(),
-});
-
-export type SparkSheetDashboardSubjectSummary = z.infer<
-  typeof SparkSheetDashboardSubjectSummarySchema
->;
-
-export const SparkSheetDashboardSchema = z
-  .object({
-    schemaVersion: z.literal(1),
-    mode: z.literal("sheet_dashboard"),
-    headline: trimmedString,
-    summaryMarkdown: trimmedString.optional(),
-    focusNote: trimmedString.optional(),
-    generatedFromRunId: trimmedString.optional(),
-    strengths: z.array(SparkSheetDashboardFocusAreaSchema).max(8).default([]),
-    weakSpots: z.array(SparkSheetDashboardFocusAreaSchema).max(8).default([]),
-    subjects: z.array(SparkSheetDashboardSubjectSummarySchema).max(12).default([]),
-    runAnalyses: z.array(SparkSheetRunAnalysisSchema).default([]),
-  })
-  .superRefine((dashboard, ctx) => {
-    const seenRunIds = new Set<string>();
-    for (let index = 0; index < dashboard.runAnalyses.length; index += 1) {
-      const analysis = dashboard.runAnalyses[index];
-      if (seenRunIds.has(analysis.runId)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["runAnalyses", index, "runId"],
-          message: "runAnalyses must not contain duplicate runIds.",
-        });
-      }
-      seenRunIds.add(analysis.runId);
-    }
-  });
-
-export type SparkSheetDashboard = z.infer<typeof SparkSheetDashboardSchema>;
-
-export const SparkSheetDashboardStateSchema =
-  SparkSheetDashboardSchema.extend({
-    updatedAt: FirestoreTimestampSchema,
-  });
-
-export type SparkSheetDashboardState = z.infer<
-  typeof SparkSheetDashboardStateSchema
->;
-
 export const SparkGraderRunDisplaySchema = z.object({
   title: trimmedString,
   subtitle: z.string().trim().min(1).nullable(),
@@ -219,9 +110,7 @@ export const SparkGraderRunDisplaySchema = z.object({
   footer: z.string().trim().min(1).nullable(),
 });
 
-export type SparkGraderRunDisplay = z.infer<
-  typeof SparkGraderRunDisplaySchema
->;
+export type SparkGraderRunDisplay = z.infer<typeof SparkGraderRunDisplaySchema>;
 
 export const SparkGraderRunSchema = z.object({
   id: trimmedString,

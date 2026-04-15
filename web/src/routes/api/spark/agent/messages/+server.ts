@@ -4,7 +4,6 @@ import {
 	createTask,
 	createSparkChatCreateSheetTool,
 	createSparkChatCreateGraderTool,
-	launchSparkSheetDashboardRefresh,
 	resolveSparkAgentLogsDir,
 	resolveSparkAgentWorkspaceRoot,
 	runSparkChatAgentLoop,
@@ -25,10 +24,7 @@ import {
 	type SparkAgentRunCard,
 	type SparkAgentMessage
 } from '@spark/schemas';
-import {
-	createGraderRun,
-	patchGraderRun
-} from '$lib/server/grader/repo';
+import { createGraderRun, patchGraderRun } from '$lib/server/grader/repo';
 import { dev } from '$app/environment';
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
@@ -740,36 +736,36 @@ async function downloadAttachmentParts(
 		if (bytes.length === 0) {
 			throw new Error(`Attachment ${attachment.id} is empty`);
 		}
-			if (bytes.length > SPARK_CHAT_ATTACHMENT_MAX_FILE_SIZE_BYTES) {
-				throw new Error(`Attachment ${attachment.id} exceeds 50 MB limit`);
-			}
-			if (isSparkDocumentAttachmentMimeType(normalizedMimeType)) {
-				const filename = resolveAttachmentPromptFilename({
-					...attachment,
-					contentType: normalizedMimeType
+		if (bytes.length > SPARK_CHAT_ATTACHMENT_MAX_FILE_SIZE_BYTES) {
+			throw new Error(`Attachment ${attachment.id} exceeds 50 MB limit`);
+		}
+		if (isSparkDocumentAttachmentMimeType(normalizedMimeType)) {
+			const filename = resolveAttachmentPromptFilename({
+				...attachment,
+				contentType: normalizedMimeType
+			});
+			try {
+				const stored = await files.create({
+					data: bytes,
+					filename,
+					mimeType: normalizedMimeType
 				});
-				try {
-					const stored = await files.create({
-						data: bytes,
-						filename,
-						mimeType: normalizedMimeType
-					});
-					return {
-						type: 'input_file',
-						file_id: stored.id,
-						filename: stored.filename ?? filename
-					} satisfies LlmContentPart;
-				} catch (error) {
-					console.error('Canonical document upload failed for Spark chat', {
-						attachmentId: attachment.id,
-						filename,
-						error: serializeErrorForLog(error)
-					});
-					throw new Error(
-						'Spark chat document uploads failed before reaching the model. Please try again later.'
-					);
-				}
+				return {
+					type: 'input_file',
+					file_id: stored.id,
+					filename: stored.filename ?? filename
+				} satisfies LlmContentPart;
+			} catch (error) {
+				console.error('Canonical document upload failed for Spark chat', {
+					attachmentId: attachment.id,
+					filename,
+					error: serializeErrorForLog(error)
+				});
+				throw new Error(
+					'Spark chat document uploads failed before reaching the model. Please try again later.'
+				);
 			}
+		}
 		return {
 			type: 'inlineData',
 			data: encodeBytesToBase64(bytes),
@@ -1307,34 +1303,6 @@ function buildSparkChatTools(options: {
 					total,
 					href: `/spark/lesson/${session.id}`
 				};
-			}
-		}),
-		refresh_sheet_dashboard: tool({
-			description: [
-				'Refresh the user’s /spark/sheets dashboard from all graded sheets.',
-				'Launches a background dashboard agent that tags sheets by subject and updates strong spots, weak spots, and subject summaries.',
-				'Use this when the user asks for a sheets dashboard refresh, subject breakdown, strong spots, weak spots, or a focused review of their graded sheets.',
-				'Set focus when the user wants the dashboard to emphasise a particular subject or weakness.'
-			].join('\n'),
-			inputSchema: z
-				.object({
-					focus: z.string().trim().min(1).optional()
-				})
-				.strict(),
-			execute: async ({ focus }) => {
-				const result = await launchSparkSheetDashboardRefresh({
-					serviceAccountJson,
-					userId,
-					focusNote: focus
-				});
-				if (result.status === 'empty') {
-					return {
-						status: 'empty' as const,
-						href: result.href,
-						message: 'No graded sheets are available yet. Grade a sheet first, then refresh the dashboard.'
-					};
-				}
-				return result;
 			}
 		}),
 		create_lesson: tool({
@@ -2119,21 +2087,21 @@ async function generateAssistantResponse(
 		attachmentMessageId: options.messageId,
 		attachmentParts
 	});
-		const instructions =
-			forcedTool === null
-				? SYSTEM_PROMPT
-				: `${SYSTEM_PROMPT}\n\n${buildForcedSparkChatToolInstruction(forcedTool)}`;
-		const logWorkspace = resolveSparkChatLogWorkspace({
-			conversationId: options.conversationId,
-			messageId: options.messageId
-		});
-		const canUseFilesystemLogging = isNodeRuntime();
-		try {
-			const result = await runSparkChatAgentLoop({
-				input,
-				modelId: SPARK_CHAT_MODEL_ID,
-				instructions,
-				tools,
+	const instructions =
+		forcedTool === null
+			? SYSTEM_PROMPT
+			: `${SYSTEM_PROMPT}\n\n${buildForcedSparkChatToolInstruction(forcedTool)}`;
+	const logWorkspace = resolveSparkChatLogWorkspace({
+		conversationId: options.conversationId,
+		messageId: options.messageId
+	});
+	const canUseFilesystemLogging = isNodeRuntime();
+	try {
+		const result = await runSparkChatAgentLoop({
+			input,
+			modelId: SPARK_CHAT_MODEL_ID,
+			instructions,
+			tools,
 			...(canUseFilesystemLogging
 				? {
 						logging: {

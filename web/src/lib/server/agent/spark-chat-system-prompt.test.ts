@@ -32,10 +32,4 @@ describe('spark chat system prompt', () => {
 		expect(sparkChatSystemPrompt).toContain('explicitly says not to search online');
 		expect(sparkChatSystemPrompt).toContain('referenceSourcePolicy="uploaded-only"');
 	});
-
-	it('routes dashboard refresh questions through the dedicated tool', () => {
-		expect(sparkChatSystemPrompt).toContain('call refresh_sheet_dashboard');
-		expect(sparkChatSystemPrompt).toContain('strong spots');
-		expect(sparkChatSystemPrompt).toContain('weak spots');
-	});
 });

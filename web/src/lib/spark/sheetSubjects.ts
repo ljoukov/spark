@@ -1,10 +1,13 @@
-import type { SparkSheetDashboardSubjectTag } from '@spark/schemas';
-
 export type SheetSubjectTheme = {
 	color: string;
 	accent: string;
 	light: string;
 	border: string;
+};
+
+export type SheetSubjectTag = {
+	key: string;
+	label: string;
 };
 
 const CANONICAL_SUBJECT_LABELS: Record<string, string> = {
@@ -171,7 +174,7 @@ export function normalizeSheetSubjectKey(value: string): string {
 	return slug;
 }
 
-export function buildSheetSubjectTag(label: string): SparkSheetDashboardSubjectTag {
+export function buildSheetSubjectTag(label: string): SheetSubjectTag {
 	const trimmed = label.trim();
 	const key = normalizeSheetSubjectKey(trimmed);
 	return {

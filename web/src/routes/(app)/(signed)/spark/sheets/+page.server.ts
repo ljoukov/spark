@@ -5,10 +5,14 @@ import {
 	safeParseGraderWorksheetReport,
 	safeParseSolveSheetDraft
 } from '$lib/server/grader/problemReport';
-import { getSheetDashboard } from '$lib/server/grader/dashboardRepo';
 import { buildGraderRunDisplay } from '$lib/server/grader/presentation';
 import { getWorkspaceTextFile, listGraderRuns } from '$lib/server/grader/repo';
-import { buildSheetSubjectTag, normalizeSheetSubjectKey } from '$lib/spark/sheetSubjects';
+import { getSheetRunAnalyses } from '$lib/server/grader/sheetRunAnalysisRepo';
+import {
+	buildSheetSubjectTag,
+	normalizeSheetSubjectKey,
+	type SheetSubjectTag
+} from '$lib/spark/sheetSubjects';
 
 function resolveSheetPhase(options: {
 	status: 'created' | 'executing' | 'stopped' | 'failed' | 'done';
@@ -33,18 +37,19 @@ function resolveSheetPhase(options: {
 
 function resolveSubjectTags(options: {
 	analysis?: {
-		subjectTags: Array<{ key: string; label: string }>;
+		subjectTags: SheetSubjectTag[];
 		primarySubjectKey?: string | undefined;
 	} | null;
 	previewSubject?: string | null;
-}): Array<{ key: string; label: string }> {
+}): SheetSubjectTag[] {
 	if (options.analysis && options.analysis.subjectTags.length > 0) {
 		return options.analysis.subjectTags.map((tag) => ({
 			key: normalizeSheetSubjectKey(tag.key),
 			label: tag.label
 		}));
 	}
-	const previewSubject = options.previewSubject?.trim();
+	const previewSubjectValue = options.previewSubject;
+	const previewSubject = previewSubjectValue?.trim();
 	if (!previewSubject) {
 		return [];
 	}
@@ -57,9 +62,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 		throw redirect(302, '/login');
 	}
 
-	const dashboard = await getSheetDashboard(user.uid);
-	const analysisByRunId = new Map(dashboard?.runAnalyses.map((analysis) => [analysis.runId, analysis]) ?? []);
-	const runs = await listGraderRuns(user.uid, 100);
+	const [runs, runAnalyses] = await Promise.all([
+		listGraderRuns(user.uid, 100),
+		getSheetRunAnalyses(user.uid)
+	]);
+	const analysisByRunId = new Map(runAnalyses.map((analysis) => [analysis.runId, analysis]));
 	const sheets = await Promise.all(
 		runs.map(async (run) => {
 			const reportPath = run.sheet?.filePath ?? run.sheetPath;
@@ -94,8 +101,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 					? {
 							awardedMarks: run.totals.awardedMarks,
 							maxMarks: run.totals.maxMarks,
-								percentage: run.totals.percentage ?? null
-							}
+							percentage: run.totals.percentage ?? null
+						}
 					: null,
 				previewSheet,
 				analysis:
@@ -113,10 +120,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 								generalFeedback: analysis.generalFeedback ?? null
 							},
 				subjectTags,
-				primarySubjectKey:
-					analysis?.primarySubjectKey
-						? normalizeSheetSubjectKey(analysis.primarySubjectKey)
-						: (subjectTags[0]?.key ?? null),
+				primarySubjectKey: analysis?.primarySubjectKey
+					? normalizeSheetSubjectKey(analysis.primarySubjectKey)
+					: (subjectTags[0]?.key ?? null),
 				createdAt: run.createdAt.toISOString(),
 				updatedAt: run.updatedAt.toISOString(),
 				error: run.error ?? null
@@ -124,36 +130,5 @@ export const load: PageServerLoad = async ({ locals }) => {
 		})
 	);
 
-	return {
-		sheets,
-		dashboard:
-			dashboard === null
-				? null
-				: {
-						...dashboard,
-						subjects: dashboard.subjects.map((subject) => ({
-							...subject,
-							key: normalizeSheetSubjectKey(subject.key)
-						})),
-						strengths: dashboard.strengths.map((entry) => ({
-							...entry,
-							subjectKeys: entry.subjectKeys.map((key) => normalizeSheetSubjectKey(key))
-						})),
-						weakSpots: dashboard.weakSpots.map((entry) => ({
-							...entry,
-							subjectKeys: entry.subjectKeys.map((key) => normalizeSheetSubjectKey(key))
-						})),
-						runAnalyses: dashboard.runAnalyses.map((analysis) => ({
-							...analysis,
-							primarySubjectKey: analysis.primarySubjectKey
-								? normalizeSheetSubjectKey(analysis.primarySubjectKey)
-								: null,
-							subjectTags: analysis.subjectTags.map((tag) => ({
-								...tag,
-								key: normalizeSheetSubjectKey(tag.key)
-							}))
-						})),
-						updatedAt: dashboard.updatedAt.toISOString()
-					}
-	};
+	return { sheets };
 };

@@ -56,7 +56,6 @@ import {
   SessionMediaDocSchema,
   SparkAgentStateTimelineSchema,
   SparkGraderWorksheetReportSchema,
-  SparkSheetDashboardSchema,
   SparkSolveSheetDraftSchema,
   SparkTutorComposerStateSchema,
   SparkTutorHistoryEntrySchema,
@@ -115,11 +114,6 @@ import {
   resolveSparkGraderModelTools,
   type SparkGraderRequestPayload,
 } from "./sparkChatShared";
-import {
-  SPARK_SHEET_DASHBOARD_OUTPUT_PATH,
-  launchSparkSheetDashboardRefresh,
-  resolveSheetDashboardDocPath,
-} from "./sheetDashboardAgent";
 import { captureSparkAgentReplayState } from "./sparkAgentReplayArtifacts";
 import {
   buildWorkspaceFileDocPath,
@@ -1024,14 +1018,6 @@ type SheetDraftPublishConfig =
       href?: string;
     };
 
-type SheetDashboardPublishConfig =
-  | {
-      mode: "live";
-    }
-  | {
-      mode: "mock";
-    };
-
 const GraderSummarySheetSchema = z.object({
   title: z.string().trim().min(1).optional(),
   filePath: z.string().trim().min(1),
@@ -1117,18 +1103,6 @@ type PublishedSheetDraftArtifacts = {
     title?: string;
     filePath: string;
   };
-};
-
-type PublishedSheetDashboardArtifacts = {
-  outputPath: string;
-  outputSha256: string;
-  headline: string;
-  summaryMarkdown?: string;
-  strengthCount: number;
-  weakSpotCount: number;
-  subjectCount: number;
-  runAnalysisCount: number;
-  dashboard: z.infer<typeof SparkSheetDashboardSchema>;
 };
 
 function selectGraderResultSummary(options: {
@@ -4145,7 +4119,8 @@ async function validateGraderWorkspaceForPublish(options: {
   if (paperUrl) {
     paper.paperUrl = paperUrl;
   }
-  const markSchemeUrl = summary.markSchemeUrl ?? report.references?.markSchemeUrl;
+  const markSchemeUrl =
+    summary.markSchemeUrl ?? report.references?.markSchemeUrl;
   if (markSchemeUrl) {
     paper.markSchemeUrl = markSchemeUrl;
   }
@@ -4328,51 +4303,6 @@ async function validateSheetDraftWorkspaceForPublish(options: {
       filePath: resolvedSheetPath,
       title: summary.sheet.title?.trim() || draft.sheet.title,
     },
-  };
-}
-
-async function validateSheetDashboardForPublish(options: {
-  rootDir: string;
-  outputPath: string;
-}): Promise<PublishedSheetDashboardArtifacts> {
-  const resolvedOutputPath = options.outputPath.replace(/\\/gu, "/").trim();
-  const outputRaw = await readFile(
-    resolveWorkspacePath(options.rootDir, resolvedOutputPath),
-    {
-      encoding: "utf8",
-    },
-  ).catch((error) => {
-    throw new Error(
-      `Missing required sheet dashboard output "${resolvedOutputPath}": ${errorAsString(error)}`,
-    );
-  });
-  let outputJson: unknown;
-  try {
-    outputJson = JSON.parse(outputRaw);
-  } catch (error) {
-    throw new Error(
-      `Sheet dashboard output "${resolvedOutputPath}" is invalid JSON: ${errorAsString(error)}`,
-    );
-  }
-  const parsedDashboard = SparkSheetDashboardSchema.safeParse(outputJson);
-  if (!parsedDashboard.success) {
-    throw new Error(
-      `Sheet dashboard output "${resolvedOutputPath}" failed schema validation: ${formatZodIssueSummary(parsedDashboard.error)}`,
-    );
-  }
-  const dashboard = parsedDashboard.data;
-  return {
-    outputPath: resolvedOutputPath,
-    outputSha256: createHash("sha256").update(outputRaw).digest("hex"),
-    headline: dashboard.headline,
-    ...(dashboard.summaryMarkdown
-      ? { summaryMarkdown: dashboard.summaryMarkdown }
-      : {}),
-    strengthCount: dashboard.strengths.length,
-    weakSpotCount: dashboard.weakSpots.length,
-    subjectCount: dashboard.subjects.length,
-    runAnalysisCount: dashboard.runAnalyses.length,
-    dashboard,
   };
 }
 
@@ -7297,7 +7227,6 @@ function buildAgentTools(options: {
   allowPythonExec?: boolean;
   graderPublish?: GraderPublishConfig;
   sheetDraftPublish?: SheetDraftPublishConfig;
-  sheetDashboardPublish?: SheetDashboardPublishConfig;
   beforePublishSheet?: () => Promise<void>;
   onPublishSheet?: (
     publication: PublishedGraderSheetArtifacts,
@@ -7305,9 +7234,6 @@ function buildAgentTools(options: {
   beforePublishSheetDraft?: () => Promise<void>;
   onPublishSheetDraft?: (
     publication: PublishedSheetDraftArtifacts,
-  ) => Promise<void> | void;
-  onPublishSheetDashboard?: (
-    publication: PublishedSheetDashboardArtifacts,
   ) => Promise<void> | void;
   debug?: LlmDebugOptions;
   extractTextDebugRootDir?: string;
@@ -7323,12 +7249,10 @@ function buildAgentTools(options: {
     allowPythonExec,
     graderPublish,
     sheetDraftPublish,
-    sheetDashboardPublish,
     beforePublishSheet,
     onPublishSheet,
     beforePublishSheetDraft,
     onPublishSheetDraft,
-    onPublishSheetDashboard,
     debug,
     extractTextDebugRootDir,
   } = options;
@@ -11547,44 +11471,6 @@ function buildAgentTools(options: {
     });
     tools.publish_sheet_draft = publish_sheet_draft;
   }
-  if (sheetDashboardPublish) {
-    const publish_sheet_dashboard = tool({
-      description:
-        "Validate and publish the /spark/sheets dashboard artifact. Requires a valid dashboard/output/dashboard.json. Fix any validation errors and retry until status='published'.",
-      inputSchema: z
-        .object({
-          outputPath: z.string().trim().min(1).optional(),
-        })
-        .strict(),
-      execute: async ({ outputPath }) => {
-        const publication = await validateSheetDashboardForPublish({
-          rootDir,
-          outputPath: outputPath ?? SPARK_SHEET_DASHBOARD_OUTPUT_PATH,
-        });
-        if (sheetDashboardPublish.mode === "live") {
-          await setFirestoreDocument({
-            serviceAccountJson,
-            documentPath: resolveSheetDashboardDocPath(userId),
-            data: {
-              ...publication.dashboard,
-              updatedAt: new Date(),
-            },
-          });
-        }
-        await onPublishSheetDashboard?.(publication);
-        return {
-          status: "published" as const,
-          mode: sheetDashboardPublish.mode,
-          headline: publication.headline,
-          strengthCount: publication.strengthCount,
-          weakSpotCount: publication.weakSpotCount,
-          subjectCount: publication.subjectCount,
-          runAnalysisCount: publication.runAnalysisCount,
-        };
-      },
-    });
-    tools.publish_sheet_dashboard = publish_sheet_dashboard;
-  }
   if (!shouldAllowPythonExec) {
     delete (tools as Record<string, unknown>).python_exec;
   }
@@ -11602,7 +11488,6 @@ export function buildSparkAgentTools(options: {
   allowPythonExec?: boolean;
   graderPublish?: GraderPublishConfig;
   sheetDraftPublish?: SheetDraftPublishConfig;
-  sheetDashboardPublish?: SheetDashboardPublishConfig;
   beforePublishSheet?: () => Promise<void>;
   onPublishSheet?: (
     publication: PublishedGraderSheetArtifacts,
@@ -11610,9 +11495,6 @@ export function buildSparkAgentTools(options: {
   beforePublishSheetDraft?: () => Promise<void>;
   onPublishSheetDraft?: (
     publication: PublishedSheetDraftArtifacts,
-  ) => Promise<void> | void;
-  onPublishSheetDashboard?: (
-    publication: PublishedSheetDashboardArtifacts,
   ) => Promise<void> | void;
   debug?: LlmDebugOptions;
   extractTextDebugRootDir?: string;
@@ -11857,8 +11739,6 @@ export async function runSparkAgentTask(
   let cleanupWorkspaceRoot = true;
   let workspaceSync: WorkspaceSync | undefined;
   let sheetRunId: string | null = null;
-  let sheetSummaryPath = "sheet/output/run-summary.json";
-  let sheetDraftPath = "sheet/output/draft.json";
   let sheetDraftAnswersPath = "sheet/state/answers.json";
   let graderRunId: string | null = null;
   let graderSummaryPath = "grader/output/run-summary.json";
@@ -11876,8 +11756,6 @@ export async function runSparkAgentTask(
   let tutorSnapshot: TutorWorkspaceSnapshot | null = null;
   let publishedSheetDraft: PublishedSheetDraftArtifacts | null = null;
   let publishedGraderSheet: PublishedGraderSheetArtifacts | null = null;
-  let sheetDashboardPath: string | null = null;
-  let publishedSheetDashboard: PublishedSheetDashboardArtifacts | null = null;
   let agentMetricType: SparkAgentMetricType = "chat";
   let agentMetricStatus: "ok" | "error" | "stopped" = "error";
   const monitoringJob = "spark-task-runner";
@@ -11926,20 +11804,6 @@ export async function runSparkAgentTask(
     if (rawSheetRunId.length > 0) {
       sheetRunId = rawSheetRunId;
     }
-    const rawSheetSummaryPath =
-      typeof agentData.sheetSummaryPath === "string"
-        ? agentData.sheetSummaryPath.trim()
-        : "";
-    if (rawSheetSummaryPath.length > 0) {
-      sheetSummaryPath = rawSheetSummaryPath;
-    }
-    const rawSheetDraftPath =
-      typeof agentData.sheetDraftPath === "string"
-        ? agentData.sheetDraftPath.trim()
-        : "";
-    if (rawSheetDraftPath.length > 0) {
-      sheetDraftPath = rawSheetDraftPath;
-    }
     const rawSheetDraftAnswersPath =
       typeof agentData.sheetDraftAnswersPath === "string"
         ? agentData.sheetDraftAnswersPath.trim()
@@ -11967,13 +11831,6 @@ export async function runSparkAgentTask(
         : "";
     if (rawSheetPath.length > 0) {
       graderSheetPath = rawSheetPath;
-    }
-    const rawSheetDashboardPath =
-      typeof agentData.sheetDashboardPath === "string"
-        ? agentData.sheetDashboardPath.trim()
-        : "";
-    if (rawSheetDashboardPath.length > 0) {
-      sheetDashboardPath = rawSheetDashboardPath;
     }
     const rawTutorSessionId =
       typeof agentData.tutorSessionId === "string"
@@ -12415,22 +12272,6 @@ export async function runSparkAgentTask(
             );
           }
         }
-        if (sheetDashboardPath && !publishedSheetDashboard) {
-          throw new Error(
-            "Sheet dashboard is not published yet. Call publish_sheet_dashboard and fix any validation errors before done().",
-          );
-        }
-        if (sheetDashboardPath && workspaceRoot && publishedSheetDashboard) {
-          const currentDashboardSha256 = await computeWorkspaceFileSha256({
-            rootDir: workspaceRoot,
-            filePath: publishedSheetDashboard.outputPath,
-          });
-          if (currentDashboardSha256 !== publishedSheetDashboard.outputSha256) {
-            throw new Error(
-              "Published sheet dashboard artifact changed after publish_sheet_dashboard. Call publish_sheet_dashboard again before done().",
-            );
-          }
-        }
         const runSummary =
           graderRunId && workspaceRoot && !publishedGraderSheet
             ? await readGraderRunSummaryFromWorkspace({
@@ -12444,7 +12285,6 @@ export async function runSparkAgentTask(
         const resultSummary =
           publishedGraderSheet?.resultSummary ??
           publishedSheetDraft?.presentation.summaryMarkdown ??
-          publishedSheetDashboard?.summaryMarkdown ??
           selectGraderResultSummary({
             doneSummary: summary,
             runSummary,
@@ -12482,15 +12322,6 @@ export async function runSparkAgentTask(
           }).catch((error) => {
             logSync?.append(
               `warn: failed to patch grader run summary: ${errorAsString(error)}`,
-            );
-          });
-          await launchSparkSheetDashboardRefresh({
-            serviceAccountJson,
-            userId: options.userId,
-            generatedFromRunId: graderRunId,
-          }).catch((error) => {
-            logSync?.append(
-              `warn: failed to refresh sheet dashboard: ${errorAsString(error)}`,
             );
           });
         }
@@ -12941,8 +12772,6 @@ export async function runSparkAgentTask(
                         publication: PublishedSheetDraftArtifacts,
                       ) => {
                         publishedSheetDraft = publication;
-                        sheetSummaryPath = publication.summaryPath;
-                        sheetDraftPath = publication.sheetPath;
                       },
                     }
                   : {}),
@@ -12962,19 +12791,6 @@ export async function runSparkAgentTask(
                         publishedGraderSheet = publication;
                         graderSummaryPath = publication.summaryPath;
                         graderSheetPath = publication.sheetPath;
-                      },
-                    }
-                  : {}),
-                ...(sheetDashboardPath
-                  ? {
-                      sheetDashboardPublish: {
-                        mode: "live" as const,
-                      },
-                      onPublishSheetDashboard: (
-                        publication: PublishedSheetDashboardArtifacts,
-                      ) => {
-                        publishedSheetDashboard = publication;
-                        sheetDashboardPath = publication.outputPath;
                       },
                     }
                   : {}),
