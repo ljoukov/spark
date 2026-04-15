@@ -98,8 +98,8 @@ describe("loadLocalEnv", () => {
     expect(process.env.GOOGLE_SERVICE_ACCOUNT_JSON).toBe(
       '{"project_id":"test-project"}',
     );
-    expect(process.env.GOOGLE_API_KEY).toBeUndefined();
-    expect(process.env.GEMINI_API_KEY).toBeUndefined();
+    expect(process.env.GOOGLE_API_KEY).toBe("");
+    expect(process.env.GEMINI_API_KEY).toBe("");
   });
 
   it("derives the default file bucket from service account auth", async () => {

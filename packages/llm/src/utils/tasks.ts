@@ -56,11 +56,21 @@ const RunAgentTaskEnvelope = z.object({
   runAgent: RunAgentTaskSchema,
 });
 
+export const FindGapsTaskSchema = z.object({
+  userId: z.string().min(1),
+});
+
+const FindGapsTaskEnvelope = z.object({
+  type: z.literal("findGaps"),
+  findGaps: FindGapsTaskSchema,
+});
+
 export const TaskSchema = z.discriminatedUnion("type", [
   GenerateQuizTaskEnvelope,
   GenerateLessonTaskEnvelope,
   GenerateWelcomeSessionTaskEnvelope,
   RunAgentTaskEnvelope,
+  FindGapsTaskEnvelope,
   HelloWorldTaskEnvelope,
 ]);
 
@@ -70,6 +80,7 @@ export type GenerateWelcomeSessionTask = z.infer<
   typeof GenerateWelcomeSessionTaskSchema
 >;
 export type RunAgentTask = z.infer<typeof RunAgentTaskSchema>;
+export type FindGapsTask = z.infer<typeof FindGapsTaskSchema>;
 export type HelloWorldTask = z.infer<typeof HelloWorldTaskEnvelope>;
 export type Task = z.infer<typeof TaskSchema>;
 
@@ -107,6 +118,25 @@ function readEnvVar(name: string): string {
     ?.env as Record<string, unknown> | undefined;
   const value = env?.[name];
   return typeof value === "string" ? value : "";
+}
+
+function withEnvVar<T>(name: string, value: string, fn: () => Promise<T>): Promise<T> {
+  const processLike = (globalThis as unknown as {
+    process?: { env?: Record<string, string | undefined> };
+  }).process;
+  const env = processLike?.env;
+  if (!env) {
+    return fn();
+  }
+  const previous = env[name];
+  env[name] = value;
+  return fn().finally(() => {
+    if (previous === undefined) {
+      delete env[name];
+    } else {
+      env[name] = previous;
+    }
+  });
 }
 
 function formatFetchError(error: unknown): string {
@@ -294,6 +324,11 @@ export async function createTask(
               agentId: task.runAgent.agentId,
               workspaceId: task.runAgent.workspaceId,
             }
+          : task.type === "findGaps"
+            ? {
+                type: task.type,
+                userId: task.findGaps.userId,
+              }
           : { type: task.type },
     });
     console.warn(`Starting a local task: ${postUrl}`);
@@ -305,7 +340,16 @@ export async function createTask(
           method: "POST",
           body,
         });
-        const resp = await fetch(postUrl, init);
+        const parsedPostUrl = new URL(postUrl);
+        const fetchLocalTask = async () => await fetch(postUrl, init);
+        const resp =
+          parsedPostUrl.protocol === "https:" && isLocalUrl(postUrl)
+            ? await withEnvVar(
+                "NODE_TLS_REJECT_UNAUTHORIZED",
+                "0",
+                fetchLocalTask,
+              )
+            : await fetchLocalTask();
         const text = await resp.text().catch(() => "");
         if (!resp.ok) {
           console.warn(
@@ -341,6 +385,8 @@ export async function createTask(
     handlerUrl.searchParams.set("userId", task.runAgent.userId);
     handlerUrl.searchParams.set("agentId", task.runAgent.agentId);
     handlerUrl.searchParams.set("workspaceId", task.runAgent.workspaceId);
+  } else if (task.type === "findGaps") {
+    handlerUrl.searchParams.set("userId", task.findGaps.userId);
   }
 
   const taskPayload = JSON.stringify(task);

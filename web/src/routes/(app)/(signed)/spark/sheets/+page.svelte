@@ -1,10 +1,16 @@
 <script lang="ts">
 	import { renderMarkdownOptional } from '$lib/markdown';
-	import { resolveSheetSubjectLabel, resolveSheetSubjectTheme } from '$lib/spark/sheetSubjects';
+	import {
+		normalizeSheetSubjectKey,
+		resolveSheetSubjectLabel,
+		resolveSheetSubjectTheme
+	} from '$lib/spark/sheetSubjects';
 	import { sumPaperSheetMarks, type PaperSheetData } from '@spark/schemas';
 	import type { PageData } from './$types';
 
 	type Sheet = PageData['sheets'][number];
+	type Gap = PageData['gaps'][number];
+	type GapTypeFilter = 'all' | Gap['type'];
 	type SubjectFilter = {
 		key: string;
 		label: string;
@@ -13,6 +19,41 @@
 
 	let { data }: { data: PageData } = $props();
 	let selectedSubjectKey = $state('all');
+	let selectedGapType = $state<GapTypeFilter>('all');
+
+	const GAP_TYPE_FILTERS: Array<{ key: GapTypeFilter; label: string }> = [
+		{ key: 'all', label: 'All' },
+		{ key: 'knowledge_gap', label: 'Knowledge gap' },
+		{ key: 'misconception', label: 'Misconception' },
+		{ key: 'oversight', label: 'Oversight' }
+	];
+
+	const GAP_TYPE_THEME: Record<
+		Gap['type'],
+		{ label: string; accent: string; light: string; border: string; text: string }
+	> = {
+		knowledge_gap: {
+			label: 'Knowledge gap',
+			accent: '#0F8B6F',
+			light: '#E4F7F0',
+			border: '#8EDAC5',
+			text: '#075E4D'
+		},
+		misconception: {
+			label: 'Misconception',
+			accent: '#B23A56',
+			light: '#FBE7EC',
+			border: '#E9A8B8',
+			text: '#7D1E35'
+		},
+		oversight: {
+			label: 'Oversight',
+			accent: '#A36A13',
+			light: '#FFF1CC',
+			border: '#E9C46A',
+			text: '#71480A'
+		}
+	};
 
 	function formatDate(value: string): string {
 		const date = new Date(value);
@@ -26,6 +67,21 @@
 			hour: '2-digit',
 			minute: '2-digit'
 		});
+	}
+
+	function formatSheetError(error: string): string {
+		const compact = error.replace(/\s+/g, ' ').trim();
+		if (
+			/(api key|apikey|bucket|credential|env|environment|firebase|gcs|google|service account|secret|token|vertex)/i.test(
+				compact
+			)
+		) {
+			return 'This sheet could not be processed. Try opening it or grading again.';
+		}
+		if (compact.length > 180) {
+			return `${compact.slice(0, 179).trimEnd()}…`;
+		}
+		return compact;
 	}
 
 	function formatMarks(awarded: number, max: number): string {
@@ -89,6 +145,26 @@
 			`--subject-light-82:${rgbaFromHex(theme.light, 0.82)}`,
 			`--subject-accent-12:${rgbaFromHex(theme.accent, 0.12)}`
 		].join('; ');
+	}
+
+	function buildGapStyle(gap: Gap): string {
+		const subjectTheme = resolveSheetSubjectTheme({ key: gap.subjectKey, label: gap.subjectLabel });
+		const typeTheme = GAP_TYPE_THEME[gap.type];
+		return [
+			`--gap-subject-color:${subjectTheme.color}`,
+			`--gap-subject-accent:${subjectTheme.accent}`,
+			`--gap-subject-light:${subjectTheme.light}`,
+			`--gap-type-accent:${typeTheme.accent}`,
+			`--gap-type-light:${typeTheme.light}`,
+			`--gap-type-border:${typeTheme.border}`,
+			`--gap-type-text:${typeTheme.text}`,
+			`--gap-type-accent-14:${rgbaFromHex(typeTheme.accent, 0.14)}`,
+			`--gap-subject-accent-12:${rgbaFromHex(subjectTheme.accent, 0.12)}`
+		].join('; ');
+	}
+
+	function gapTypeLabel(type: Gap['type']): string {
+		return GAP_TYPE_THEME[type].label;
 	}
 
 	function resolveMarksSummary(sheet: Sheet): {
@@ -199,6 +275,25 @@
 			sheet.subjectTags.some((subject) => subject.key === selectedSubjectKey)
 		);
 	});
+
+	const selectedSubjectLabel = $derived(
+		subjectFilters.find((subject) => subject.key === selectedSubjectKey)?.label ?? 'this subject'
+	);
+
+	const filteredGaps = $derived.by(() => {
+		if (selectedSubjectKey === 'all') {
+			return [];
+		}
+		return data.gaps.filter((gap) => {
+			if (normalizeSheetSubjectKey(gap.subjectKey) !== selectedSubjectKey) {
+				return false;
+			}
+			if (selectedGapType === 'all') {
+				return true;
+			}
+			return gap.type === selectedGapType;
+		});
+	});
 </script>
 
 <svelte:head>
@@ -244,6 +339,48 @@
 				Showing {filteredSheets.length.toString()} of {data.sheets.length.toString()} sheets
 			</p>
 		</section>
+
+		{#if selectedSubjectKey !== 'all'}
+			<section class="gaps-panel" aria-label={`${selectedSubjectLabel} gaps`}>
+				<div class="gap-type-filter-list" aria-label="Gap type filters">
+					{#each GAP_TYPE_FILTERS as filter (filter.key)}
+						<button
+							type="button"
+							class:gap-type-filter--active={selectedGapType === filter.key}
+							class="gap-type-filter"
+							onclick={() => {
+								selectedGapType = filter.key;
+							}}
+						>
+							{filter.label}
+						</button>
+					{/each}
+				</div>
+
+				{#if filteredGaps.length > 0}
+					<div class="gap-row" aria-label="Practice gaps">
+						{#each filteredGaps as gap (gap.id)}
+							<a class="gap-card" style={buildGapStyle(gap)} href={`/spark/gaps/${gap.id}`}>
+								<div class="gap-card__header">
+									<span class="gap-card__type">{gapTypeLabel(gap.type)}</span>
+									<span class="gap-card__marks">
+										{gap.source.awardedMarks ?? 0}/{gap.source.maxMarks ?? 0}
+									</span>
+								</div>
+								<h2>{gap.title}</h2>
+								<p>{gap.cardQuestion}</p>
+								<footer>
+									<span>{gap.subjectLabel}</span>
+									<span>{gap.source.questionLabel ?? gap.source.questionId}</span>
+								</footer>
+							</a>
+						{/each}
+					</div>
+				{:else}
+					<p class="gap-empty">No practice gaps for {selectedSubjectLabel} yet.</p>
+				{/if}
+			</section>
+		{/if}
 
 		<div class="sheet-grid">
 			{#each filteredSheets as sheet (sheet.id)}
@@ -301,7 +438,7 @@
 							</div>
 
 							{#if sheet.error}
-								<p class="sheet-preview__error">{sheet.error}</p>
+								<p class="sheet-preview__error">{formatSheetError(sheet.error)}</p>
 							{:else if summaryHtml}
 								<div class="sheet-preview__summary markdown-content">
 									{@html summaryHtml}
@@ -448,6 +585,135 @@
 	.filters-row__count {
 		margin: 0;
 		font-size: 0.84rem;
+		color: color-mix(in srgb, var(--foreground) 68%, transparent);
+	}
+
+	.gaps-panel {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.gap-type-filter-list {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.45rem;
+		padding-bottom: 0.1rem;
+	}
+
+	.gap-type-filter {
+		flex: 0 0 auto;
+		padding: 0.48rem 0.68rem;
+		border-radius: 8px;
+		border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+		background: color-mix(in srgb, var(--card) 96%, transparent);
+		color: color-mix(in srgb, var(--foreground) 78%, transparent);
+		font-size: 0.84rem;
+		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.gap-type-filter--active {
+		border-color: color-mix(in srgb, #0f8b6f 44%, var(--border));
+		background: color-mix(in srgb, #0f8b6f 11%, var(--card));
+		color: #075e4d;
+	}
+
+	.gap-row {
+		display: flex;
+		gap: 1rem;
+		overflow-x: auto;
+		padding: 0.15rem 0 0.4rem;
+		scroll-snap-type: x proximity;
+		scrollbar-width: thin;
+	}
+
+	.gap-card {
+		flex: 0 0 clamp(17.5rem, 31%, 24rem);
+		min-width: 17.5rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.7rem;
+		min-height: 12rem;
+		padding: 1rem;
+		border-radius: 8px;
+		border: 1px solid var(--gap-type-border);
+		background:
+			linear-gradient(135deg, var(--gap-type-light) 0%, white 58%),
+			var(--gap-type-light);
+		color: inherit;
+		text-decoration: none;
+		scroll-snap-align: start;
+		box-shadow: 0 16px 38px rgba(15, 23, 42, 0.08);
+	}
+
+	.gap-card:hover {
+		border-color: color-mix(in srgb, var(--gap-type-accent) 66%, var(--gap-type-border));
+		box-shadow: 0 20px 44px rgba(15, 23, 42, 0.12);
+		transform: translateY(-1px);
+	}
+
+	.gap-card__header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.7rem;
+	}
+
+	.gap-card__type,
+	.gap-card__marks {
+		display: inline-flex;
+		align-items: center;
+		border-radius: 8px;
+		font-size: 0.72rem;
+		font-weight: 800;
+		letter-spacing: 0.07em;
+		text-transform: uppercase;
+	}
+
+	.gap-card__type {
+		padding: 0.26rem 0.5rem;
+		border: 1px solid var(--gap-type-border);
+		background: var(--gap-type-accent-14);
+		color: var(--gap-type-text);
+	}
+
+	.gap-card__marks {
+		padding: 0.22rem 0.48rem;
+		background: white;
+		color: var(--gap-subject-color);
+		border: 1px solid color-mix(in srgb, var(--gap-subject-accent) 36%, white);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.gap-card h2 {
+		margin: 0;
+		color: var(--gap-type-text);
+		font-size: 1.08rem;
+		line-height: 1.18;
+	}
+
+	.gap-card p {
+		margin: 0;
+		color: color-mix(in srgb, var(--foreground) 78%, var(--gap-type-text) 22%);
+		line-height: 1.42;
+	}
+
+	.gap-card footer {
+		display: flex;
+		justify-content: space-between;
+		gap: 0.7rem;
+		margin-top: auto;
+		color: color-mix(in srgb, var(--gap-subject-color) 72%, var(--foreground));
+		font-size: 0.78rem;
+		font-weight: 700;
+	}
+
+	.gap-empty {
+		margin: 0;
+		padding: 0.8rem 0.9rem;
+		border-radius: 8px;
+		border: 1px dashed color-mix(in srgb, var(--border) 84%, transparent);
 		color: color-mix(in srgb, var(--foreground) 68%, transparent);
 	}
 
@@ -717,6 +983,56 @@
 		color: #f0eef8;
 	}
 
+	:global([data-theme='dark'] .gap-type-filter),
+	:global(:root:not([data-theme='light']) .gap-type-filter) {
+		border-color: #3a3258;
+		background: #201c39;
+		color: #e4dff5;
+	}
+
+	:global([data-theme='dark'] .gap-type-filter--active),
+	:global(:root:not([data-theme='light']) .gap-type-filter--active) {
+		border-color: color-mix(in srgb, #24b894 48%, #3a3258);
+		background: color-mix(in srgb, #0f8b6f 20%, #201c39);
+		color: #bff6df;
+	}
+
+	:global([data-theme='dark'] .gap-card),
+	:global(:root:not([data-theme='light']) .gap-card) {
+		border-color: color-mix(in srgb, var(--gap-type-accent) 46%, #3a3258);
+		background:
+			linear-gradient(
+				135deg,
+				color-mix(in srgb, var(--gap-type-accent) 20%, #201c39) 0%,
+				#17142a 70%
+			),
+			#201c39;
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.03),
+			0 24px 56px -34px rgba(2, 6, 23, 0.82);
+	}
+
+	:global([data-theme='dark'] .gap-card__marks),
+	:global(:root:not([data-theme='light']) .gap-card__marks) {
+		background: #201c39;
+		border-color: color-mix(in srgb, var(--gap-subject-accent) 38%, #3a3258);
+		color: color-mix(in srgb, var(--gap-subject-light) 34%, #f0eef8);
+	}
+
+	:global([data-theme='dark'] .gap-card h2),
+	:global(:root:not([data-theme='light']) .gap-card h2) {
+		color: color-mix(in srgb, var(--gap-type-light) 46%, #f0eef8);
+	}
+
+	:global([data-theme='dark'] .gap-card p),
+	:global([data-theme='dark'] .gap-card footer),
+	:global([data-theme='dark'] .gap-empty),
+	:global(:root:not([data-theme='light']) .gap-card p),
+	:global(:root:not([data-theme='light']) .gap-card footer),
+	:global(:root:not([data-theme='light']) .gap-empty) {
+		color: #d8d0e9;
+	}
+
 	:global([data-theme='dark'] .sheet-signal),
 	:global(:root:not([data-theme='light']) .sheet-signal) {
 		background: #1d1934;
@@ -839,6 +1155,11 @@
 			width: 6.8rem;
 			min-width: 6.8rem;
 			margin-left: 0.65rem;
+		}
+
+		.gap-card {
+			flex-basis: 80%;
+			min-width: 80%;
 		}
 	}
 </style>

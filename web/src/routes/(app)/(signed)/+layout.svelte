@@ -23,8 +23,10 @@
 
 	type ExperienceKey = 'lesson' | 'spark' | null;
 
-	function isSheetDetailRoute(routeId: string | null | undefined): boolean {
-		return Boolean(routeId?.includes('/spark/sheets/[sheetId]'));
+	function isSheetStyleStandaloneRoute(routeId: string | null | undefined): boolean {
+		return Boolean(
+			routeId?.includes('/spark/sheets/[sheetId]') || routeId?.includes('/spark/gaps/[gapId]')
+		);
 	}
 
 	function resolveExperience(routeId: string | null | undefined): ExperienceKey {
@@ -69,7 +71,7 @@
 		userStore.set(data.user ?? null);
 	});
 	const sessionId = $derived($page.params.sessionId ?? null);
-	const showSheetDetailLayout = $derived(isSheetDetailRoute($page.route.id));
+	const showSheetDetailLayout = $derived(isSheetStyleStandaloneRoute($page.route.id));
 	const experience = $derived(resolveExperience($page.route.id));
 	const sessionHomeHref = $derived(resolveSessionHomeHref(experience, sessionId));
 	const brandCopy = $derived(resolveBrandCopy(experience));

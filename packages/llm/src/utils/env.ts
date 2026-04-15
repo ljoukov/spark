@@ -19,8 +19,8 @@ export function preferGoogleServiceAccountAuth(): void {
   if (!serviceAccountJson) {
     return;
   }
-  delete process.env.GOOGLE_API_KEY;
-  delete process.env.GEMINI_API_KEY;
+  process.env.GOOGLE_API_KEY = "";
+  process.env.GEMINI_API_KEY = "";
 
   if (
     process.env.LLM_FILES_GCS_BUCKET === undefined &&

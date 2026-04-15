@@ -5,6 +5,7 @@ import {
 	safeParseGraderWorksheetReport,
 	safeParseSolveSheetDraft
 } from '$lib/server/grader/problemReport';
+import { listLearningGaps } from '$lib/server/gaps/repo';
 import { buildGraderRunDisplay } from '$lib/server/grader/presentation';
 import { getWorkspaceTextFile, listGraderRuns } from '$lib/server/grader/repo';
 import { getSheetRunAnalyses } from '$lib/server/grader/sheetRunAnalysisRepo';
@@ -62,9 +63,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 		throw redirect(302, '/login');
 	}
 
-	const [runs, runAnalyses] = await Promise.all([
+	const [runs, runAnalyses, gapsRaw] = await Promise.all([
 		listGraderRuns(user.uid, 100),
-		getSheetRunAnalyses(user.uid)
+		getSheetRunAnalyses(user.uid),
+		listLearningGaps(user.uid, 120)
 	]);
 	const analysisByRunId = new Map(runAnalyses.map((analysis) => [analysis.runId, analysis]));
 	const sheets = await Promise.all(
@@ -130,5 +132,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 		})
 	);
 
-	return { sheets };
+	const gaps = gapsRaw.map((gap) => ({
+		...gap,
+		createdAt: gap.createdAt.toISOString(),
+		updatedAt: gap.updatedAt.toISOString()
+	}));
+
+	return { sheets, gaps };
 };

@@ -8,6 +8,7 @@ import {
 	generateSession,
 	generateQuizDefinitions,
 	generateWelcomeSessionTemplate,
+	runSparkGapsFinder,
 	runSparkAgentTask
 } from '@spark/llm';
 import {
@@ -90,6 +91,21 @@ export const POST: RequestHandler = async ({ request }) => {
 		} catch (error) {
 			console.error('[internal task] runAgent failed', { error, userId, agentId });
 			return json({ status: 'failed', reason: 'agent_failed' }, { status: 500 });
+		}
+	}
+
+	if (task.type === 'findGaps') {
+		const { userId } = task.findGaps;
+		console.log(`[internal task] findGaps userId=${userId}`);
+		try {
+			const result = await runSparkGapsFinder({
+				serviceAccountJson: requireServiceAccountJson(),
+				userId
+			});
+			return json({ status: 'completed', result }, { status: 200 });
+		} catch (error) {
+			console.error('[internal task] findGaps failed', { error, userId });
+			return json({ status: 'failed', reason: 'gaps_finder_failed' }, { status: 500 });
 		}
 	}
 

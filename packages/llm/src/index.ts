@@ -13,6 +13,7 @@ export * from "./agent/sparkAgentReplayArtifacts";
 export * from "./agent/sparkChatShared";
 export * from "./agent/sparkGraderLocalRun";
 export * from "./agent/graderAgentPrompt";
+export * from "./agent/gapsFinderAgent";
 export * from "./agent/sheetDraftAgentPrompt";
 export * from "./agent/workspaceFileStore";
 export * from "./agent/benchmarks/agenticBenchmark";

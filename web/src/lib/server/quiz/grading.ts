@@ -1,4 +1,5 @@
-import { generateText, type LlmTextDelta, type LlmTextModelId } from '@spark/llm';
+import { env } from '$env/dynamic/private';
+import type { LlmTextDelta, LlmTextModelId } from '@spark/llm';
 
 export const DEFAULT_GRADING_PROMPT =
 	'Use GCSE Biology marking standards. Award marks for each distinct point in the mark scheme.';
@@ -28,6 +29,8 @@ async function requestGradeFromModel(
 	maxAttempts: number,
 	onDelta?: (delta: LlmTextDelta) => void
 ): Promise<string> {
+	preferGoogleServiceAccountAuthForGrading();
+	const { generateText } = await import('@spark/llm');
 	let lastError: unknown = null;
 	for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
 		try {
@@ -42,6 +45,56 @@ async function requestGradeFromModel(
 		}
 	}
 	throw lastError ?? new Error('Grading request failed');
+}
+
+function preferGoogleServiceAccountAuthForGrading(): void {
+	const serviceAccountJson = (
+		env.GOOGLE_SERVICE_ACCOUNT_JSON ?? process.env.GOOGLE_SERVICE_ACCOUNT_JSON
+	)?.trim();
+	if (!serviceAccountJson) {
+		return;
+	}
+	process.env.GOOGLE_SERVICE_ACCOUNT_JSON = unwrapQuotedJson(serviceAccountJson);
+	process.env.GOOGLE_API_KEY = '';
+	process.env.GEMINI_API_KEY = '';
+
+	if (process.env.LLM_FILES_GCS_BUCKET !== undefined || process.env.VERTEX_GCS_BUCKET !== undefined) {
+		return;
+	}
+	const projectId = parseServiceAccountProjectId(serviceAccountJson);
+	if (projectId !== null) {
+		process.env.LLM_FILES_GCS_BUCKET = `${projectId}.firebasestorage.app`;
+	}
+}
+
+function parseServiceAccountProjectId(serviceAccountJson: string): string | null {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(unwrapQuotedJson(serviceAccountJson));
+	} catch {
+		return null;
+	}
+	if (parsed === null || typeof parsed !== 'object') {
+		return null;
+	}
+	const projectId = (parsed as { project_id?: unknown }).project_id;
+	if (typeof projectId !== 'string') {
+		return null;
+	}
+	const trimmed = projectId.trim();
+	return trimmed.length > 0 ? trimmed : null;
+}
+
+function unwrapQuotedJson(value: string): string {
+	const trimmed = value.trim();
+	if (
+		((trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+			(trimmed.startsWith('"') && trimmed.endsWith('"'))) &&
+		trimmed.length >= 2
+	) {
+		return trimmed.slice(1, -1);
+	}
+	return trimmed;
 }
 
 function buildGradingPrompt(input: GradeTypeAnswerInput): string {

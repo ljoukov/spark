@@ -123,6 +123,7 @@ import {
   resolveWorkspaceFilePathFromFirestoreDocument,
   resolveWorkspacePathContentType,
 } from "./workspaceFileStore";
+import { launchSparkGapsFinderForRun } from "./gapsFinderAgent";
 import {
   encodeBgraBitmapToPng,
   getPdfPageCount,
@@ -12303,27 +12304,43 @@ export async function runSparkAgentTask(
               "Grader sheet publish metadata is missing at completion time.",
             );
           }
-          await patchGraderRunStatus({
-            serviceAccountJson,
-            userId: options.userId,
-            runId: graderRunId,
-            updates: {
-              status: "done",
-              updatedAt: now,
-              completedAt: now,
-              ...(resultSummary ? { resultSummary } : {}),
-              ...(publication.paper ? { paper: publication.paper } : {}),
-              presentation: publication.presentation,
-              totals: publication.totals,
-              sheet: publication.sheet,
-              summaryPath: publication.summaryPath,
-              sheetPath: publication.sheetPath,
-            },
-          }).catch((error) => {
+          let patchedGraderRun = false;
+          try {
+            await patchGraderRunStatus({
+              serviceAccountJson,
+              userId: options.userId,
+              runId: graderRunId,
+              updates: {
+                status: "done",
+                updatedAt: now,
+                completedAt: now,
+                ...(resultSummary ? { resultSummary } : {}),
+                ...(publication.paper ? { paper: publication.paper } : {}),
+                presentation: publication.presentation,
+                totals: publication.totals,
+                sheet: publication.sheet,
+                summaryPath: publication.summaryPath,
+                sheetPath: publication.sheetPath,
+              },
+            });
+            patchedGraderRun = true;
+          } catch (error) {
             logSync?.append(
               `warn: failed to patch grader run summary: ${errorAsString(error)}`,
             );
-          });
+          }
+          if (patchedGraderRun) {
+            await launchSparkGapsFinderForRun({
+              serviceAccountJson,
+              userId: options.userId,
+              runId: graderRunId,
+              completedAt: now,
+            }).catch((error) => {
+              logSync?.append(
+                `warn: failed to launch gaps finder: ${errorAsString(error)}`,
+              );
+            });
+          }
         }
         if (sheetRunId && workspaceRoot) {
           const now = new Date();
