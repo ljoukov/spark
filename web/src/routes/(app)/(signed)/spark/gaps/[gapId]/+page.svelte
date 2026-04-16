@@ -464,55 +464,57 @@
 	</div>
 
 	<main class="gap-page__main">
-		<div class="gap-page__meta">
-			<p>{gap.subjectLabel}</p>
-			<h1>{gap.title}</h1>
-			<span>{gap.cardQuestion}</span>
-		</div>
+		<div class="gap-page__content">
+			<div class="gap-page__meta">
+				<p>{gap.subjectLabel}</p>
+				<h1>{gap.title}</h1>
+				<span>{gap.cardQuestion}</span>
+			</div>
 
-		<div class="gap-page__slide">
-			{#if activeStep.kind === 'free_text'}
-				<QuizTypeAnswer
-					question={toTypeQuestion(activeStep)}
-					value={activeAttempt.value}
-					status={activeAttempt.status === 'correct' ? 'correct' : activeAttempt.status === 'incorrect' ? 'incorrect' : 'neutral'}
-					locked={activeAttempt.locked}
-					feedback={activeAttempt.feedback}
-					showContinue={activeAttempt.showContinue}
-					continueLabel={continueLabel}
-					busy={activeAttempt.busyAction !== null}
-					busyAction={activeAttempt.busyAction}
-					submitPhase="grading"
-					answerLabel="Check"
-					dontKnowLabel="Show me"
-					eyebrow={stepEyebrow(activeStep)}
-					onInput={({ value }) => handleTypeInput(value)}
-					onSubmit={({ value }) => void handleTypeSubmit(value)}
-					onDontKnow={handleDontKnow}
-					onContinue={advance}
-				/>
-			{:else if activeStep.kind === 'multiple_choice'}
-				<QuizMultipleChoice
-					question={toMultipleQuestion(activeStep)}
-					selectedOptionId={activeAttempt.selectedOptionId}
-					status={activeAttempt.status === 'correct' ? 'correct' : activeAttempt.status === 'incorrect' ? 'incorrect' : 'neutral'}
-					locked={activeAttempt.locked}
-					feedback={activeAttempt.feedback}
-					showContinue={activeAttempt.showContinue}
-					continueLabel={continueLabel}
-					eyebrow={stepEyebrow(activeStep)}
-					onSelect={({ optionId }) => handleMultipleSelect(optionId)}
-					onSubmit={({ optionId }) => handleMultipleSubmit(optionId)}
-					onDontKnow={handleDontKnow}
-					onContinue={advance}
-				/>
-			{:else}
-				<QuizInfoCard
-					question={toInfoQuestion(activeStep)}
-					continueLabel={continueLabel}
-					onContinue={handleInfoContinue}
-				/>
-			{/if}
+			<div class="gap-page__slide">
+				{#if activeStep.kind === 'free_text'}
+					<QuizTypeAnswer
+						question={toTypeQuestion(activeStep)}
+						value={activeAttempt.value}
+						status={activeAttempt.status === 'correct' ? 'correct' : activeAttempt.status === 'incorrect' ? 'incorrect' : 'neutral'}
+						locked={activeAttempt.locked}
+						feedback={activeAttempt.feedback}
+						showContinue={activeAttempt.showContinue}
+						continueLabel={continueLabel}
+						busy={activeAttempt.busyAction !== null}
+						busyAction={activeAttempt.busyAction}
+						submitPhase="grading"
+						answerLabel="Check"
+						dontKnowLabel="Show me"
+						eyebrow={stepEyebrow(activeStep)}
+						onInput={({ value }) => handleTypeInput(value)}
+						onSubmit={({ value }) => void handleTypeSubmit(value)}
+						onDontKnow={handleDontKnow}
+						onContinue={advance}
+					/>
+				{:else if activeStep.kind === 'multiple_choice'}
+					<QuizMultipleChoice
+						question={toMultipleQuestion(activeStep)}
+						selectedOptionId={activeAttempt.selectedOptionId}
+						status={activeAttempt.status === 'correct' ? 'correct' : activeAttempt.status === 'incorrect' ? 'incorrect' : 'neutral'}
+						locked={activeAttempt.locked}
+						feedback={activeAttempt.feedback}
+						showContinue={activeAttempt.showContinue}
+						continueLabel={continueLabel}
+						eyebrow={stepEyebrow(activeStep)}
+						onSelect={({ optionId }) => handleMultipleSelect(optionId)}
+						onSubmit={({ optionId }) => handleMultipleSubmit(optionId)}
+						onDontKnow={handleDontKnow}
+						onContinue={advance}
+					/>
+				{:else}
+					<QuizInfoCard
+						question={toInfoQuestion(activeStep)}
+						continueLabel={continueLabel}
+						onContinue={handleInfoContinue}
+					/>
+				{/if}
+			</div>
 		</div>
 	</main>
 </section>
@@ -556,9 +558,29 @@
 		margin: 0 auto;
 		flex: 1;
 		flex-direction: column;
-		justify-content: center;
+		gap: 0;
+	}
+
+	.gap-page__main::before,
+	.gap-page__main::after {
+		content: '';
+		min-height: 0;
+	}
+
+	.gap-page__main::before {
+		flex: 1 1 0;
+	}
+
+	.gap-page__main::after {
+		flex: 2 1 0;
+	}
+
+	.gap-page__content {
+		display: flex;
+		width: 100%;
+		flex: 0 0 auto;
+		flex-direction: column;
 		gap: 1rem;
-		padding-bottom: 2rem;
 	}
 
 	.gap-page__meta {
@@ -615,14 +637,34 @@
 		color: #d8d0e9;
 	}
 
-	@media (max-width: 700px) {
+	@media (max-width: 71.875rem) {
+		.gap-page__top {
+			box-sizing: border-box;
+			padding-right: 2.75rem;
+		}
+
+		:global(.app-shell:has(.gap-page) .sheet-close-button) {
+			top: calc(env(safe-area-inset-top, 0px) + 1.5rem);
+		}
+	}
+
+	@media (max-width: 43.75rem) {
 		.gap-page {
-			padding: calc(env(safe-area-inset-top, 0px) + 3.6rem) 0.7rem 0.7rem;
+			padding: calc(env(safe-area-inset-top, 0px) + 0.7rem) 0.7rem 0.7rem;
+		}
+
+		:global(.app-shell:has(.gap-page) .sheet-close-button) {
+			top: calc(env(safe-area-inset-top, 0px) + 1.2rem);
 		}
 
 		.gap-page__main {
 			justify-content: flex-start;
 			padding-top: 0.3rem;
+		}
+
+		.gap-page__main::before,
+		.gap-page__main::after {
+			display: none;
 		}
 
 		.gap-page__meta h1 {
