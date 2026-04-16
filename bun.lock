@@ -9,7 +9,7 @@
       "name": "spark-eval",
       "version": "0.0.0",
       "dependencies": {
-        "@ljoukov/llm": "7.0.0",
+        "@ljoukov/llm": "7.0.6",
         "@spark/llm": "workspace:*",
         "@spark/schemas": "workspace:*",
         "commander": "^14.0.2",
@@ -49,7 +49,7 @@
       },
       "devDependencies": {
         "@eslint/js": "^9.39.2",
-        "@ljoukov/llm": "7.0.0",
+        "@ljoukov/llm": "7.0.6",
         "@types/node": "^25.0.9",
         "@types/pngjs": "^6.0.5",
         "eslint": "^9.39.2",
@@ -59,7 +59,7 @@
         "vitest": "^4.0.17",
       },
       "peerDependencies": {
-        "@ljoukov/llm": "7.0.0",
+        "@ljoukov/llm": "7.0.6",
       },
     },
     "packages/proto": {
@@ -99,7 +99,7 @@
         "@connectrpc/connect": "^2.1.1",
         "@connectrpc/connect-node": "^2.1.1",
         "@connectrpc/connect-web": "^2.1.1",
-        "@ljoukov/llm": "7.0.0",
+        "@ljoukov/llm": "7.0.6",
         "@ljoukov/sheet": "0.3.0",
         "@spark/llm": "workspace:*",
         "@spark/proto": "workspace:*",
@@ -476,7 +476,7 @@
 
     "@js-sdsl/ordered-map": ["@js-sdsl/ordered-map@4.4.2", "", {}, "sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw=="],
 
-    "@ljoukov/llm": ["@ljoukov/llm@7.0.0", "", { "dependencies": { "@alcyone-labs/zod-to-json-schema": "^4.0.10", "@google-cloud/storage": "^7.19.0", "@google/genai": "^1.45.0", "ajv": "^8.18.0", "ajv-formats": "^3.0.1", "google-auth-library": "^10.5.0", "mime": "^4.1.0", "openai": "^6.29.0", "undici": "^7.21.0", "ws": "^8.19.0", "zod": "^4.3.6" } }, "sha512-2CuF+geMHy0dGJH1jHUWJMAVijcpf8eKXWUZebNl8/v97apGb9HGMoVUBXRRpfejdh3OsRx12xGq66YBpjz0MQ=="],
+    "@ljoukov/llm": ["@ljoukov/llm@7.0.6", "", { "dependencies": { "@alcyone-labs/zod-to-json-schema": "^4.0.10", "@google-cloud/storage": "^7.19.0", "@google/genai": "^1.45.0", "ajv": "^8.18.0", "ajv-formats": "^3.0.1", "google-auth-library": "^10.5.0", "mime": "^4.1.0", "openai": "^6.29.0", "undici": "^7.21.0", "ws": "^8.19.0", "zod": "^4.3.6" } }, "sha512-3FDJj3LXybfFaFp8aXAexx18twWg1sHc74OOQnPK15YDOlzcz7YZ/bhUCYgmtuzYkdjtuNuGK5+MOCfnFkVAsQ=="],
 
     "@ljoukov/sheet": ["@ljoukov/sheet@0.3.0", "", { "dependencies": { "@lucide/svelte": "^0.562.0", "esm-env": "^1.2.2", "highlight.js": "^11.11.1", "katex": "^0.16.27", "marked": "^17.0.5", "marked-katex-extension": "^5.1.7", "zod": "^4.3.6" }, "peerDependencies": { "svelte": "^5.0.0" } }, "sha512-n0dfcP3F7feQTEdDlvN1MYlhDtMuhcbhkYnwmENZNDxr02TCg+0DmxyAdL7VBR90fa71lAKYFkxzQz8STlLnCg=="],
 

@@ -29,6 +29,10 @@
 		);
 	}
 
+	function isGuideImmersiveRoute(routeId: string | null | undefined): boolean {
+		return Boolean(routeId?.includes('/spark/guides/[id]'));
+	}
+
 	function resolveExperience(routeId: string | null | undefined): ExperienceKey {
 		if (!routeId) {
 			return null;
@@ -72,6 +76,7 @@
 	});
 	const sessionId = $derived($page.params.sessionId ?? null);
 	const showSheetDetailLayout = $derived(isSheetStyleStandaloneRoute($page.route.id));
+	const showGuideImmersiveLayout = $derived(isGuideImmersiveRoute($page.route.id));
 	const experience = $derived(resolveExperience($page.route.id));
 	const sessionHomeHref = $derived(resolveSessionHomeHref(experience, sessionId));
 	const brandCopy = $derived(resolveBrandCopy(experience));
@@ -362,6 +367,10 @@
 			<main class="app-main app-main--sheet-detail">
 				{@render children?.()}
 			</main>
+		{:else if showGuideImmersiveLayout}
+			<main class="app-main app-main--guide-immersive">
+				{@render children?.()}
+			</main>
 		{:else}
 			<header class="app-header" data-experience={experience ?? ''}>
 				<a class="app-brand" href={sessionHomeHref}>
@@ -473,13 +482,20 @@
 								<DropdownMenu.SubTrigger class="app-user-menu__subtrigger">
 									Appearance
 								</DropdownMenu.SubTrigger>
-								<DropdownMenu.SubContent class="app-appearance-menu" alignOffset={-8} sideOffset={8}>
+								<DropdownMenu.SubContent
+									class="app-appearance-menu"
+									alignOffset={-8}
+									sideOffset={8}
+								>
 									<DropdownMenu.RadioGroup
 										value={theme}
 										onValueChange={(value) => handleThemeSelect(value as ThemePreference)}
 									>
 										{#each themeOptions as option}
-											<DropdownMenu.RadioItem value={option.value} class="app-appearance-menu__item">
+											<DropdownMenu.RadioItem
+												value={option.value}
+												class="app-appearance-menu__item"
+											>
 												<CheckIcon class="theme-check" />
 												<span>{option.label}</span>
 											</DropdownMenu.RadioItem>
@@ -807,6 +823,11 @@
 
 	.app-main--sheet-detail {
 		overflow: auto;
+	}
+
+	.app-main--guide-immersive {
+		overflow: hidden;
+		scrollbar-gutter: auto;
 	}
 
 	/* CSS-only lock: when page content contains a `.workspace` (code editor).

@@ -6,7 +6,11 @@ const MAX_PARALLEL_REQUESTS = 3;
 const MIN_INTERVAL_BETWEEN_START_MS = 200;
 const START_JITTER_MS = 200;
 
-export const OPENAI_MODEL_IDS = ["gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"] as const;
+export const OPENAI_MODEL_IDS = [
+  "gpt-5.4",
+  "gpt-5.4-mini",
+  "gpt-5.4-nano",
+] as const;
 
 export const CHATGPT_ONLY_MODEL_IDS = [
   "gpt-5.4-fast",
@@ -66,10 +70,6 @@ const OPENAI_GPT_54_NANO_PRICING: OpenAiPricing = {
   cachedRate: 0.005 / 1_000_000,
   outputRate: 0.4 / 1_000_000,
 };
-
-export type OpenAiReasoningEffort = "low" | "medium" | "high" | "xhigh";
-
-export const DEFAULT_OPENAI_REASONING_EFFORT: OpenAiReasoningEffort = "medium";
 
 export function isOpenAiModelId(value: string): value is OpenAiModelId {
   return (OPENAI_MODEL_IDS as readonly string[]).includes(value);

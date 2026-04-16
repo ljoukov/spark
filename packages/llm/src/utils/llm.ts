@@ -39,10 +39,13 @@ import type { Part as GooglePart } from "@google/genai";
 import type { ResponseTextConfig } from "openai/resources/responses/responses";
 import { z } from "zod";
 
-import type { OpenAiReasoningEffort } from "./openai-llm";
 import { loadLocalEnv } from "./env";
 import { generateGeminiTextAndImages } from "./gemini";
-import type { JobProgressReporter, LlmUsageChunk, ModelCallHandle } from "./concurrency";
+import type {
+  JobProgressReporter,
+  LlmUsageChunk,
+  ModelCallHandle,
+} from "./concurrency";
 import {
   configureSparkLlmTelemetryFromEnv,
   publishSparkLlmCallMetricsFromEnv,
@@ -73,6 +76,7 @@ export type {
   LlmImageData,
   LlmImageSize,
   LlmStreamEvent,
+  LlmThinkingLevel,
   LlmToolCallContext,
   LlmToolConfig,
   LlmToolSet,
@@ -92,14 +96,18 @@ type LlmInlineDataPart = {
   mimeType?: string;
 };
 
-export type LlmContentPart = { type: "text"; text: string; thought?: boolean } | LlmInlineDataPart;
+export type LlmContentPart =
+  | { type: "text"; text: string; thought?: boolean }
+  | LlmInlineDataPart;
 
 export type LlmContent = {
   readonly role: LlmRole;
   readonly parts: readonly LlmContentPart[];
 };
 
-export function convertGooglePartsToLlmParts(parts: readonly GooglePart[]): LlmContentPart[] {
+export function convertGooglePartsToLlmParts(
+  parts: readonly GooglePart[],
+): LlmContentPart[] {
   // @ljoukov/llm depends on its own @google/genai version; cast via unknown to avoid coupling.
   return convertGooglePartsToLlmPartsV2(
     parts as unknown as Parameters<typeof convertGooglePartsToLlmPartsV2>[0],
@@ -118,7 +126,9 @@ const LEGACY_LLM_MODEL_ID_ALIASES = {
 
 function normaliseLlmModelId(modelId: string): string {
   const mapped =
-    LEGACY_LLM_MODEL_ID_ALIASES[modelId as keyof typeof LEGACY_LLM_MODEL_ID_ALIASES];
+    LEGACY_LLM_MODEL_ID_ALIASES[
+      modelId as keyof typeof LEGACY_LLM_MODEL_ID_ALIASES
+    ];
   if (mapped !== undefined) {
     return mapped;
   }
@@ -173,7 +183,7 @@ export type LlmCallBaseOptions = {
   readonly progress?: JobProgressReporter;
   readonly debug?: LlmDebugOptions;
   readonly imageSize?: LlmImageSize;
-  readonly openAiReasoningEffort?: OpenAiReasoningEffort;
+  readonly thinkingLevel?: LlmThinkingLevel;
 };
 
 export type LlmTextCallOptions = LlmCallBaseOptions & {
@@ -185,7 +195,10 @@ export type LlmTextCallOptions = LlmCallBaseOptions & {
 };
 
 // Gemini does not support tool calls when responseJsonSchema/JSON mode is used, so tools are excluded here.
-export type LlmJsonCallOptions<T> = Omit<LlmTextCallOptions, "responseJsonSchema" | "tools"> & {
+export type LlmJsonCallOptions<T> = Omit<
+  LlmTextCallOptions,
+  "responseJsonSchema" | "tools"
+> & {
   readonly schema: z.ZodType<T>;
   readonly responseJsonSchema?: JsonSchema;
   readonly openAiSchemaName?: string;
@@ -261,7 +274,9 @@ async function generateImagesWithDirectGemini(
                   ...(options.imageAspectRatio
                     ? { aspectRatio: options.imageAspectRatio }
                     : {}),
-                  ...(options.imageSize ? { imageSize: options.imageSize } : {}),
+                  ...(options.imageSize
+                    ? { imageSize: options.imageSize }
+                    : {}),
                 },
               }
             : {}),
@@ -305,8 +320,8 @@ export type LlmToolLoopStep = {
     readonly responseTokens?: number;
     readonly responseImageTokens?: number;
     readonly thinkingTokens?: number;
-  readonly totalTokens?: number;
-  readonly toolUsePromptTokens?: number;
+    readonly totalTokens?: number;
+    readonly toolUsePromptTokens?: number;
   };
   readonly costUsd?: number;
   readonly timing?: {
@@ -347,7 +362,7 @@ export type LlmToolLoopOptions = {
   readonly maxSteps?: number;
   readonly progress?: JobProgressReporter;
   readonly debug?: LlmDebugOptions;
-  readonly openAiReasoningEffort?: OpenAiReasoningEffort;
+  readonly thinkingLevel?: LlmThinkingLevel;
   readonly onDelta?: (delta: LlmTextDelta) => void;
   readonly onEvent?: (event: LlmStreamEvent) => void;
   readonly steering?: LlmToolLoopSteeringChannel;
@@ -368,7 +383,9 @@ function createFallbackProgress(label: string): JobProgressReporter {
 }
 
 function isInlineImageMime(mimeType: string | undefined): boolean {
-  return typeof mimeType === "string" && mimeType.toLowerCase().startsWith("image/");
+  return (
+    typeof mimeType === "string" && mimeType.toLowerCase().startsWith("image/")
+  );
 }
 
 function estimateInlineBytes(data: string): number {
@@ -421,19 +438,10 @@ const INPUT_ROLE_FROM_CONTENT_ROLE = {
   model: "assistant",
   system: "system",
   tool: "assistant",
-} as const satisfies Record<LlmRole, "user" | "assistant" | "system" | "developer">;
-
-function resolveThinkingLevel(
-  openAiReasoningEffort: OpenAiReasoningEffort | undefined,
-): LlmThinkingLevel | undefined {
-  if (openAiReasoningEffort === undefined) {
-    return undefined;
-  }
-  if (openAiReasoningEffort === "xhigh") {
-    return "high";
-  }
-  return openAiReasoningEffort;
-}
+} as const satisfies Record<
+  LlmRole,
+  "user" | "assistant" | "system" | "developer"
+>;
 
 function toInputMessages(contents: readonly LlmContent[]): Array<{
   role: "user" | "assistant" | "system" | "developer";
@@ -445,7 +453,11 @@ function toInputMessages(contents: readonly LlmContent[]): Array<{
   }));
 }
 
-function reportPromptUsage(progress: JobProgressReporter, handle: ModelCallHandle, contents: readonly LlmContent[]): void {
+function reportPromptUsage(
+  progress: JobProgressReporter,
+  handle: ModelCallHandle,
+  contents: readonly LlmContent[],
+): void {
   const promptStats = summarisePromptStats(contents);
   const chunk: LlmUsageChunk = {
     prompt: {
@@ -461,7 +473,9 @@ function resolveMetricsStatus(blocked: boolean): "ok" | "blocked" {
   return blocked ? "blocked" : "ok";
 }
 
-export async function generateText(options: LlmTextCallOptions): Promise<string> {
+export async function generateText(
+  options: LlmTextCallOptions,
+): Promise<string> {
   loadLocalEnv();
   configureSparkLlmTelemetryFromEnv();
 
@@ -482,7 +496,7 @@ export async function generateText(options: LlmTextCallOptions): Promise<string>
     responseMimeType: options.responseMimeType,
     responseJsonSchema: options.responseJsonSchema,
     imageSize: options.imageSize,
-    thinkingLevel: resolveThinkingLevel(options.openAiReasoningEffort),
+    thinkingLevel: options.thinkingLevel,
     openAiTextFormat: options.openAiTextFormat,
     telemetry: false,
   });
@@ -548,7 +562,9 @@ export async function generateText(options: LlmTextCallOptions): Promise<string>
   }
 }
 
-export async function generateJson<T>(options: LlmJsonCallOptions<T>): Promise<T> {
+export async function generateJson<T>(
+  options: LlmJsonCallOptions<T>,
+): Promise<T> {
   loadLocalEnv();
   configureSparkLlmTelemetryFromEnv();
 
@@ -574,7 +590,10 @@ export async function generateJson<T>(options: LlmJsonCallOptions<T>): Promise<T
     }
     return floored;
   };
-  const maxAttempts = normaliseAttempts(options.maxAttempts) ?? normaliseAttempts(options.maxRetries) ?? 2;
+  const maxAttempts =
+    normaliseAttempts(options.maxAttempts) ??
+    normaliseAttempts(options.maxRetries) ??
+    2;
   const startedAtMs = Date.now();
 
   try {
@@ -583,9 +602,13 @@ export async function generateJson<T>(options: LlmJsonCallOptions<T>): Promise<T
       input: toInputMessages(options.contents),
       schema: options.schema,
       maxAttempts,
-      ...(options.openAiSchemaName ? { openAiSchemaName: options.openAiSchemaName } : {}),
-      ...(options.normalizeJson ? { normalizeJson: options.normalizeJson } : {}),
-      thinkingLevel: resolveThinkingLevel(options.openAiReasoningEffort),
+      ...(options.openAiSchemaName
+        ? { openAiSchemaName: options.openAiSchemaName }
+        : {}),
+      ...(options.normalizeJson
+        ? { normalizeJson: options.normalizeJson }
+        : {}),
+      thinkingLevel: options.thinkingLevel,
       telemetry: false,
       onEvent: (event) => {
         if (event.type === "delta") {
@@ -601,7 +624,9 @@ export async function generateJson<T>(options: LlmJsonCallOptions<T>): Promise<T
             });
           }
         } else if (event.type === "model") {
-          progress.recordModelUsage(handle, { modelVersion: event.modelVersion });
+          progress.recordModelUsage(handle, {
+            modelVersion: event.modelVersion,
+          });
         } else if (event.type === "usage") {
           progress.recordModelUsage(handle, {
             modelVersion: event.modelVersion,
@@ -640,7 +665,9 @@ export async function generateJson<T>(options: LlmJsonCallOptions<T>): Promise<T
   }
 }
 
-export async function runToolLoop(options: LlmToolLoopOptions): Promise<LlmToolLoopResult> {
+export async function runToolLoop(
+  options: LlmToolLoopOptions,
+): Promise<LlmToolLoopResult> {
   loadLocalEnv();
   configureSparkLlmTelemetryFromEnv();
 
@@ -648,24 +675,23 @@ export async function runToolLoop(options: LlmToolLoopOptions): Promise<LlmToolL
 
   const onEvent: ((event: LlmStreamEvent) => void) | undefined =
     options.onDelta || options.onEvent
-    ? (event) => {
-        options.onEvent?.(event);
-        if (event.type !== "delta") {
-          return;
+      ? (event) => {
+          options.onEvent?.(event);
+          if (event.type !== "delta") {
+            return;
+          }
+          if (event.channel === "response") {
+            options.onDelta?.({ textDelta: event.text });
+          } else {
+            options.onDelta?.({ thoughtDelta: event.text });
+          }
         }
-        if (event.channel === "response") {
-          options.onDelta?.({ textDelta: event.text });
-        } else {
-          options.onDelta?.({ thoughtDelta: event.text });
-        }
-      }
-    : undefined;
+      : undefined;
 
   const input =
-    "prompt" in options
-      ? options.prompt
-      : toInputMessages(options.contents);
-  const instructions = "systemPrompt" in options ? options.systemPrompt : undefined;
+    "prompt" in options ? options.prompt : toInputMessages(options.contents);
+  const instructions =
+    "systemPrompt" in options ? options.systemPrompt : undefined;
   const resolvedModelId = resolveLlmTextModelId(options.modelId);
 
   // We do not currently stream per-step progress into JobProgressReporter; callers
@@ -680,7 +706,7 @@ export async function runToolLoop(options: LlmToolLoopOptions): Promise<LlmToolL
     tools: options.tools,
     modelTools: options.modelTools,
     maxSteps: options.maxSteps,
-    thinkingLevel: resolveThinkingLevel(options.openAiReasoningEffort),
+    thinkingLevel: options.thinkingLevel,
     steering: options.steering,
     ...(onEvent ? { onEvent } : {}),
   };
@@ -691,7 +717,9 @@ export async function runToolLoop(options: LlmToolLoopOptions): Promise<LlmToolL
     const result = await runAgentLoopV2({
       ...request,
       telemetry: false,
-      ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
+      ...(options.subagents !== undefined
+        ? { subagents: options.subagents }
+        : {}),
     });
 
     const publishedSteps: LlmToolLoopStep[] = result.steps.map((step) => ({
@@ -773,7 +801,9 @@ export async function runToolLoop(options: LlmToolLoopOptions): Promise<LlmToolL
   }
 }
 
-export async function generateImages(options: LlmGenerateImagesOptions): Promise<LlmImageData[]> {
+export async function generateImages(
+  options: LlmGenerateImagesOptions,
+): Promise<LlmImageData[]> {
   loadLocalEnv();
   configureSparkLlmTelemetryFromEnv();
 
@@ -815,7 +845,10 @@ export async function generateImages(options: LlmGenerateImagesOptions): Promise
 }
 
 export async function generateImageInBatches(
-  options: LlmGenerateImagesOptions & { batchSize: number; overlapSize: number },
+  options: LlmGenerateImagesOptions & {
+    batchSize: number;
+    overlapSize: number;
+  },
 ): Promise<LlmImageData[]> {
   loadLocalEnv();
   configureSparkLlmTelemetryFromEnv();

@@ -30,10 +30,10 @@ import {
   runToolLoop,
   tool,
   type LlmDebugOptions,
+  type LlmThinkingLevel,
   type LlmTextModelId,
   type LlmToolConfig,
 } from "../utils/llm";
-import type { OpenAiReasoningEffort } from "../utils/openai-llm";
 import type { JobProgressReporter, LlmUsageChunk } from "../utils/concurrency";
 import { errorAsString } from "../utils/error";
 import { loadEnvFromFile, loadLocalEnv } from "../utils/env";
@@ -67,9 +67,9 @@ function formatCurrencyUsd(value: number): string {
   }).format(safeValue);
 }
 
-function resolveOpenAiReasoningEffort(
+function resolveThinkingLevel(
   modelId: LlmTextModelId,
-): OpenAiReasoningEffort | undefined {
+): LlmThinkingLevel | undefined {
   if (modelId.includes("gpt-5.4") || modelId.includes("gpt-5.3-codex-spark")) {
     return "medium";
   }
@@ -1348,7 +1348,9 @@ function loadAgentEnv(): void {
   const fileDir = path.dirname(currentFile);
   const repoRoot = path.resolve(fileDir, "..", "..", "..", "..");
   loadEnvFromFile(path.join(repoRoot, ".env.local"), { override: false });
-  loadEnvFromFile(path.join(repoRoot, "web", ".env.local"), { override: false });
+  loadEnvFromFile(path.join(repoRoot, "web", ".env.local"), {
+    override: false,
+  });
 }
 
 function buildSessionAgentTools(options: {
@@ -2037,8 +2039,7 @@ function buildSessionAgentTools(options: {
           subStage: input.debugLabel ?? "call",
         };
         const generationModelId: LlmTextModelId = "gemini-2.5-pro";
-        const generationReasoning =
-          resolveOpenAiReasoningEffort(generationModelId);
+        const generationThinkingLevel = resolveThinkingLevel(generationModelId);
         const templateText = await readFile(
           resolveWorkspacePath(paths.workspaceDir, input.promptPath),
           "utf8",
@@ -2065,7 +2066,7 @@ function buildSessionAgentTools(options: {
           }
           const text = await generateText({
             modelId: generationModelId,
-            openAiReasoningEffort: generationReasoning,
+            thinkingLevel: generationThinkingLevel,
             contents: [
               {
                 role: "user",
@@ -2188,7 +2189,7 @@ export async function runSessionAgentSmokeTest(options: {
   const modelId = options.modelId ?? DEFAULT_AGENT_MODEL_ID;
   const includeStory = true;
   const includeCoding = true;
-  const openAiReasoningEffort = resolveOpenAiReasoningEffort(modelId);
+  const thinkingLevel = resolveThinkingLevel(modelId);
   const tools = buildSessionAgentTools({
     paths,
     progress: options.progress,
@@ -2215,7 +2216,7 @@ export async function runSessionAgentSmokeTest(options: {
     tools,
     maxSteps: 20,
     progress: options.progress,
-    openAiReasoningEffort,
+    thinkingLevel,
     debug: { rootDir: paths.debugDir, stage: "agent-smoke" },
   });
 
@@ -2264,7 +2265,7 @@ export async function runSessionGenerationAgent(
   const includeCoding = options.includeCoding ?? true;
   const modelId = options.modelId ?? DEFAULT_AGENT_MODEL_ID;
   const maxSteps = options.maxSteps ?? DEFAULT_MAX_STEPS;
-  const openAiReasoningEffort = resolveOpenAiReasoningEffort(modelId);
+  const thinkingLevel = resolveThinkingLevel(modelId);
   const paths = resolveWorkspacePaths(options.workingDirectory);
 
   const brief =
@@ -2317,7 +2318,7 @@ export async function runSessionGenerationAgent(
       tools,
       maxSteps,
       progress: options.progress,
-      openAiReasoningEffort,
+      thinkingLevel,
       debug: {
         rootDir: paths.debugDir,
         stage: "agent-loop",

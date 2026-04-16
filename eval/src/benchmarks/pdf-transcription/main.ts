@@ -100,7 +100,10 @@ const APPROACHES: readonly Approach[] = [
 ] as const;
 
 const STRATEGIES: readonly StrategyId[] = ["bulk", "individual"] as const;
-const COORDINATE_MODES: readonly CoordinateMode[] = ["norm", "int1000"] as const;
+const COORDINATE_MODES: readonly CoordinateMode[] = [
+  "norm",
+  "int1000",
+] as const;
 
 const JUDGE_MODEL_IDS = [
   "gemini-2.5-pro",
@@ -213,7 +216,10 @@ function setProgressTotal(total: number): void {
 }
 
 function incrementProgress(): void {
-  progressState.completed = Math.min(progressState.total, progressState.completed + 1);
+  progressState.completed = Math.min(
+    progressState.total,
+    progressState.completed + 1,
+  );
 }
 
 function getProgressPercent(): number {
@@ -377,7 +383,10 @@ async function assertFileExists(inputPath: string): Promise<void> {
   });
 }
 
-function requireFunctionTool(value: unknown, name: string): asserts value is FunctionToolLike {
+function requireFunctionTool(
+  value: unknown,
+  name: string,
+): asserts value is FunctionToolLike {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`Tool "${name}" is not an object.`);
   }
@@ -404,10 +413,12 @@ function mergeUsageTokens(
     promptTokens: next.promptTokens ?? current.promptTokens,
     cachedTokens: next.cachedTokens ?? current.cachedTokens,
     responseTokens: next.responseTokens ?? current.responseTokens,
-    responseImageTokens: next.responseImageTokens ?? current.responseImageTokens,
+    responseImageTokens:
+      next.responseImageTokens ?? current.responseImageTokens,
     thinkingTokens: next.thinkingTokens ?? current.thinkingTokens,
     totalTokens: next.totalTokens ?? current.totalTokens,
-    toolUsePromptTokens: next.toolUsePromptTokens ?? current.toolUsePromptTokens,
+    toolUsePromptTokens:
+      next.toolUsePromptTokens ?? current.toolUsePromptTokens,
   };
 }
 
@@ -415,7 +426,7 @@ async function generateTextWithMetrics(options: {
   modelId: LlmTextModelId;
   contents: readonly LlmContent[];
   responseMimeType?: string;
-  openAiReasoningEffort?: "low" | "medium" | "high";
+  thinkingLevel?: "low" | "medium" | "high";
 }): Promise<{ text: string; metrics: ModelCallMetrics }> {
   let activeHandle: ModelCallHandle | null = null;
   let modelVersion: string | null = null;
@@ -432,7 +443,10 @@ async function generateTextWithMetrics(options: {
       if (activeHandle !== handle) {
         return;
       }
-      if (typeof chunk.modelVersion === "string" && chunk.modelVersion.trim().length > 0) {
+      if (
+        typeof chunk.modelVersion === "string" &&
+        chunk.modelVersion.trim().length > 0
+      ) {
         modelVersion = chunk.modelVersion.trim();
       }
       usageTokens = mergeUsageTokens(usageTokens, chunk.tokens);
@@ -447,10 +461,10 @@ async function generateTextWithMetrics(options: {
   const text = await generateText({
     modelId: options.modelId,
     contents: options.contents,
-    ...(options.responseMimeType ? { responseMimeType: options.responseMimeType } : {}),
-    ...(options.openAiReasoningEffort
-      ? { openAiReasoningEffort: options.openAiReasoningEffort }
+    ...(options.responseMimeType
+      ? { responseMimeType: options.responseMimeType }
       : {}),
+    ...(options.thinkingLevel ? { thinkingLevel: options.thinkingLevel } : {}),
     progress,
   });
   const elapsedMs = Date.now() - startedAt;
@@ -533,7 +547,10 @@ function toFiniteInteger(value: unknown): number | null {
   return Math.round(numeric);
 }
 
-function normaliseDiagramManifest(raw: unknown, maxDiagrams: number): DiagramManifest {
+function normaliseDiagramManifest(
+  raw: unknown,
+  maxDiagrams: number,
+): DiagramManifest {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     throw new Error("Diagram extraction output is not an object.");
   }
@@ -549,13 +566,16 @@ function normaliseDiagramManifest(raw: unknown, maxDiagrams: number): DiagramMan
       continue;
     }
     const entry = rawEntry as Record<string, unknown>;
-    const problemIdRaw =
-      (typeof entry.problemId === "string" && entry.problemId.trim().length > 0
+    const problemIdRaw = (
+      typeof entry.problemId === "string" && entry.problemId.trim().length > 0
         ? entry.problemId
         : typeof entry.problem === "string" && entry.problem.trim().length > 0
           ? entry.problem
-          : "unknown").trim();
-    const page = toFiniteInteger(entry.page ?? entry.pageNumber ?? entry.page_number);
+          : "unknown"
+    ).trim();
+    const page = toFiniteInteger(
+      entry.page ?? entry.pageNumber ?? entry.page_number,
+    );
     if (page === null || page < 1) {
       continue;
     }
@@ -605,9 +625,13 @@ function normaliseDiagramManifest(raw: unknown, maxDiagrams: number): DiagramMan
 
     if (bboxNorm === null) {
       const bboxNormRaw =
-        entry.bboxNorm && typeof entry.bboxNorm === "object" && !Array.isArray(entry.bboxNorm)
+        entry.bboxNorm &&
+        typeof entry.bboxNorm === "object" &&
+        !Array.isArray(entry.bboxNorm)
           ? (entry.bboxNorm as Record<string, unknown>)
-          : entry.bbox && typeof entry.bbox === "object" && !Array.isArray(entry.bbox)
+          : entry.bbox &&
+              typeof entry.bbox === "object" &&
+              !Array.isArray(entry.bbox)
             ? (entry.bbox as Record<string, unknown>)
             : null;
       if (!bboxNormRaw) {
@@ -646,12 +670,15 @@ function normaliseDiagramManifest(raw: unknown, maxDiagrams: number): DiagramMan
         ? entry.label.trim()
         : undefined;
     const description =
-      typeof entry.description === "string" && entry.description.trim().length > 0
+      typeof entry.description === "string" &&
+      entry.description.trim().length > 0
         ? entry.description.trim()
         : undefined;
     const confidenceRaw = toFiniteNumber(entry.confidence);
     const confidence =
-      confidenceRaw !== null ? Math.max(0, Math.min(1, confidenceRaw)) : undefined;
+      confidenceRaw !== null
+        ? Math.max(0, Math.min(1, confidenceRaw))
+        : undefined;
 
     normalizedDiagrams.push({
       id,
@@ -683,8 +710,13 @@ async function renderPdfAssets(options: {
   sourcePageImages: string[];
 }> {
   const pdfBytes = await readFile(options.pdfPath);
-  const pageCount = await getPdfPageCount({ pdfBytes: Uint8Array.from(pdfBytes) });
-  const pageNumbers = Array.from({ length: pageCount }, (_, index) => index + 1);
+  const pageCount = await getPdfPageCount({
+    pdfBytes: Uint8Array.from(pdfBytes),
+  });
+  const pageNumbers = Array.from(
+    { length: pageCount },
+    (_, index) => index + 1,
+  );
   const renderedByPage = await renderPdfPagesBgra({
     pdfBytes: Uint8Array.from(pdfBytes),
     pageNumbers,
@@ -737,7 +769,11 @@ async function cropDiagramImages(options: {
   renderedByPage: Map<number, PdfiumBitmap>;
   diagramsDir: string;
 }): Promise<Array<{ problemId: string; imagePath: string; label?: string }>> {
-  const diagrams: Array<{ problemId: string; imagePath: string; label?: string }> = [];
+  const diagrams: Array<{
+    problemId: string;
+    imagePath: string;
+    label?: string;
+  }> = [];
   for (const [index, entry] of options.manifest.diagrams.entries()) {
     const pageBitmap = options.renderedByPage.get(entry.page);
     if (!pageBitmap) {
@@ -775,7 +811,10 @@ function appendDiagramMarkdown(options: {
   lines.push("");
   lines.push("## Extracted Diagrams");
 
-  const grouped = new Map<string, Array<{ imagePath: string; label?: string }>>();
+  const grouped = new Map<
+    string,
+    Array<{ imagePath: string; label?: string }>
+  >();
   for (const entry of options.diagrams) {
     const key = normaliseProblemId(entry.problemId);
     const existing = grouped.get(key);
@@ -795,7 +834,8 @@ function appendDiagramMarkdown(options: {
       const rel = path
         .relative(path.dirname(options.markdownPath), entry.imagePath)
         .replaceAll("\\", "/");
-      const label = entry.label?.trim() ?? `${problemId} diagram ${(index + 1).toString()}`;
+      const label =
+        entry.label?.trim() ?? `${problemId} diagram ${(index + 1).toString()}`;
       lines.push(`![${label}](${rel})`);
     }
   }
@@ -846,7 +886,12 @@ async function runJudge(options: {
     },
     {
       type: "text",
-      text: ["Transcription markdown:", "```markdown", markdownText, "```"].join("\n"),
+      text: [
+        "Transcription markdown:",
+        "```markdown",
+        markdownText,
+        "```",
+      ].join("\n"),
     },
   ];
 
@@ -867,7 +912,7 @@ async function runJudge(options: {
     contents: [{ role: "user", parts }],
     responseMimeType: "application/json",
     ...(options.modelId.startsWith("chatgpt-")
-      ? { openAiReasoningEffort: "low" as const }
+      ? { thinkingLevel: "low" as const }
       : {}),
   });
 
@@ -930,7 +975,9 @@ function createPromptForDiagramExtraction(
   ].join("\n");
 }
 
-function createPromptForTranscription(problemIds: readonly ProblemId[]): string {
+function createPromptForTranscription(
+  problemIds: readonly ProblemId[],
+): string {
   return [
     `Transcribe only these problems: ${problemIds.join(", ")}.`,
     "Return markdown only.",
@@ -944,7 +991,10 @@ function mergeManifests(manifests: DiagramManifest[]): DiagramManifest {
   const diagrams = manifests.flatMap((item) => item.diagrams);
   const notes = manifests
     .map((item) => item.notes)
-    .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    .filter(
+      (item): item is string =>
+        typeof item === "string" && item.trim().length > 0,
+    )
     .join("\n");
   return DiagramManifestSchema.parse({
     diagrams,
@@ -1015,7 +1065,10 @@ async function executeToolCall(options: {
   };
 }
 
-function getOutputPathOrThrow(result: Record<string, unknown>, label: string): string {
+function getOutputPathOrThrow(
+  result: Record<string, unknown>,
+  label: string,
+): string {
   const outputPath = result.outputPath;
   if (typeof outputPath !== "string" || outputPath.trim().length === 0) {
     throw new Error(`${label} missing outputPath.`);
@@ -1049,7 +1102,10 @@ async function runPdfToolPipeline(options: {
       fallbackModelId: options.approach.modelId,
       input: {
         pdfPath: options.workspaceRelativePdfPath,
-        prompt: createPromptForDiagramExtraction(PROBLEM_IDS, options.coordinateMode),
+        prompt: createPromptForDiagramExtraction(
+          PROBLEM_IDS,
+          options.coordinateMode,
+        ),
         outputPath: "output/diagrams-bulk.json",
         maxDiagrams: 24,
         modelId: options.approach.modelId,
@@ -1082,7 +1138,9 @@ async function runPdfToolPipeline(options: {
     );
 
     const manifest = DiagramManifestSchema.parse(
-      JSON.parse(await readFile(path.join(options.runDir, diagramPath), "utf8")),
+      JSON.parse(
+        await readFile(path.join(options.runDir, diagramPath), "utf8"),
+      ),
     );
     const transcriptionMarkdown = await readFile(
       path.join(options.runDir, transcriptionPath),
@@ -1109,7 +1167,10 @@ async function runPdfToolPipeline(options: {
       fallbackModelId: options.approach.modelId,
       input: {
         pdfPath: options.workspaceRelativePdfPath,
-        prompt: createPromptForDiagramExtraction([problemId], options.coordinateMode),
+        prompt: createPromptForDiagramExtraction(
+          [problemId],
+          options.coordinateMode,
+        ),
         outputPath: `output/diagrams-${key}.json`,
         maxDiagrams: 8,
         modelId: options.approach.modelId,
@@ -1123,7 +1184,9 @@ async function runPdfToolPipeline(options: {
     manifestPaths.push(diagramPath);
     manifests.push(
       DiagramManifestSchema.parse(
-        JSON.parse(await readFile(path.join(options.runDir, diagramPath), "utf8")),
+        JSON.parse(
+          await readFile(path.join(options.runDir, diagramPath), "utf8"),
+        ),
       ),
     );
 
@@ -1145,7 +1208,9 @@ async function runPdfToolPipeline(options: {
       transcriptionCall.result,
       `${labelPrefix}:individual:${problemId}:read_pdf`,
     );
-    transcriptionBlocks.push(await readFile(path.join(options.runDir, transcriptionPath), "utf8"));
+    transcriptionBlocks.push(
+      await readFile(path.join(options.runDir, transcriptionPath), "utf8"),
+    );
   }
 
   return {
@@ -1174,10 +1239,16 @@ async function runImageModelPipeline(options: {
   const transcriptions: string[] = [];
   const manifestPaths: string[] = [];
 
-  const tasks: Array<{ type: "bulk"; problems: readonly ProblemId[] } | { type: "single"; problems: readonly [ProblemId] }> =
+  const tasks: Array<
+    | { type: "bulk"; problems: readonly ProblemId[] }
+    | { type: "single"; problems: readonly [ProblemId] }
+  > =
     options.strategy === "bulk"
       ? [{ type: "bulk", problems: PROBLEM_IDS }]
-      : PROBLEM_IDS.map((problemId) => ({ type: "single", problems: [problemId] as const }));
+      : PROBLEM_IDS.map((problemId) => ({
+          type: "single",
+          problems: [problemId] as const,
+        }));
 
   for (const task of tasks) {
     const suffix =
@@ -1189,7 +1260,9 @@ async function runImageModelPipeline(options: {
       task.problems,
       options.coordinateMode,
     );
-    const diagramParts: LlmContentPart[] = [{ type: "text", text: diagramPrompt }];
+    const diagramParts: LlmContentPart[] = [
+      { type: "text", text: diagramPrompt },
+    ];
     diagramParts.push(...(await toImageParts(options.sourcePageImagePaths)));
 
     const diagramCall = await withRetries(
@@ -1204,7 +1277,7 @@ async function runImageModelPipeline(options: {
               modelId: options.approach.modelId,
               contents: [{ role: "user", parts: diagramParts }],
               responseMimeType: "application/json",
-              openAiReasoningEffort: "low",
+              thinkingLevel: "low",
             });
           },
         ),
@@ -1212,14 +1285,28 @@ async function runImageModelPipeline(options: {
     metrics.push(diagramCall.metrics);
     const rawDiagramManifest = parseJsonFromLlmText(diagramCall.text);
     const normalizedManifest = normaliseDiagramManifest(rawDiagramManifest, 24);
-    const manifestPath = path.join(options.runDir, "output", `diagrams-${suffix}.json`);
-    await writeFile(`${manifestPath}`, `${JSON.stringify(normalizedManifest, null, 2)}\n`, "utf8");
-    manifestPaths.push(path.relative(options.runDir, manifestPath).replaceAll("\\", "/"));
+    const manifestPath = path.join(
+      options.runDir,
+      "output",
+      `diagrams-${suffix}.json`,
+    );
+    await writeFile(
+      `${manifestPath}`,
+      `${JSON.stringify(normalizedManifest, null, 2)}\n`,
+      "utf8",
+    );
+    manifestPaths.push(
+      path.relative(options.runDir, manifestPath).replaceAll("\\", "/"),
+    );
     manifests.push(normalizedManifest);
 
     const transcriptionPrompt = createPromptForTranscription(task.problems);
-    const transcriptionParts: LlmContentPart[] = [{ type: "text", text: transcriptionPrompt }];
-    transcriptionParts.push(...(await toImageParts(options.sourcePageImagePaths)));
+    const transcriptionParts: LlmContentPart[] = [
+      { type: "text", text: transcriptionPrompt },
+    ];
+    transcriptionParts.push(
+      ...(await toImageParts(options.sourcePageImagePaths)),
+    );
 
     const transcriptionCall = await withRetries(
       `${labelPrefix}:${suffix}:transcribe`,
@@ -1232,7 +1319,7 @@ async function runImageModelPipeline(options: {
             return await generateTextWithMetrics({
               modelId: options.approach.modelId,
               contents: [{ role: "user", parts: transcriptionParts }],
-              openAiReasoningEffort: "low",
+              thinkingLevel: "low",
             });
           },
         ),
@@ -1324,7 +1411,8 @@ async function runSingleExperiment(options: {
     `${experimentLabel} source pages rendered: count=${sourcePageImages.length.toString()}`,
   );
 
-  const { readPdfTool, extractPdfDiagramsTool } = await buildToolHarness(experimentDir);
+  const { readPdfTool, extractPdfDiagramsTool } =
+    await buildToolHarness(experimentDir);
   const workspaceRelativePdfPath = "source/hamilton-2017-q.pdf";
 
   const pipelineResult =
@@ -1357,7 +1445,10 @@ async function runSingleExperiment(options: {
     markdownPath: path.join(outputDir, "transcription-with-diagrams.md"),
     diagrams: croppedDiagrams,
   });
-  const outputMarkdownPath = path.join(outputDir, "transcription-with-diagrams.md");
+  const outputMarkdownPath = path.join(
+    outputDir,
+    "transcription-with-diagrams.md",
+  );
   await writeFile(outputMarkdownPath, transcriptionWithDiagrams, "utf8");
 
   const pipelineLatencyMs = Date.now() - pipelineStartedAt;
@@ -1375,16 +1466,26 @@ async function runSingleExperiment(options: {
   });
   const verdicts = await Promise.all(judgeTasks);
   const judgingLatencyMs = Date.now() - judgingStartedAt;
-  const judgingCostUsd = verdicts.reduce((sum, verdict) => sum + verdict.metrics.costUsd, 0);
+  const judgingCostUsd = verdicts.reduce(
+    (sum, verdict) => sum + verdict.metrics.costUsd,
+    0,
+  );
 
   const overallPass = verdicts.every((item) => item.verdict === "pass");
   const totalLatencyMs = Date.now() - totalStartedAt;
   const totalCostUsd = pipelineCostUsd + judgingCostUsd;
 
   const outputJsonPath = path.join(outputDir, "experiment-result.json");
-  const reportOutputMarkdownPath = path.join(reportOutputDir, "transcription-with-diagrams.md");
+  const reportOutputMarkdownPath = path.join(
+    reportOutputDir,
+    "transcription-with-diagrams.md",
+  );
   const reportDiagramImagePaths = croppedDiagrams.map((item) => {
-    return path.join(reportOutputDir, "diagrams", path.basename(item.imagePath));
+    return path.join(
+      reportOutputDir,
+      "diagrams",
+      path.basename(item.imagePath),
+    );
   });
   const reportSourcePageImagePaths = sourcePageImages.map((item) => {
     return path.join(reportOutputDir, "source-pages", path.basename(item));
@@ -1430,7 +1531,11 @@ async function runSingleExperiment(options: {
     },
   };
 
-  await writeFile(outputJsonPath, `${JSON.stringify(experimentResult, null, 2)}\n`, "utf8");
+  await writeFile(
+    outputJsonPath,
+    `${JSON.stringify(experimentResult, null, 2)}\n`,
+    "utf8",
+  );
   await rm(reportOutputDir, { recursive: true, force: true });
   await mkdir(path.dirname(reportOutputDir), { recursive: true });
   await cp(outputDir, reportOutputDir, { recursive: true, force: true });
@@ -1481,7 +1586,9 @@ async function toMarkdownReport(report: BenchmarkReport): Promise<string> {
   lines.push(`| ${separatorColumns.join(" | ")} |`);
 
   for (const item of report.experiments) {
-    const verdictByModel = new Map(item.judging.verdicts.map((verdict) => [verdict.modelId, verdict]));
+    const verdictByModel = new Map(
+      item.judging.verdicts.map((verdict) => [verdict.modelId, verdict]),
+    );
     const judgeCells = JUDGE_MODEL_IDS.map((modelId) => {
       const verdict = verdictByModel.get(modelId);
       if (!verdict) {
@@ -1498,7 +1605,9 @@ async function toMarkdownReport(report: BenchmarkReport): Promise<string> {
   lines.push("## Detailed Outputs");
   lines.push("");
   for (const item of report.experiments) {
-    lines.push(`### ${item.approachLabel} / ${item.strategy} / ${item.coordinateMode}`);
+    lines.push(
+      `### ${item.approachLabel} / ${item.strategy} / ${item.coordinateMode}`,
+    );
     lines.push(`- Status: ${item.status.toUpperCase()}`);
     lines.push(`- Reason: ${item.reason}`);
     lines.push(`- Copied output dir: ${item.reportOutputDir}`);
@@ -1567,7 +1676,11 @@ async function main(): Promise<void> {
 
   const experiments = await Promise.all(
     experimentConfigs.map(async ({ approach, strategy, coordinateMode }) => {
-      const configName = configNameForExperiment({ approach, strategy, coordinateMode });
+      const configName = configNameForExperiment({
+        approach,
+        strategy,
+        coordinateMode,
+      });
       const experimentDir = path.join(runRoot, configName);
       const reportOutputDir = path.join(REPORT_OUTPUT_DIR, configName);
       try {
@@ -1622,7 +1735,11 @@ async function main(): Promise<void> {
           },
         };
         await mkdir(outputDir, { recursive: true });
-        await writeFile(outputJsonPath, `${JSON.stringify(fallback, null, 2)}\n`, "utf8");
+        await writeFile(
+          outputJsonPath,
+          `${JSON.stringify(fallback, null, 2)}\n`,
+          "utf8",
+        );
         await rm(reportOutputDir, { recursive: true, force: true });
         await mkdir(path.dirname(reportOutputDir), { recursive: true });
         await cp(outputDir, reportOutputDir, { recursive: true, force: true });
@@ -1640,7 +1757,11 @@ async function main(): Promise<void> {
     reportJsonPath: toRepoRelativePath(reportJsonPath),
     experiments,
   };
-  await writeFile(reportJsonPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  await writeFile(
+    reportJsonPath,
+    `${JSON.stringify(report, null, 2)}\n`,
+    "utf8",
+  );
 
   const markdown = await toMarkdownReport(report);
   await writeFile(RESULTS_MARKDOWN_PATH, markdown, "utf8");

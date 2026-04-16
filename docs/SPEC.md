@@ -102,6 +102,7 @@ https://localhost:8081/login-with-email
 Useful entry points after sign-in:
 
 - `/spark` (Spark AI chat), `/spark/lesson`, `/spark/lessons`
+- `/spark/guides` plus `/spark/guides/v1` through `/spark/guides/v17` (hard-coded knowledge-gap guide prototypes)
 - `/admin` (requires the userId in `ADMIN_USER_IDS`)
 
 Notes:
@@ -148,6 +149,7 @@ Recommended defaults:
     - Help students prepare for the British Informatics Olympiad (BIO) with coding practice lessons and problems delivered via the web app (e.g., under `/spark/lesson`), with progress persisted through SvelteKit APIs that proxy Firestore.
   - Spark AI Agent (web, Phase 1)
     - Logged-in web home at `/spark` is the Spark AI Agent chat experience.
+    - `/spark/guides` lists hard-coded student-facing knowledge-gap guide prototypes, and `/spark/guides/v1` through `/spark/guides/v17` render full-screen prototype flows without the Spark app nav. They use the same biology example, keep interaction state in the browser where possible, and cover guided ladder, evidence-slip, tutor-transcript, answer-builder, fill-in-the-gaps, sheet-style typed blanks, a minimal gap-fill sheet, an AI-judged prompted gap sheet, reading-only study sheets, climb, lab, and imported HTML-reference flows. Guide prototypes sit on the standard Spark ambient blob background with card surfaces rather than ruled-paper page backgrounds, and guide detail pages use the same circular close control as sheet detail pages. The prompted gap sheet posts one blank at a time to a signed-in SvelteKit endpoint that hard-codes the judging prompt and uses `gemini-flash-latest` with `thinkingLevel: "low"`; the judge receives the worksheet context plus previous attempts and must return simple guiding-question hints for partial/incorrect answers without revealing the missing word.
     - The chat stream is a continuous list of messages (no section summaries/collapsed sections); the composer stays pinned at the bottom.
     - The UI mirrors ChatGPT: a centered conversation column, assistant replies render as clean text blocks, and user messages appear as right-aligned pill bubbles with left-aligned text inside each bubble.
     - After the second assistant reply, the latest assistant response expands to a minimum height to keep breathing room above the composer without adding trailing spacer after the response.
@@ -529,7 +531,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 
 ## 9) LLM Guardrails & Prompting
 
-- LLM providers: Gemini (Vertex AI) and OpenAI (Responses API / ChatGPT Codex backend). The shared wrapper defaults OpenAI API text calls to `gpt-5.4-mini` with `reasoning: { effort: "medium" }` when an OpenAI model is selected. Spark chat (`POST /api/spark/agent/messages`) uses `chatgpt-gpt-5.4-fast` with `thinkingLevel: "medium"`, and Spark run-agent execution (`packages/llm/src/agent/sparkAgentRunner.ts`) also uses `chatgpt-gpt-5.4-fast` with `thinkingLevel: "medium"`. When Spark agent subagents are enabled, Spark keeps the Codex prompt pattern and Spark itself chooses the same parent model rather than letting the model choose an arbitrary subagent backend. Free-text grading uses `gemini-flash-latest`.
+- LLM providers: Gemini (Vertex AI) and OpenAI (Responses API / ChatGPT Codex backend). The shared wrapper exposes model-agnostic `thinkingLevel: "low" | "medium" | "high"` for calls that need explicit reasoning control. Spark chat (`POST /api/spark/agent/messages`) uses `chatgpt-gpt-5.4-fast` with `thinkingLevel: "medium"`, and Spark run-agent execution (`packages/llm/src/agent/sparkAgentRunner.ts`) also uses `chatgpt-gpt-5.4-fast` with `thinkingLevel: "medium"`. When Spark agent subagents are enabled, Spark keeps the Codex prompt pattern and Spark itself chooses the same parent model rather than letting the model choose an arbitrary subagent backend. Free-text grading uses `gemini-flash-latest`.
 - Extraction prompt: preserve original wording; label low-confidence items; ensure per-question metadata includes source page reference.
 - Generation prompt: board + subject aware; include numeric tolerance, significant figures instructions; produce rationale snippet.
 - Grading prompt: strict rubric enforcement with partial credit; return plain text with `%AWARDED_MARKS%: X`, `%MAX_MARKS%: Y`, and `%FEEDBACK%:` followed by Markdown that includes sections (a) grade + reasoning (including a `Your answer: X/Y` line), (b) a perfect full-mark answer, and (c) per-mark bullet points. For partial/zero marks, include short “Where you got marks” / “What you missed” lines after the grade reason. The grader result label {correct, partial, incorrect} is derived from marks for UI tone/summary.

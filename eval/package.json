@@ -36,7 +36,7 @@
     "session:story": "tsx src/code/generateTestStory.ts"
   },
   "dependencies": {
-    "@ljoukov/llm": "7.0.0",
+    "@ljoukov/llm": "7.0.6",
     "@spark/llm": "workspace:*",
     "@spark/schemas": "workspace:*",
     "commander": "^14.0.2",
