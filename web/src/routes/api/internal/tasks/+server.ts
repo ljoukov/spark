@@ -95,12 +95,13 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	if (task.type === 'findGaps') {
-		const { userId } = task.findGaps;
+		const { userId, forceUiData } = task.findGaps;
 		console.log(`[internal task] findGaps userId=${userId}`);
 		try {
 			const result = await runSparkGapsFinder({
 				serviceAccountJson: requireServiceAccountJson(),
-				userId
+				userId,
+				forceUiData
 			});
 			return json({ status: 'completed', result }, { status: 200 });
 		} catch (error) {

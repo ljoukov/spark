@@ -6,6 +6,8 @@
 		QuizProgress,
 		QuizTypeAnswer
 	} from '$lib/components/quiz/index.js';
+	import GapInlineMode from '$lib/components/spark/gaps/GapInlineMode.svelte';
+	import GapReadingMode from '$lib/components/spark/gaps/GapReadingMode.svelte';
 	import { renderMarkdownOptional } from '$lib/markdown';
 	import type {
 		QuizFeedback,
@@ -14,11 +16,16 @@
 		QuizProgressStep,
 		QuizTypeAnswerQuestion
 	} from '$lib/types/quiz';
+	import type {
+		SparkLearningGapInlinePresentation,
+		SparkLearningGapReadingPresentation
+	} from '@spark/schemas';
 	import { untrack } from 'svelte';
 	import { z } from 'zod';
 	import type { PageData } from './$types';
 
 	type Step = PageData['gap']['steps'][number];
+	type GapMode = 'current' | 'v11' | 'v16';
 	type AttemptStatus = 'pending' | 'correct' | 'incorrect';
 	type AttemptState = {
 		status: AttemptStatus;
@@ -92,9 +99,15 @@
 		[/evaluate|conclusion/, 'Evaluate conclusion'],
 		[/poem|poet|writer|language/, 'Text evidence']
 	];
+	const GAP_MODE_OPTIONS: Array<{ value: GapMode; label: string }> = [
+		{ value: 'current', label: 'Current' },
+		{ value: 'v11', label: 'Inline' },
+		{ value: 'v16', label: 'Spine' }
+	];
 
 	let { data }: { data: PageData } = $props();
 	const gap = $derived(data.gap);
+	let selectedMode = $state<GapMode>('current');
 	let currentIndex = $state(0);
 	let attempts = $state<AttemptState[]>(
 		untrack(() => data.gap.steps.map((_, index) => createInitialAttempt(index === 0)))
@@ -430,8 +443,117 @@
 		};
 	}
 
+	function splitSentenceLikeText(value: string, maxItems: number): string[] {
+		const sentences = value
+			.split(/(?<=[.!?])\s+/u)
+			.map((part) => part.trim().replace(/\s+/g, ' '))
+			.filter((part) => part.length > 0);
+		if (sentences.length > 0) {
+			return sentences.slice(0, maxItems);
+		}
+		return value
+			.split(/\s*(?:->|→|;|\|)\s*/u)
+			.map((part) => part.trim().replace(/\s+/g, ' '))
+			.filter((part) => part.length > 0)
+			.slice(0, maxItems);
+	}
+
+	function freeTextSteps(): Extract<Step, { kind: 'free_text' }>[] {
+		return gap.steps.filter(
+			(step): step is Extract<Step, { kind: 'free_text' }> => step.kind === 'free_text'
+		);
+	}
+
+	function fallbackFinalAnswer(): string {
+		const model = gap.steps.find(
+			(step): step is Extract<Step, { kind: 'model_answer' }> => step.kind === 'model_answer'
+		)?.body;
+		if (model) {
+			return model;
+		}
+		const freeModels = freeTextSteps().map((step) => step.modelAnswer);
+		if (freeModels.length > 0) {
+			return freeModels.join(' ');
+		}
+		return gap.cardQuestion;
+	}
+
+	function fallbackInlinePresentation(): SparkLearningGapInlinePresentation {
+		const blanks = freeTextSteps()
+			.slice(0, 6)
+			.map((step, index) => ({
+				id: `blank-${(index + 1).toString()}`,
+				before: step.prompt,
+				after: '',
+				expectedAnswer: step.expectedAnswer,
+				prompt: step.placeholder ?? step.label ?? 'Short answer',
+				maxMarks: step.maxMarks
+			}));
+		return {
+			question: gap.cardQuestion,
+			instructions: 'Complete the missing words, then check your answer.',
+			blanks:
+				blanks.length > 0
+					? blanks
+					: [
+							{
+								id: 'blank-1',
+								before: gap.cardQuestion,
+								after: '',
+								expectedAnswer: fallbackFinalAnswer(),
+								prompt: 'Key idea',
+								maxMarks: 1
+							}
+						],
+			modelAnswer: fallbackFinalAnswer()
+		};
+	}
+
+	function fallbackReadingPresentation(): SparkLearningGapReadingPresentation {
+		const finalAnswer = fallbackFinalAnswer();
+		const memory = gap.steps.find(
+			(step): step is Extract<Step, { kind: 'memory_chain' }> => step.kind === 'memory_chain'
+		)?.body;
+		const memoryParts = memory
+			? memory
+					.split(/\s*(?:->|→|;|\|)\s*/u)
+					.map((part) => part.trim().replace(/\s+/g, ' '))
+					.filter((part) => part.length > 0)
+					.slice(0, 6)
+			: [];
+		const labels = gap.steps
+			.map((step) => step.label ?? '')
+			.filter((label) => label.trim().length > 0)
+			.slice(0, 6);
+		const sentences = splitSentenceLikeText(finalAnswer, 6);
+		const outline = freeTextSteps()
+			.map((step) => step.modelAnswer)
+			.slice(0, 6);
+		return {
+			question: gap.cardQuestion,
+			ideaChain:
+				memoryParts.length >= 2
+					? memoryParts
+					: labels.length >= 2
+						? labels
+						: sentences.length >= 2
+							? sentences
+							: [gap.title, 'Model answer'],
+			outline:
+				outline.length >= 2
+					? outline
+					: sentences.length >= 2
+						? sentences
+						: [finalAnswer, 'Use the model answer wording.'],
+			keySentences: sentences.length > 0 ? sentences : [finalAnswer],
+			finalAnswer
+		};
+	}
+
 	const activeStep = $derived(gap.steps[currentIndex] as Step);
 	const activeAttempt = $derived(attempts[currentIndex] ?? createInitialAttempt());
+	const inlinePresentation = $derived(gap.presentations?.v11 ?? fallbackInlinePresentation());
+	const readingPresentation = $derived(gap.presentations?.v16 ?? fallbackReadingPresentation());
 	const progressSteps = $derived(
 		gap.steps.map<QuizProgressStep>((step, index) => {
 			const attempt = attempts[index];
@@ -454,72 +576,153 @@
 	<title>Spark · {gap.title}</title>
 </svelte:head>
 
-<section class="gap-page">
-	<div class="gap-page__top">
-		<QuizProgress
-			steps={progressSteps}
-			currentIndex={currentIndex}
-			onNavigate={({ index }) => goToStep(index)}
-		/>
-	</div>
+<div class="gap-mode-switcher">
+	<label for="gap-mode-select">View</label>
+	<select id="gap-mode-select" bind:value={selectedMode} aria-label="Gap presentation mode">
+		{#each GAP_MODE_OPTIONS as option}
+			<option value={option.value}>{option.label}</option>
+		{/each}
+	</select>
+</div>
 
-	<main class="gap-page__main">
-		<div class="gap-page__content">
-			<div class="gap-page__meta">
-				<p>{gap.subjectLabel}</p>
-				<h1>{gap.title}</h1>
-				<span>{gap.cardQuestion}</span>
-			</div>
-
-			<div class="gap-page__slide">
-				{#if activeStep.kind === 'free_text'}
-					<QuizTypeAnswer
-						question={toTypeQuestion(activeStep)}
-						value={activeAttempt.value}
-						status={activeAttempt.status === 'correct' ? 'correct' : activeAttempt.status === 'incorrect' ? 'incorrect' : 'neutral'}
-						locked={activeAttempt.locked}
-						feedback={activeAttempt.feedback}
-						showContinue={activeAttempt.showContinue}
-						continueLabel={continueLabel}
-						busy={activeAttempt.busyAction !== null}
-						busyAction={activeAttempt.busyAction}
-						submitPhase="grading"
-						answerLabel="Check"
-						dontKnowLabel="Show me"
-						eyebrow={stepEyebrow(activeStep)}
-						onInput={({ value }) => handleTypeInput(value)}
-						onSubmit={({ value }) => void handleTypeSubmit(value)}
-						onDontKnow={handleDontKnow}
-						onContinue={advance}
-					/>
-				{:else if activeStep.kind === 'multiple_choice'}
-					<QuizMultipleChoice
-						question={toMultipleQuestion(activeStep)}
-						selectedOptionId={activeAttempt.selectedOptionId}
-						status={activeAttempt.status === 'correct' ? 'correct' : activeAttempt.status === 'incorrect' ? 'incorrect' : 'neutral'}
-						locked={activeAttempt.locked}
-						feedback={activeAttempt.feedback}
-						showContinue={activeAttempt.showContinue}
-						continueLabel={continueLabel}
-						eyebrow={stepEyebrow(activeStep)}
-						onSelect={({ optionId }) => handleMultipleSelect(optionId)}
-						onSubmit={({ optionId }) => handleMultipleSubmit(optionId)}
-						onDontKnow={handleDontKnow}
-						onContinue={advance}
-					/>
-				{:else}
-					<QuizInfoCard
-						question={toInfoQuestion(activeStep)}
-						continueLabel={continueLabel}
-						onContinue={handleInfoContinue}
-					/>
-				{/if}
-			</div>
+{#if selectedMode === 'current'}
+	<section class="gap-page">
+		<div class="gap-page__top">
+			<QuizProgress
+				steps={progressSteps}
+				currentIndex={currentIndex}
+				onNavigate={({ index }) => goToStep(index)}
+			/>
 		</div>
-	</main>
-</section>
+
+		<main class="gap-page__main">
+			<div class="gap-page__content">
+				<div class="gap-page__meta">
+					<p>{gap.subjectLabel}</p>
+					<h1>{gap.title}</h1>
+					<span>{gap.cardQuestion}</span>
+				</div>
+
+				<div class="gap-page__slide">
+					{#if activeStep.kind === 'free_text'}
+						<QuizTypeAnswer
+							question={toTypeQuestion(activeStep)}
+							value={activeAttempt.value}
+							status={activeAttempt.status === 'correct' ? 'correct' : activeAttempt.status === 'incorrect' ? 'incorrect' : 'neutral'}
+							locked={activeAttempt.locked}
+							feedback={activeAttempt.feedback}
+							showContinue={activeAttempt.showContinue}
+							continueLabel={continueLabel}
+							busy={activeAttempt.busyAction !== null}
+							busyAction={activeAttempt.busyAction}
+							submitPhase="grading"
+							answerLabel="Check"
+							dontKnowLabel="Show me"
+							eyebrow={stepEyebrow(activeStep)}
+							onInput={({ value }) => handleTypeInput(value)}
+							onSubmit={({ value }) => void handleTypeSubmit(value)}
+							onDontKnow={handleDontKnow}
+							onContinue={advance}
+						/>
+					{:else if activeStep.kind === 'multiple_choice'}
+						<QuizMultipleChoice
+							question={toMultipleQuestion(activeStep)}
+							selectedOptionId={activeAttempt.selectedOptionId}
+							status={activeAttempt.status === 'correct' ? 'correct' : activeAttempt.status === 'incorrect' ? 'incorrect' : 'neutral'}
+							locked={activeAttempt.locked}
+							feedback={activeAttempt.feedback}
+							showContinue={activeAttempt.showContinue}
+							continueLabel={continueLabel}
+							eyebrow={stepEyebrow(activeStep)}
+							onSelect={({ optionId }) => handleMultipleSelect(optionId)}
+							onSubmit={({ optionId }) => handleMultipleSubmit(optionId)}
+							onDontKnow={handleDontKnow}
+							onContinue={advance}
+						/>
+					{:else}
+						<QuizInfoCard
+							question={toInfoQuestion(activeStep)}
+							continueLabel={continueLabel}
+							onContinue={handleInfoContinue}
+						/>
+					{/if}
+				</div>
+			</div>
+		</main>
+	</section>
+{:else if selectedMode === 'v11'}
+	<section class="gap-page gap-page--presentation">
+		<GapInlineMode
+			gapId={gap.id}
+			subjectLabel={gap.subjectLabel}
+			presentation={inlinePresentation}
+		/>
+	</section>
+{:else}
+	<section class="gap-page gap-page--presentation">
+		<GapReadingMode subjectLabel={gap.subjectLabel} presentation={readingPresentation} />
+	</section>
+{/if}
 
 <style>
+	.gap-mode-switcher {
+		position: fixed;
+		top: calc(env(safe-area-inset-top, 0px) + 0.9rem);
+		left: calc(env(safe-area-inset-left, 0px) + 1rem);
+		z-index: 35;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+		border: 1px solid rgba(23, 33, 27, 0.14);
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.78);
+		padding: 0.4rem 0.45rem 0.4rem 0.6rem;
+		box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+		backdrop-filter: blur(18px);
+	}
+
+	.gap-mode-switcher label {
+		color: #27745d;
+		font-size: 0.74rem;
+		font-weight: 800;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	.gap-mode-switcher select {
+		min-width: 7.4rem;
+		border: 0;
+		border-radius: 6px;
+		background: #ffffff;
+		color: #17211b;
+		padding: 0.34rem 0.55rem;
+		font: inherit;
+		font-size: 0.9rem;
+		font-weight: 700;
+	}
+
+	.gap-mode-switcher select:focus {
+		outline: 2px solid rgba(39, 116, 93, 0.34);
+		outline-offset: 2px;
+	}
+
+	:global([data-theme='dark'] .gap-mode-switcher),
+	:global(:root:not([data-theme='light']) .gap-mode-switcher) {
+		border-color: rgba(126, 208, 167, 0.18);
+		background: rgba(17, 23, 19, 0.82);
+	}
+
+	:global([data-theme='dark'] .gap-mode-switcher label),
+	:global(:root:not([data-theme='light']) .gap-mode-switcher label) {
+		color: #79caa1;
+	}
+
+	:global([data-theme='dark'] .gap-mode-switcher select),
+	:global(:root:not([data-theme='light']) .gap-mode-switcher select) {
+		background: #1c271f;
+		color: #f4f1ea;
+	}
+
 	.gap-page {
 		display: flex;
 		flex-direction: column;
@@ -544,7 +747,12 @@
 			100% 2rem,
 			100% 100%;
 		color: var(--foreground);
-		padding: calc(env(safe-area-inset-top, 0px) + 1rem) 1rem 1rem;
+		padding: calc(env(safe-area-inset-top, 0px) + 4.1rem) 1rem 1rem;
+	}
+
+	.gap-page--presentation {
+		display: block;
+		padding: 0;
 	}
 
 	.gap-page__top {
@@ -618,23 +826,49 @@
 
 	:global([data-theme='dark'] .gap-page),
 	:global(:root:not([data-theme='light']) .gap-page) {
+		--background: #111713;
+		--foreground: #f4f1ea;
+		--card: #18211c;
+		--card-foreground: #f4f1ea;
+		--popover: #18211c;
+		--popover-foreground: #f4f1ea;
+		--primary: #79caa1;
+		--primary-foreground: #0d1510;
+		--secondary: #1d2a22;
+		--secondary-foreground: #f4f1ea;
+		--muted: #1d2a22;
+		--muted-foreground: #b8c7bd;
+		--accent: #203528;
+		--accent-foreground: #f4f1ea;
+		--border: rgba(126, 208, 167, 0.18);
+		--input: rgba(126, 208, 167, 0.22);
+		--ring: rgba(126, 208, 167, 0.52);
+		--app-content-bg: rgba(24, 33, 28, 0.9);
+		--app-content-border: rgba(126, 208, 167, 0.18);
+		--app-content-shadow-primary: 0 48px 140px -60px rgba(0, 0, 0, 0.82);
+		--app-content-shadow-secondary: 0 40px 110px -70px rgba(0, 0, 0, 0.7);
 		background:
 			linear-gradient(
 				90deg,
-				color-mix(in srgb, #3a3258 54%, transparent) 0 1px,
+				color-mix(in srgb, #2f4d3e 46%, transparent) 0 1px,
 				transparent 1px 100%
 			),
 			linear-gradient(
 				180deg,
-				color-mix(in srgb, #3a3258 48%, transparent) 0 1px,
+				color-mix(in srgb, #2f4d3e 40%, transparent) 0 1px,
 				transparent 1px 2rem
 			),
-			linear-gradient(180deg, #17142a 0%, #201c39 48%, #17142a 100%);
+			linear-gradient(180deg, #101713 0%, #162119 48%, #101713 100%);
+	}
+
+	:global([data-theme='dark'] .gap-page__meta p),
+	:global(:root:not([data-theme='light']) .gap-page__meta p) {
+		color: #79caa1;
 	}
 
 	:global([data-theme='dark'] .gap-page__meta span),
 	:global(:root:not([data-theme='light']) .gap-page__meta span) {
-		color: #d8d0e9;
+		color: #d8e2da;
 	}
 
 	@media (max-width: 71.875rem) {
@@ -650,7 +884,11 @@
 
 	@media (max-width: 43.75rem) {
 		.gap-page {
-			padding: calc(env(safe-area-inset-top, 0px) + 0.7rem) 0.7rem 0.7rem;
+			padding: calc(env(safe-area-inset-top, 0px) + 4.4rem) 0.7rem 0.7rem;
+		}
+
+		.gap-page--presentation {
+			padding: 0;
 		}
 
 		:global(.app-shell:has(.gap-page) .sheet-close-button) {

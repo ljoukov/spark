@@ -58,6 +58,7 @@ const RunAgentTaskEnvelope = z.object({
 
 export const FindGapsTaskSchema = z.object({
   userId: z.string().min(1),
+  forceUiData: z.boolean().optional(),
 });
 
 const FindGapsTaskEnvelope = z.object({
@@ -328,6 +329,7 @@ export async function createTask(
             ? {
                 type: task.type,
                 userId: task.findGaps.userId,
+                ...(task.findGaps.forceUiData ? { forceUiData: "1" } : {}),
               }
           : { type: task.type },
     });
@@ -387,6 +389,9 @@ export async function createTask(
     handlerUrl.searchParams.set("workspaceId", task.runAgent.workspaceId);
   } else if (task.type === "findGaps") {
     handlerUrl.searchParams.set("userId", task.findGaps.userId);
+    if (task.findGaps.forceUiData) {
+      handlerUrl.searchParams.set("forceUiData", "1");
+    }
   }
 
   const taskPayload = JSON.stringify(task);

@@ -5,6 +5,7 @@ import {
   SparkGapsFinderPendingRunSchema,
   SparkGraderRunSchema,
   SparkGraderWorksheetReportSchema,
+  SparkLearningGapPresentationsSchema,
   SparkLearningGapSchema,
   visitPaperSheetQuestions,
   type PaperSheetQuestion,
@@ -13,6 +14,7 @@ import {
   type SparkGraderRun,
   type SparkGraderWorksheetReport,
   type SparkLearningGap,
+  type SparkLearningGapPresentations,
   type SparkLearningGapStep,
 } from "@spark/schemas";
 import { z } from "zod";
@@ -62,6 +64,7 @@ type RunGapsFinderOptions = {
   serviceAccountJson: string;
   userId: string;
   scanBacklog?: boolean;
+  forceUiData?: boolean;
 };
 
 type PendingRunDoc = SparkGapsFinderPendingRun & {
@@ -143,6 +146,7 @@ const generatedGapSchema = z.object({
   dedupeKey: z.string().trim().min(1),
   severity: z.number().int().min(1).max(5),
   steps: z.array(generatedGapStepSchema).min(3).max(12),
+  presentations: z.unknown().optional(),
 });
 
 const generatedGapResponseSchema = z.object({
@@ -537,7 +541,7 @@ async function listExistingGaps(options: {
     serviceAccountJson: options.serviceAccountJson,
     collectionPath: gapsCollectionPath(options.userId),
     orderBy: "createdAt desc",
-    limit: 200,
+    limit: 500,
   });
   const gaps: SparkLearningGap[] = [];
   for (const doc of docs) {
@@ -594,12 +598,14 @@ async function queuePendingRun(options: QueueGapsFinderRunOptions): Promise<bool
 async function enqueueGapsFinderTask(options: {
   serviceAccountJson: string;
   userId: string;
+  forceUiData?: boolean;
 }): Promise<void> {
   await createTask(
     {
       type: "findGaps",
       findGaps: {
         userId: options.userId,
+        ...(options.forceUiData ? { forceUiData: true } : {}),
       },
     },
     {
@@ -841,6 +847,202 @@ function normalizeSteps(steps: GeneratedGap["steps"]): SparkLearningGapStep[] {
   return normalized;
 }
 
+function splitSentenceLikeText(value: string, maxItems: number): string[] {
+  const sentences = value
+    .split(/(?<=[.!?])\s+/u)
+    .map((part) => normalizeWhitespace(part))
+    .filter((part) => part.length > 0);
+  if (sentences.length > 0) {
+    return sentences.slice(0, maxItems);
+  }
+  const arrowParts = value
+    .split(/\s*(?:->|→|;|\|)\s*/u)
+    .map((part) => normalizeWhitespace(part))
+    .filter((part) => part.length > 0);
+  return arrowParts.slice(0, maxItems);
+}
+
+function freeTextSteps(
+  steps: SparkLearningGapStep[],
+): Extract<SparkLearningGapStep, { kind: "free_text" }>[] {
+  return steps.filter(
+    (step): step is Extract<SparkLearningGapStep, { kind: "free_text" }> =>
+      step.kind === "free_text",
+  );
+}
+
+function modelAnswerStep(
+  steps: SparkLearningGapStep[],
+): Extract<SparkLearningGapStep, { kind: "model_answer" }> | undefined {
+  return steps.find(
+    (step): step is Extract<SparkLearningGapStep, { kind: "model_answer" }> =>
+      step.kind === "model_answer",
+  );
+}
+
+function memoryChainStep(
+  steps: SparkLearningGapStep[],
+): Extract<SparkLearningGapStep, { kind: "memory_chain" }> | undefined {
+  return steps.find(
+    (step): step is Extract<SparkLearningGapStep, { kind: "memory_chain" }> =>
+      step.kind === "memory_chain",
+  );
+}
+
+function fallbackFinalAnswer(gap: {
+  cardQuestion: string;
+  steps: SparkLearningGapStep[];
+}): string {
+  const model = modelAnswerStep(gap.steps)?.body;
+  if (model) {
+    return model;
+  }
+  const freeTextModels = freeTextSteps(gap.steps).map((step) => step.modelAnswer);
+  if (freeTextModels.length > 0) {
+    return freeTextModels.join(" ");
+  }
+  return gap.cardQuestion;
+}
+
+function fallbackIdeaChain(steps: SparkLearningGapStep[], finalAnswer: string): string[] {
+  const memory = memoryChainStep(steps)?.body;
+  const memoryParts = memory
+    ? memory
+        .split(/\s*(?:->|→|;|\|)\s*/u)
+        .map((part) => normalizeWhitespace(part))
+        .filter((part) => part.length > 0)
+        .slice(0, 6)
+    : [];
+  if (memoryParts.length >= 2) {
+    return memoryParts;
+  }
+  const labels = steps
+    .map((step) => step.label ?? "")
+    .filter((label) => label.trim().length > 0)
+    .slice(0, 6);
+  if (labels.length >= 2) {
+    return labels;
+  }
+  const sentences = splitSentenceLikeText(finalAnswer, 6);
+  return sentences.length >= 2 ? sentences : [finalAnswer, "GCSE answer"];
+}
+
+function fallbackOutline(steps: SparkLearningGapStep[], finalAnswer: string): string[] {
+  const freeTextOutlines = freeTextSteps(steps)
+    .map((step) => step.modelAnswer)
+    .slice(0, 6);
+  if (freeTextOutlines.length >= 2) {
+    return freeTextOutlines;
+  }
+  const sentences = splitSentenceLikeText(finalAnswer, 6);
+  return sentences.length >= 2 ? sentences : [finalAnswer, "Use the model answer wording."];
+}
+
+function fallbackInlineBlanks(options: {
+  cardQuestion: string;
+  steps: SparkLearningGapStep[];
+}): SparkLearningGapPresentations["v11"]["blanks"] {
+  const blanks = freeTextSteps(options.steps)
+    .slice(0, 6)
+    .map((step, index) => ({
+      id: `blank-${(index + 1).toString()}`,
+      before: step.prompt,
+      after: "",
+      expectedAnswer: step.expectedAnswer,
+      prompt: step.placeholder ?? step.label ?? "Short answer",
+      maxMarks: step.maxMarks,
+    }));
+  if (blanks.length > 0) {
+    return blanks;
+  }
+  return [
+    {
+      id: "blank-1",
+      before: options.cardQuestion,
+      after: "",
+      expectedAnswer: "answer",
+      prompt: "Key idea",
+      maxMarks: 1,
+    },
+  ];
+}
+
+function fallbackPresentations(options: {
+  cardQuestion: string;
+  steps: SparkLearningGapStep[];
+}): SparkLearningGapPresentations {
+  const finalAnswer = fallbackFinalAnswer({
+    cardQuestion: options.cardQuestion,
+    steps: options.steps,
+  });
+  const keySentences = splitSentenceLikeText(finalAnswer, 6);
+  return {
+    v11: {
+      question: options.cardQuestion,
+      instructions: "Complete the missing words, then check your answer.",
+      blanks: fallbackInlineBlanks(options),
+      modelAnswer: finalAnswer,
+    },
+    v16: {
+      question: options.cardQuestion,
+      ideaChain: fallbackIdeaChain(options.steps, finalAnswer),
+      outline: fallbackOutline(options.steps, finalAnswer),
+      keySentences: keySentences.length > 0 ? keySentences : [finalAnswer],
+      finalAnswer,
+    },
+  };
+}
+
+function normalizePresentations(options: {
+  generated?: Pick<GeneratedGap, "cardQuestion" | "presentations">;
+  cardQuestion: string;
+  steps: SparkLearningGapStep[];
+}): SparkLearningGapPresentations {
+  const fallback = fallbackPresentations({
+    cardQuestion: options.cardQuestion,
+    steps: options.steps,
+  });
+  const rawPresentations = asRecord(options.generated?.presentations)
+    ? normalizeGeneratedPresentations({
+        presentations: options.generated?.presentations,
+      })
+    : undefined;
+  const parsed = SparkLearningGapPresentationsSchema.safeParse(
+    mergePresentations(rawPresentations, fallback),
+  );
+  return parsed.success ? parsed.data : fallback;
+}
+
+function mergePresentations(
+  candidate: Record<string, unknown> | undefined,
+  fallback: SparkLearningGapPresentations,
+): SparkLearningGapPresentations {
+  const v11 = asRecord(candidate?.v11);
+  const v16 = asRecord(candidate?.v16);
+  return {
+    v11: {
+      question: firstString(v11 ?? {}, ["question"]) ?? fallback.v11.question,
+      instructions:
+        firstString(v11 ?? {}, ["instructions"]) ?? fallback.v11.instructions,
+      blanks:
+        normalizeGeneratedInlineBlanks(v11?.blanks).length > 0
+          ? normalizeGeneratedInlineBlanks(v11?.blanks)
+          : fallback.v11.blanks,
+      modelAnswer:
+        firstString(v11 ?? {}, ["modelAnswer"]) ?? fallback.v11.modelAnswer,
+    },
+    v16: {
+      question: firstString(v16 ?? {}, ["question"]) ?? fallback.v16.question,
+      ideaChain: stringArray(v16 ?? {}, ["ideaChain"]) ?? fallback.v16.ideaChain,
+      outline: stringArray(v16 ?? {}, ["outline"]) ?? fallback.v16.outline,
+      keySentences:
+        stringArray(v16 ?? {}, ["keySentences"]) ?? fallback.v16.keySentences,
+      finalAnswer:
+        firstString(v16 ?? {}, ["finalAnswer"]) ?? fallback.v16.finalAnswer,
+    },
+  };
+}
+
 function buildGenerationPrompt(options: {
   candidates: WeakQuestionCandidate[];
   existingGaps: SparkLearningGap[];
@@ -897,12 +1099,73 @@ function buildGenerationPrompt(options: {
                   "glucose up → water potential down → water in by osmosis → turgid → bend apart → stoma opens",
               },
             ],
+            presentations: {
+              v11: {
+                question:
+                  "Complete the explanation of how extra glucose in guard cells makes a stoma open.",
+                instructions:
+                  "Fill each blank with the short biological word or phrase that completes the chain.",
+                blanks: [
+                  {
+                    id: "glucose",
+                    before: "Glucose concentration in the guard cells",
+                    after: ".",
+                    expectedAnswer: "increases",
+                    prompt: "What happens to glucose?",
+                    maxMarks: 1,
+                  },
+                  {
+                    id: "water-potential",
+                    before: "This makes the water potential",
+                    after: "inside the guard cells.",
+                    expectedAnswer: "lower",
+                    prompt: "Higher or lower?",
+                    maxMarks: 1,
+                  },
+                  {
+                    id: "osmosis",
+                    before: "Water enters the guard cells by",
+                    after: ".",
+                    expectedAnswer: "osmosis",
+                    prompt: "Water movement process",
+                    maxMarks: 1,
+                  },
+                ],
+                modelAnswer:
+                  "Glucose concentration increases in the guard cells, lowering their water potential. Water enters by osmosis, the cells become turgid and bend apart, and the stoma opens.",
+              },
+              v16: {
+                question:
+                  "Explain how extra glucose in guard cells makes a stoma open.",
+                ideaChain: [
+                  "glucose up",
+                  "water potential down",
+                  "osmosis in",
+                  "cells turgid",
+                  "stoma opens",
+                ],
+                outline: [
+                  "More glucose lowers water potential in guard cells.",
+                  "Water moves into the guard cells by osmosis.",
+                  "Turgid guard cells bend apart and open the stoma.",
+                ],
+                keySentences: [
+                  "Extra glucose lowers the water potential inside guard cells.",
+                  "Water enters the guard cells by osmosis.",
+                  "The guard cells become turgid and bend apart, opening the stoma.",
+                ],
+                finalAnswer:
+                  "Extra glucose lowers the water potential inside guard cells, so water enters by osmosis. The guard cells become turgid and bend apart, opening the stoma.",
+              },
+            },
           },
         ],
       },
       null,
       2,
     ),
+    "",
+    "For every generated gap, include all three presentation paths: the current `steps` quiz flow, `presentations.v11` inline blank sheet data, and `presentations.v16` answer-spine reading data. The v11 blanks must reconstruct a fluent answer, and their prompts must guide without revealing the missing answer. The v16 ideaChain must use compact 2 to 5 word fragments, not full explanatory sentences. The v16 `finalAnswer` is the GCSE model answer, so write it as a polished model answer.",
     "",
     "Existing active gaps to dedupe against:",
     JSON.stringify(existing, null, 2),
@@ -927,6 +1190,116 @@ function firstString(record: Record<string, unknown>, keys: string[]): string | 
     }
   }
   return undefined;
+}
+
+function stringArray(record: Record<string, unknown>, keys: string[]): string[] | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (!Array.isArray(value)) {
+      continue;
+    }
+    const strings = value
+      .map((entry) => (typeof entry === "string" ? normalizeWhitespace(entry) : ""))
+      .filter((entry) => entry.length > 0);
+    if (strings.length > 0) {
+      return strings;
+    }
+  }
+  return undefined;
+}
+
+function normalizeGeneratedInlineBlanks(
+  value: unknown,
+): SparkLearningGapPresentations["v11"]["blanks"] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const blanks: SparkLearningGapPresentations["v11"]["blanks"] = [];
+  for (let index = 0; index < value.length; index += 1) {
+    const record = asRecord(value[index]);
+    if (!record) {
+      continue;
+    }
+    const before =
+      firstString(record, ["before", "prefix", "textBefore"]) ??
+      (typeof record.before === "string" ? record.before.trim() : "");
+    const after =
+      firstString(record, ["after", "suffix", "textAfter"]) ??
+      (typeof record.after === "string" ? record.after.trim() : "");
+    const expectedAnswer = firstString(record, [
+      "expectedAnswer",
+      "answer",
+      "missingAnswer",
+      "correctAnswer",
+    ]);
+    if (!expectedAnswer) {
+      continue;
+    }
+    const prompt = firstString(record, ["prompt", "hint", "placeholder", "question"]);
+    blanks.push({
+      id:
+        firstString(record, ["id", "blankId", "key"]) ??
+        `blank-${(index + 1).toString()}`,
+      before,
+      after,
+      expectedAnswer,
+      ...(prompt ? { prompt } : {}),
+      ...(typeof record.maxMarks === "number" ? { maxMarks: record.maxMarks } : {}),
+    });
+  }
+  return blanks;
+}
+
+function normalizeGeneratedPresentations(
+  record: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const direct = asRecord(record.presentations);
+  const container = direct ?? record;
+  const v11Raw =
+    asRecord(container.v11) ??
+    asRecord(container.inline) ??
+    asRecord(container.inlineBlanks) ??
+    asRecord(container.inlinePresentation) ??
+    asRecord(container.inlineBlankSheet);
+  const v16Raw =
+    asRecord(container.v16) ??
+    asRecord(container.reading) ??
+    asRecord(container.answerSpine) ??
+    asRecord(container.readingPresentation) ??
+    asRecord(container.readingSpine);
+  if (!v11Raw && !v16Raw) {
+    return direct ?? undefined;
+  }
+  const presentations: Record<string, unknown> = {};
+  if (v11Raw) {
+    presentations.v11 = {
+      question: firstString(v11Raw, [
+        "question",
+        "prompt",
+        "title",
+        "worksheetQuestion",
+        "gapQuestion",
+      ]),
+      instructions: firstString(v11Raw, ["instructions", "instruction", "objective"]),
+      blanks: normalizeGeneratedInlineBlanks(v11Raw.blanks),
+      modelAnswer: firstString(v11Raw, [
+        "modelAnswer",
+        "finalAnswer",
+        "answer",
+        "completedAnswer",
+      ]),
+    };
+  }
+  if (v16Raw) {
+    presentations.v16 = {
+      question: firstString(v16Raw, ["question", "prompt", "title", "gapQuestion"]),
+      ideaChain: stringArray(v16Raw, ["ideaChain", "chain", "spine"]),
+      outline: stringArray(v16Raw, ["outline", "points"]),
+      keySentences: stringArray(v16Raw, ["keySentences", "sentences"]),
+      finalAnswer: firstString(v16Raw, ["finalAnswer", "modelAnswer", "answer"]),
+    };
+  }
+  return presentations;
 }
 
 function normalizeGapType(value: unknown): GeneratedGap["type"] | undefined {
@@ -1087,6 +1460,7 @@ function normalizeGeneratedResponse(value: unknown): unknown {
           steps: rawSteps
             .map((step) => normalizeGeneratedStep(step))
             .filter((step): step is Record<string, unknown> => step !== null),
+          presentations: normalizeGeneratedPresentations(record),
         };
       })
       .filter((gap) => gap !== null),
@@ -1131,7 +1505,155 @@ async function generateGaps(options: {
       });
     }
   }
-  throw lastError ?? new Error("Gaps finder generation failed");
+  if (lastError instanceof Error) {
+    throw lastError;
+  }
+  throw new Error(
+    lastError === null
+      ? "Gaps finder generation failed"
+      : errorAsString(lastError),
+  );
+}
+
+function buildPresentationBackfillPrompt(gap: SparkLearningGap): string {
+  const finalAnswer = fallbackFinalAnswer({
+    cardQuestion: gap.cardQuestion,
+    steps: gap.steps,
+  });
+  return [
+    "You are Spark's gaps-finder agent preparing UI presentation data for one existing GCSE practice gap.",
+    "Return JSON only with exactly one top-level key: `presentations`.",
+    "",
+    "Create two presentations for the same gap:",
+    "- `v11`: worksheet-style inline blank data. Turn the model answer into 3 to 6 short blanks. Each blank must have `id`, `before`, `after`, `expectedAnswer`, and a concise non-revealing `prompt`. The filled blanks must reconstruct a fluent answer. Do not include prototype copy or UI commentary.",
+    "- `v16`: read-only answer spine data. Include `question`, a 2 to 6 item `ideaChain`, a 2 to 6 item `outline`, 1 to 6 `keySentences`, and `finalAnswer`. The `finalAnswer` field is the GCSE model answer. Each `ideaChain` item must be a compact 2 to 5 word fragment, not a full sentence. Good: `low pressure`, `backflow risk`, `valves stop backflow`, `towards heart`. Bad: `Low pressure means blood in veins could flow backwards.`.",
+    "",
+    "The two presentations must agree with the existing quiz steps and must not add unrelated facts.",
+    "",
+    "Existing gap:",
+    JSON.stringify(
+      {
+        title: gap.title,
+        subjectLabel: gap.subjectLabel,
+        type: gap.type,
+        cardQuestion: gap.cardQuestion,
+        shortRationale: gap.shortRationale,
+        sourceQuestion: gap.source.questionPrompt,
+        existingFinalAnswer: finalAnswer,
+        steps: gap.steps.map((step) => {
+          if (step.kind === "free_text") {
+            return {
+              kind: step.kind,
+              label: step.label,
+              prompt: step.prompt,
+              expectedAnswer: step.expectedAnswer,
+              modelAnswer: step.modelAnswer,
+              markScheme: step.markScheme,
+            };
+          }
+          if (step.kind === "multiple_choice") {
+            return {
+              kind: step.kind,
+              label: step.label,
+              prompt: step.prompt,
+              explanation: step.explanation,
+            };
+          }
+          return {
+            kind: step.kind,
+            label: step.label,
+            prompt: step.prompt,
+            body: step.body,
+          };
+        }),
+      },
+      null,
+      2,
+    ),
+  ].join("\n");
+}
+
+async function generatePresentationsForGap(
+  gap: SparkLearningGap,
+): Promise<SparkLearningGapPresentations> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const rawText = await generateText({
+        modelId: GAPS_FINDER_MODEL_ID,
+        responseMimeType: "application/json",
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                type: "text",
+                text: buildPresentationBackfillPrompt(gap),
+              },
+            ],
+          },
+        ],
+      });
+      const parsedJson = parseJsonFromLlmText(rawText);
+      const rootRecord = asRecord(parsedJson);
+      const fallback = fallbackPresentations({
+        cardQuestion: gap.cardQuestion,
+        steps: gap.steps,
+      });
+      const normalized =
+        rootRecord !== null ? normalizeGeneratedPresentations(rootRecord) : undefined;
+      const parsed = SparkLearningGapPresentationsSchema.safeParse(
+        mergePresentations(normalized, fallback),
+      );
+      if (parsed.success) {
+        return parsed.data;
+      }
+      throw new Error(`Invalid generated gap presentations: ${parsed.error.message}`);
+    } catch (error) {
+      lastError = error;
+      console.warn("[gaps-finder] presentation generation attempt failed", {
+        gapId: gap.id,
+        attempt,
+        error: errorAsString(error),
+      });
+    }
+  }
+  console.warn("[gaps-finder] using fallback presentation data", {
+    gapId: gap.id,
+    error: errorAsString(lastError),
+  });
+  return fallbackPresentations({
+    cardQuestion: gap.cardQuestion,
+    steps: gap.steps,
+  });
+}
+
+async function backfillGapPresentations(options: {
+  serviceAccountJson: string;
+  userId: string;
+  force: boolean;
+}): Promise<number> {
+  const gaps = await listExistingGaps({
+    serviceAccountJson: options.serviceAccountJson,
+    userId: options.userId,
+  });
+  let updated = 0;
+  for (const gap of gaps) {
+    if (!options.force && gap.presentations?.v11 && gap.presentations.v16) {
+      continue;
+    }
+    const presentations = await generatePresentationsForGap(gap);
+    await patchFirestoreDocument({
+      serviceAccountJson: options.serviceAccountJson,
+      documentPath: gapDocPath(options.userId, gap.id),
+      updates: {
+        presentations,
+        updatedAt: new Date(),
+      },
+    });
+    updated += 1;
+  }
+  return updated;
 }
 
 async function writeGapFinderWorkspace(options: {
@@ -1341,6 +1863,7 @@ async function persistGeneratedGaps(options: {
     seen.add(dedupeKey);
     seen.add(cardKey);
     const gapId = buildGapId(generated, source);
+    const steps = normalizeSteps(generated.steps);
     const parsedGap = SparkLearningGapSchema.safeParse({
       id: gapId,
       schemaVersion: GAPS_FINDER_SCHEMA_VERSION,
@@ -1364,7 +1887,12 @@ async function persistGeneratedGaps(options: {
         awardedMarks: source.awardedMarks,
         maxMarks: source.maxMarks,
       },
-      steps: normalizeSteps(generated.steps),
+      steps,
+      presentations: normalizePresentations({
+        generated,
+        cardQuestion: generated.cardQuestion,
+        steps,
+      }),
       createdAt: now,
       updatedAt: now,
     });
@@ -1429,6 +1957,7 @@ export async function runSparkGapsFinder(
   status: "completed" | "already_running";
   processedRunCount?: number;
   createdGapCount?: number;
+  updatedGapPresentationCount?: number;
   workspaceId?: string;
 }> {
   if (options.scanBacklog) {
@@ -1454,6 +1983,13 @@ export async function runSparkGapsFinder(
       limit: GAPS_FINDER_BATCH_SIZE,
     });
     if (pendingRuns.length === 0) {
+      const updatedGapPresentationCount = options.forceUiData
+        ? await backfillGapPresentations({
+            serviceAccountJson: options.serviceAccountJson,
+            userId: options.userId,
+            force: true,
+          })
+        : 0;
       await updateLeaseState({
         serviceAccountJson: options.serviceAccountJson,
         userId: options.userId,
@@ -1463,7 +1999,12 @@ export async function runSparkGapsFinder(
           lastCompletedAt: new Date(),
         },
       });
-      return { status: "completed", processedRunCount: 0, createdGapCount: 0 };
+      return {
+        status: "completed",
+        processedRunCount: 0,
+        createdGapCount: 0,
+        updatedGapPresentationCount,
+      };
     }
 
     const loadedRuns = await loadQueuedRuns({
@@ -1509,6 +2050,20 @@ export async function runSparkGapsFinder(
       workspaceId,
     });
 
+    const remainingPending = await listPendingRuns({
+      serviceAccountJson: options.serviceAccountJson,
+      userId: options.userId,
+      limit: 1,
+    });
+    const updatedGapPresentationCount =
+      options.forceUiData && remainingPending.length === 0
+        ? await backfillGapPresentations({
+            serviceAccountJson: options.serviceAccountJson,
+            userId: options.userId,
+            force: true,
+          })
+        : 0;
+
     await updateLeaseState({
       serviceAccountJson: options.serviceAccountJson,
       userId: options.userId,
@@ -1520,15 +2075,11 @@ export async function runSparkGapsFinder(
       },
     });
 
-    const remainingPending = await listPendingRuns({
-      serviceAccountJson: options.serviceAccountJson,
-      userId: options.userId,
-      limit: 1,
-    });
     if (remainingPending.length > 0) {
       await enqueueGapsFinderTask({
         serviceAccountJson: options.serviceAccountJson,
         userId: options.userId,
+        forceUiData: options.forceUiData,
       });
     }
 
@@ -1536,6 +2087,7 @@ export async function runSparkGapsFinder(
       status: "completed",
       processedRunCount: pendingRuns.length,
       createdGapCount: persistedGaps.length,
+      updatedGapPresentationCount,
       workspaceId,
     };
   } catch (error) {
