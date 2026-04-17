@@ -29,6 +29,10 @@ import {
   resolveSparkGraderModelTools,
 } from "./sparkChatShared";
 import {
+  resolveSparkAgentSkillFiles,
+  SPARK_GRADER_SKILL_IDS,
+} from "./sparkAgentSkills";
+import {
   SPARK_AGENT_REPLAY_DIR,
   SPARK_AGENT_REPLAY_INITIAL_WORKSPACE_DIR,
   readSparkAgentReplayManifest,
@@ -217,6 +221,22 @@ async function loadLocalGraderRequestPayload(options: {
   return SparkGraderRequestPayloadSchema.parse(JSON.parse(raw));
 }
 
+async function ensureLocalGraderSkillFiles(options: {
+  workspaceDir: string;
+}): Promise<void> {
+  for (const skillFile of resolveSparkAgentSkillFiles(SPARK_GRADER_SKILL_IDS)) {
+    const resolvedPath = resolveLocalReplayWorkspacePath(
+      options.workspaceDir,
+      skillFile.path,
+    );
+    if (await pathExists(resolvedPath)) {
+      continue;
+    }
+    await mkdir(path.dirname(resolvedPath), { recursive: true });
+    await writeFile(resolvedPath, skillFile.content, { encoding: "utf8" });
+  }
+}
+
 export type PreparedSparkGraderReplayWorkspace = {
   sourceMode: "captured-snapshot";
   workspaceDir: string;
@@ -304,6 +324,7 @@ export async function runSparkGraderLocal(options: {
     null;
   const useSubagents = options.useSubagents ?? false;
   const disableExtractTextTool = options.disableExtractTextTool ?? false;
+  await ensureLocalGraderSkillFiles({ workspaceDir: options.workspaceDir });
 
   const workspace: SparkAgentWorkspace = {
     scheduleUpdate: () => {},
@@ -359,6 +380,7 @@ export async function runSparkGraderLocal(options: {
   const done = tool({
     description:
       "Mark the local grader replay as complete. Stores a short summary for the caller.",
+    terminal: true,
     inputSchema: z
       .object({
         summary: z.string().trim().min(1).optional(),

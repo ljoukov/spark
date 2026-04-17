@@ -1,5 +1,6 @@
 import os from "node:os";
 import path from "node:path";
+import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
 import { createHash, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
@@ -12,6 +13,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
+import { promisify } from "node:util";
 
 import type { PyodideInterface } from "pyodide";
 import { zodToJsonSchema } from "@alcyone-labs/zod-to-json-schema";
@@ -55,6 +57,7 @@ import {
   SessionSchema,
   SessionMediaDocSchema,
   SparkAgentStateTimelineSchema,
+  SparkGraderWorksheetReferencesSchema,
   SparkGraderWorksheetReportSchema,
   SparkSolveSheetDraftSchema,
   SparkTutorComposerStateSchema,
@@ -104,10 +107,11 @@ import {
   downloadStorageObject,
   uploadStorageObject,
 } from "../utils/gcp/storageRest";
+import { applyPdfTranscriptionSkillTools } from "./skills/pdfTranscription";
 import {
-  applyPdfTranscriptionSkillTools,
-  PDF_TRANSCRIPTION_SKILL_TEXT,
-} from "./skills/pdfTranscription";
+  renderSparkAgentSkillReadList,
+  SPARK_GRADER_SKILL_IDS,
+} from "./sparkAgentSkills";
 import { AgentProcessUsageMonitor } from "./agentProcessUsageMonitor";
 import {
   SparkGraderRequestPayloadSchema,
@@ -138,6 +142,8 @@ import type {
   StageHandle,
 } from "../utils/concurrency";
 
+const execFileAsync = promisify(execFile);
+
 const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4-fast";
 const SPARK_AGENT_FILESYSTEM_TOOL_PROFILE = "codex" as const;
 
@@ -162,6 +168,11 @@ const SUPPORTED_CROP_IMAGE_INPUT_MIME_TYPES = [
 const SUPPORTED_CROP_IMAGE_INPUT_MIME_TYPE_SET = new Set<string>(
   SUPPORTED_CROP_IMAGE_INPUT_MIME_TYPES,
 );
+const READ_WORKSPACE_FILE_DEFAULT_MAX_CHARS = 24_000;
+const READ_WORKSPACE_FILE_MAX_CHARS = 200_000;
+const READ_WORKSPACE_FILE_DEFAULT_RANGE_LINES = 240;
+const READ_WORKSPACE_FILE_MAX_RANGE_LINES = 2_000;
+const READ_WORKSPACE_FILE_LARGE_OUTLINE_MAX_LINES = 90;
 
 type TrackedSubmodelCallSummary = {
   readonly modelId: string;
@@ -170,6 +181,215 @@ type TrackedSubmodelCallSummary = {
   readonly usageTokens: LlmUsageTokenUpdate | null;
   readonly costUsd: number | null;
 };
+
+type PdfImagesListEntry = {
+  readonly page: number;
+  readonly imageNumber: number;
+  readonly type: string;
+  readonly width: number;
+  readonly height: number;
+  readonly color: string;
+  readonly components: number | null;
+  readonly bitsPerComponent: number | null;
+  readonly encoding: string;
+  readonly interpolate: string;
+  readonly objectId: string | null;
+  readonly xPpi: number | null;
+  readonly yPpi: number | null;
+  readonly size: string | null;
+  readonly ratio: string | null;
+};
+
+function parseOptionalNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  if (typeof value === "number") {
+    return value;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return undefined;
+}
+
+function parsePdfImagesListOutput(stdout: string): PdfImagesListEntry[] {
+  const entries: PdfImagesListEntry[] = [];
+  for (const line of stdout.split(/\r?\n/gu)) {
+    const columns = line.trim().split(/\s+/u).filter(Boolean);
+    if (columns.length < 10 || !/^\d+$/u.test(columns[0] ?? "")) {
+      continue;
+    }
+
+    const page = Number.parseInt(columns[0] ?? "", 10);
+    const imageNumber = Number.parseInt(columns[1] ?? "", 10);
+    const width = Number.parseInt(columns[3] ?? "", 10);
+    const height = Number.parseInt(columns[4] ?? "", 10);
+    if (
+      !Number.isFinite(page) ||
+      !Number.isFinite(imageNumber) ||
+      !Number.isFinite(width) ||
+      !Number.isFinite(height)
+    ) {
+      continue;
+    }
+
+    const objectNumber = columns[10];
+    const objectGeneration = columns[11];
+    const xPpi = Number.parseInt(columns[12] ?? "", 10);
+    const yPpi = Number.parseInt(columns[13] ?? "", 10);
+    const components = Number.parseInt(columns[6] ?? "", 10);
+    const bitsPerComponent = Number.parseInt(columns[7] ?? "", 10);
+
+    entries.push({
+      page,
+      imageNumber,
+      type: columns[2] ?? "unknown",
+      width,
+      height,
+      color: columns[5] ?? "unknown",
+      components: Number.isFinite(components) ? components : null,
+      bitsPerComponent: Number.isFinite(bitsPerComponent)
+        ? bitsPerComponent
+        : null,
+      encoding: columns[8] ?? "unknown",
+      interpolate: columns[9] ?? "unknown",
+      objectId:
+        objectNumber !== undefined && objectGeneration !== undefined
+          ? `${objectNumber} ${objectGeneration}`
+          : null,
+      xPpi: Number.isFinite(xPpi) ? xPpi : null,
+      yPpi: Number.isFinite(yPpi) ? yPpi : null,
+      size: columns[14] ?? null,
+      ratio: columns[15] ?? null,
+    });
+  }
+  return entries;
+}
+
+function sanitizePdfImageFilenamePrefix(value: string | undefined): string {
+  const normalized = (value ?? "embedded-image")
+    .trim()
+    .replace(/[^a-z0-9_-]+/giu, "-")
+    .replace(/^-+|-+$/gu, "");
+  if (normalized.length > 0) {
+    return normalized.slice(0, 80);
+  }
+  return "embedded-image";
+}
+
+async function resolvePdfImagesExtractedFiles(options: {
+  outputDir: string;
+  absoluteOutputDir: string;
+  filenamePrefix: string;
+}): Promise<
+  Array<{
+    path: string;
+    width: number | null;
+    height: number | null;
+    bytes: number;
+  }>
+> {
+  const entries = await readdir(options.absoluteOutputDir, {
+    withFileTypes: true,
+  }).catch(() => []);
+  const imageFiles = entries
+    .filter((entry) => {
+      if (!entry.isFile()) {
+        return false;
+      }
+      if (!entry.name.startsWith(`${options.filenamePrefix}-`)) {
+        return false;
+      }
+      return /\.(?:png|jpe?g|ppm|pbm|tiff?|jp2|jb2[eg]?)$/iu.test(entry.name);
+    })
+    .map((entry) => entry.name)
+    .sort((left, right) => left.localeCompare(right));
+
+  const results: Array<{
+    path: string;
+    width: number | null;
+    height: number | null;
+    bytes: number;
+  }> = [];
+  for (const fileName of imageFiles) {
+    const absolutePath = path.join(options.absoluteOutputDir, fileName);
+    const relativePath = `${options.outputDir}/${fileName}`;
+    const fileStat = await stat(absolutePath);
+    let width: number | null = null;
+    let height: number | null = null;
+    try {
+      const metadata = await getSharp()(absolutePath).metadata();
+      if (typeof metadata.width === "number" && metadata.width > 0) {
+        width = metadata.width;
+      }
+      if (typeof metadata.height === "number" && metadata.height > 0) {
+        height = metadata.height;
+      }
+    } catch {
+      width = null;
+      height = null;
+    }
+    results.push({
+      path: relativePath,
+      width,
+      height,
+      bytes: fileStat.size,
+    });
+  }
+  return results;
+}
+
+function attachExtractedPdfImagePaths(options: {
+  images: PdfImagesListEntry[];
+  files: Array<{
+    path: string;
+    width: number | null;
+    height: number | null;
+    bytes: number;
+  }>;
+}): Array<Record<string, unknown>> {
+  const usedFiles = new Set<number>();
+  return options.images.map((image) => {
+    const fileIndex = options.files.findIndex((file, index) => {
+      return (
+        !usedFiles.has(index) &&
+        file.width === image.width &&
+        file.height === image.height
+      );
+    });
+    if (fileIndex !== -1) {
+      usedFiles.add(fileIndex);
+    }
+    const file = fileIndex !== -1 ? options.files[fileIndex] : null;
+    return {
+      page: image.page,
+      imageNumber: image.imageNumber,
+      type: image.type,
+      width: image.width,
+      height: image.height,
+      color: image.color,
+      components: image.components,
+      bitsPerComponent: image.bitsPerComponent,
+      encoding: image.encoding,
+      interpolate: image.interpolate,
+      objectId: image.objectId,
+      xPpi: image.xPpi,
+      yPpi: image.yPpi,
+      size: image.size,
+      ratio: image.ratio,
+      ...(file
+        ? {
+            path: file.path,
+            outputBytes: file.bytes,
+          }
+        : {}),
+    };
+  });
+}
 const DEFAULT_GENERATE_TEXT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4-fast";
 const WORKSPACE_UPDATE_THROTTLE_MS = 10_000;
 const AGENT_LOG_THROTTLE_MS = 2_000;
@@ -201,6 +421,9 @@ const PDF_DIAGRAM_MAX_ITEMS = 64;
 const GRADER_PRE_PUBLISH_DIAGRAM_EXTRACTION_BUDGET = 8;
 const DEFAULT_PDF_DIAGRAM_EXTRACTION_PROMPT =
   "Identify answer-critical figures, diagrams, graphs, tables, and option-diagram blocks in this PDF. Return coarse rectangular bounding boxes that include all labels, axes, legends, option labels, and required annotations while excluding surrounding question text where practical.";
+const PDF_EMBEDDED_IMAGE_MAX_ITEMS = 300;
+const PDF_EMBEDDED_IMAGE_DEFAULT_MAX_ITEMS = 100;
+const PDF_IMAGES_CLI_MAX_BUFFER = 16 * 1024 * 1024;
 const TUTOR_CONTEXT_PROBLEM_PATH = "context/problem.md";
 const TUTOR_CONTEXT_REPORT_PATH = "context/report.json";
 const TUTOR_CONTEXT_OFFICIAL_SOLUTION_PATH = "context/official-solution.md";
@@ -227,6 +450,659 @@ async function loadSparkGraderRequestPayloadFromWorkspace(rootDir: string) {
     }
     throw error;
   }
+}
+
+function asJsonObject(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function collectRawWorksheetScoreTotals(sheetJson: unknown): {
+  awardedMarks: number;
+  maxMarks: number;
+  scoredQuestions: number;
+} | null {
+  const root = asJsonObject(sheetJson);
+  const review = asJsonObject(root?.review);
+  const questions = asJsonObject(review?.questions);
+  if (!questions) {
+    return null;
+  }
+  let awardedMarks = 0;
+  let maxMarks = 0;
+  let scoredQuestions = 0;
+  for (const value of Object.values(questions)) {
+    const questionReview = asJsonObject(value);
+    const score = asJsonObject(questionReview?.score);
+    const got = score?.got;
+    const total = score?.total;
+    if (typeof got !== "number" || typeof total !== "number") {
+      continue;
+    }
+    if (!Number.isFinite(got) || !Number.isFinite(total)) {
+      continue;
+    }
+    awardedMarks += got;
+    maxMarks += total;
+    scoredQuestions += 1;
+  }
+  if (scoredQuestions === 0) {
+    return null;
+  }
+  return {
+    awardedMarks,
+    maxMarks,
+    scoredQuestions,
+  };
+}
+
+async function normalizeRawGraderAggregateScoresForPublish(options: {
+  rootDir: string;
+  summaryPath: string;
+  sheetPath: string;
+  sheetJson: unknown;
+  summary: GraderRunSummary;
+  onWorkspaceFileChanged?: (filePath: string) => void;
+}): Promise<{
+  sheetJson: unknown;
+  sheetRaw: string | null;
+  summaryRaw: string | null;
+  summary: GraderRunSummary;
+}> {
+  const totals = collectRawWorksheetScoreTotals(options.sheetJson);
+  if (!totals) {
+    return {
+      sheetJson: options.sheetJson,
+      sheetRaw: null,
+      summaryRaw: null,
+      summary: options.summary,
+    };
+  }
+
+  const root = asJsonObject(options.sheetJson);
+  const review = asJsonObject(root?.review);
+  const score = asJsonObject(review?.score);
+  if (!root || !review || !score) {
+    return {
+      sheetJson: options.sheetJson,
+      sheetRaw: null,
+      summaryRaw: null,
+      summary: options.summary,
+    };
+  }
+
+  const currentGot = score.got;
+  const currentTotal = score.total;
+  let sheetChanged = false;
+  if (currentGot !== totals.awardedMarks) {
+    score.got = totals.awardedMarks;
+    sheetChanged = true;
+  }
+  if (currentTotal !== totals.maxMarks) {
+    score.total = totals.maxMarks;
+    sheetChanged = true;
+  }
+  const label = review.label;
+  if (
+    typeof label === "string" &&
+    /^\s*\d+(?:\.\d+)?\s*\/\s*\d+(?:\.\d+)?\s*(?:marks?)?\s*$/iu.test(label)
+  ) {
+    const normalizedLabel = `${totals.awardedMarks.toString()}/${totals.maxMarks.toString()}`;
+    if (label !== normalizedLabel) {
+      review.label = normalizedLabel;
+      sheetChanged = true;
+    }
+  }
+
+  let sheetRaw: string | null = null;
+  const summaryTotals = options.summary.totals;
+  if (!summaryTotals) {
+    return {
+      sheetJson: options.sheetJson,
+      sheetRaw,
+      summaryRaw: null,
+      summary: options.summary,
+    };
+  }
+  let summaryChanged = false;
+  if (summaryTotals.awardedMarks !== totals.awardedMarks) {
+    summaryTotals.awardedMarks = totals.awardedMarks;
+    summaryChanged = true;
+  }
+  if (summaryTotals.maxMarks !== totals.maxMarks) {
+    summaryTotals.maxMarks = totals.maxMarks;
+    summaryChanged = true;
+  }
+
+  if (sheetChanged) {
+    sheetRaw = JSON.stringify(options.sheetJson, null, 2).concat("\n");
+    await writeFile(
+      resolveWorkspacePath(options.rootDir, options.sheetPath),
+      sheetRaw,
+      { encoding: "utf8" },
+    );
+    options.onWorkspaceFileChanged?.(options.sheetPath);
+  }
+  if (summaryChanged) {
+    const summaryRaw = JSON.stringify(options.summary, null, 2).concat("\n");
+    await writeFile(
+      resolveWorkspacePath(options.rootDir, options.summaryPath),
+      summaryRaw,
+      { encoding: "utf8" },
+    );
+    options.onWorkspaceFileChanged?.(options.summaryPath);
+    return {
+      sheetJson: options.sheetJson,
+      sheetRaw,
+      summaryRaw,
+      summary: options.summary,
+    };
+  }
+
+  return {
+    sheetJson: options.sheetJson,
+    sheetRaw,
+    summaryRaw: null,
+    summary: options.summary,
+  };
+}
+
+async function normalizeRawGraderSummaryMetadataForPublish(options: {
+  rootDir: string;
+  summaryPath: string;
+  summaryJson: unknown;
+  onWorkspaceFileChanged?: (filePath: string) => void;
+}): Promise<{
+  summaryJson: unknown;
+  summaryRaw: string | null;
+}> {
+  const summary = asJsonObject(options.summaryJson);
+  if (!summary) {
+    return {
+      summaryJson: options.summaryJson,
+      summaryRaw: null,
+    };
+  }
+
+  let changed = false;
+  if (typeof summary.year === "number" && Number.isFinite(summary.year)) {
+    summary.year = summary.year.toString();
+    changed = true;
+  }
+
+  if (!changed) {
+    return {
+      summaryJson: options.summaryJson,
+      summaryRaw: null,
+    };
+  }
+
+  const summaryRaw = JSON.stringify(options.summaryJson, null, 2).concat("\n");
+  await writeFile(
+    resolveWorkspacePath(options.rootDir, options.summaryPath),
+    summaryRaw,
+    { encoding: "utf8" },
+  );
+  options.onWorkspaceFileChanged?.(options.summaryPath);
+
+  return {
+    summaryJson: options.summaryJson,
+    summaryRaw,
+  };
+}
+
+function isSupportedQuestionReviewStatus(value: unknown): boolean {
+  return (
+    value === "correct" ||
+    value === "incorrect" ||
+    value === "teacher-review"
+  );
+}
+
+function inferQuestionReviewStatusFromRawScore(
+  score: Record<string, unknown> | null,
+): "correct" | "incorrect" | "teacher-review" {
+  const got = score?.got;
+  const total = score?.total;
+  if (
+    typeof got === "number" &&
+    typeof total === "number" &&
+    Number.isFinite(got) &&
+    Number.isFinite(total)
+  ) {
+    return got >= total ? "correct" : "incorrect";
+  }
+  return "teacher-review";
+}
+
+function normalizeRawPaperSheetAnswerValue(
+  value: unknown,
+): SparkGraderWorksheetReport["answers"][string] | undefined {
+  if (typeof value === "string") {
+    return value;
+  }
+  const record = asJsonObject(value);
+  if (!record) {
+    return undefined;
+  }
+
+  const answer: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(record)) {
+    if (typeof entry === "string") {
+      answer[key] = entry;
+      continue;
+    }
+    if (typeof entry === "number" && Number.isFinite(entry)) {
+      answer[key] = entry.toString();
+    }
+  }
+  return answer;
+}
+
+function collectRawInlineQuestionAnswers(
+  value: unknown,
+  answers: Map<string, SparkGraderWorksheetReport["answers"][string]>,
+): void {
+  const record = asJsonObject(value);
+  if (!record) {
+    return;
+  }
+
+  const id = record.id;
+  if (typeof id === "string" && "answer" in record) {
+    const answer = normalizeRawPaperSheetAnswerValue(record.answer);
+    if (answer !== undefined) {
+      answers.set(id, answer);
+    }
+  }
+
+  const children = record.questions;
+  if (Array.isArray(children)) {
+    for (const child of children) {
+      collectRawInlineQuestionAnswers(child, answers);
+    }
+  }
+
+  const sections = record.sections;
+  if (Array.isArray(sections)) {
+    for (const section of sections) {
+      collectRawInlineQuestionAnswers(section, answers);
+    }
+  }
+}
+
+function defaultPaperSheetAnswerForQuestion(
+  question: PaperSheetQuestion,
+): SparkGraderWorksheetReport["answers"][string] {
+  if (
+    question.type === "mcq" ||
+    question.type === "lines" ||
+    question.type === "calc"
+  ) {
+    return "";
+  }
+
+  if (
+    question.type === "fill" ||
+    question.type === "cloze" ||
+    question.type === "answer_bank"
+  ) {
+    return Object.fromEntries(
+      question.blanks.map((_, index) => [index.toString(), ""]),
+    );
+  }
+
+  if (question.type === "match") {
+    return Object.fromEntries(question.pairs.map((pair) => [pair.term, ""]));
+  }
+
+  if (question.type === "spelling") {
+    return Object.fromEntries(
+      question.words.map((_, index) => [index.toString(), ""]),
+    );
+  }
+
+  const answer: Record<string, string> = {};
+  for (const box of question.boxes) {
+    if (box.initialValue === undefined && box.readonly !== true) {
+      answer[box.id] = "";
+    }
+  }
+  return answer;
+}
+
+function coerceBareGraderWorksheetReportForPublish(
+  value: unknown,
+): SparkGraderWorksheetReport | null {
+  const direct = SparkGraderWorksheetReportSchema.safeParse(value);
+  if (direct.success) {
+    return direct.data;
+  }
+
+  const root = asJsonObject(value);
+  if (!root || root.sheet !== undefined || !Array.isArray(root.sections)) {
+    return null;
+  }
+
+  const sourceSections = root.sections;
+  const title =
+    typeof root.title === "string" && root.title.trim().length > 0
+      ? root.title.trim()
+      : "Graded worksheet";
+  const subtitle =
+    typeof root.subtitle === "string" && root.subtitle.trim().length > 0
+      ? root.subtitle.trim()
+      : "Submitted answers";
+  const subject =
+    typeof root.subject === "string" && root.subject.trim().length > 0
+      ? root.subject.trim()
+      : "Worksheet";
+  const level =
+    typeof root.level === "string" && root.level.trim().length > 0
+      ? root.level.trim()
+      : subject;
+
+  const candidateSections = [
+    {
+      id: "questions",
+      label: "Questions",
+      questions: sourceSections,
+    },
+  ];
+  const draft = coerceSparkSolveSheetDraft({
+    schemaVersion: 1,
+    mode: "draft",
+    sheet: {
+      id:
+        typeof root.id === "string" && root.id.trim().length > 0
+          ? root.id.trim()
+          : "graded-worksheet",
+      subject,
+      level,
+      title,
+      subtitle,
+      color: typeof root.color === "string" ? root.color : "#2F6F3E",
+      accent: typeof root.accent === "string" ? root.accent : "#327A45",
+      light: typeof root.light === "string" ? root.light : "#EAF6EE",
+      border: typeof root.border === "string" ? root.border : "#B7D8C1",
+      sections: candidateSections,
+    },
+    ...(root.references !== undefined ? { references: root.references } : {}),
+  });
+  if (!draft) {
+    return null;
+  }
+
+  const inlineAnswers = new Map<
+    string,
+    SparkGraderWorksheetReport["answers"][string]
+  >();
+  collectRawInlineQuestionAnswers(root, inlineAnswers);
+  const explicitAnswers = asJsonObject(root.answers);
+  if (explicitAnswers) {
+    for (const [questionId, rawAnswer] of Object.entries(explicitAnswers)) {
+      const answer = normalizeRawPaperSheetAnswerValue(rawAnswer);
+      if (answer !== undefined) {
+        inlineAnswers.set(questionId, answer);
+      }
+    }
+  }
+
+  const rawReview = asJsonObject(root.review);
+  const rawReviewQuestions = asJsonObject(rawReview?.questions) ?? {};
+  const answers: SparkGraderWorksheetReport["answers"] = {};
+  const reviewQuestions: SparkGraderWorksheetReport["review"]["questions"] = {};
+  visitPaperSheetQuestions(draft.sheet.sections.flatMap((section) => {
+    return "questions" in section && section.questions ? section.questions : [];
+  }), (question) => {
+    answers[question.id] =
+      inlineAnswers.get(question.id) ??
+      defaultPaperSheetAnswerForQuestion(question);
+    const rawReviewEntry = asJsonObject(rawReviewQuestions[question.id]) ?? {};
+    const rawScore = asJsonObject(rawReviewEntry.score);
+    const status = isSupportedQuestionReviewStatus(rawReviewEntry.status)
+      ? (rawReviewEntry.status as "correct" | "incorrect" | "teacher-review")
+      : inferQuestionReviewStatusFromRawScore(rawScore);
+    reviewQuestions[question.id] = {
+      ...rawReviewEntry,
+      status,
+      note: typeof rawReviewEntry.note === "string" ? rawReviewEntry.note : "",
+    };
+  });
+
+  const rawScore = asJsonObject(rawReview?.score);
+  const got = rawScore?.got;
+  const total = rawScore?.total;
+  const score = {
+    got: typeof got === "number" && Number.isFinite(got) ? got : 0,
+    total: typeof total === "number" && Number.isFinite(total) ? total : 0,
+  };
+  const review = {
+    mode:
+      rawReview?.mode === "awaiting_answers"
+        ? ("awaiting_answers" as const)
+        : ("graded" as const),
+    score,
+    label:
+      typeof rawReview?.label === "string" &&
+      rawReview.label.trim().length > 0
+        ? rawReview.label.trim()
+        : `${score.got.toString()}/${score.total.toString()}`,
+    message:
+      typeof rawReview?.message === "string" &&
+      rawReview.message.trim().length > 0
+        ? rawReview.message.trim()
+        : "Graded submitted work.",
+    note: typeof rawReview?.note === "string" ? rawReview.note : "",
+    questions: reviewQuestions,
+  };
+
+  const references = SparkGraderWorksheetReferencesSchema.safeParse(
+    root.references,
+  );
+  const report = SparkGraderWorksheetReportSchema.safeParse({
+    schemaVersion: 1,
+    sheet: draft.sheet,
+    answers,
+    review,
+    ...(references.success ? { references: references.data } : {}),
+  });
+  return report.success ? report.data : null;
+}
+
+const PAPER_SHEET_DEFAULT_COLORS = {
+  color: "#2F6F3E",
+  accent: "#327A45",
+  light: "#EAF6EE",
+  border: "#B7D8C1",
+} as const;
+
+function isHexColor(value: unknown): value is string {
+  return typeof value === "string" && /^#[0-9a-fA-F]{6}$/u.test(value);
+}
+
+function normalizeRawPaperSheetShapeForPublish(
+  value: unknown,
+): { readonly value: unknown; readonly changed: boolean } {
+  const root = asJsonObject(value);
+  if (!root) {
+    return { value, changed: false };
+  }
+
+  const rootSheet = asJsonObject(root.sheet);
+  const sheet = rootSheet ?? root;
+  if (!Array.isArray(sheet.sections)) {
+    return { value, changed: false };
+  }
+
+  let changed = false;
+  const nextRoot: Record<string, unknown> = { ...root };
+  const nextSheet: Record<string, unknown> = { ...sheet };
+  const review = asJsonObject(root.review);
+  const nextReview = review ? { ...review } : null;
+
+  if (
+    nextReview &&
+    nextReview.mode !== "graded" &&
+    nextReview.mode !== "awaiting_answers"
+  ) {
+    nextReview.mode = "graded";
+    changed = true;
+  }
+
+  for (const [key, fallback] of Object.entries(PAPER_SHEET_DEFAULT_COLORS)) {
+    if (!isHexColor(nextSheet[key])) {
+      nextSheet[key] = fallback;
+      changed = true;
+    }
+  }
+
+  const normalizeQuestionEntry = (entry: unknown): unknown => {
+    const question = asJsonObject(entry);
+    if (!question) {
+      return entry;
+    }
+    const nextQuestion: Record<string, unknown> = { ...question };
+    if (
+      nextQuestion.type === "lines" &&
+      typeof nextQuestion.lines !== "number"
+    ) {
+      nextQuestion.lines = 4;
+      changed = true;
+    }
+    if (Array.isArray(nextQuestion.questions)) {
+      nextQuestion.questions = nextQuestion.questions.map((child) =>
+        normalizeQuestionEntry(child),
+      );
+    }
+    return nextQuestion;
+  };
+
+  nextSheet.sections = sheet.sections.map((section, index) => {
+    const sectionRecord = asJsonObject(section);
+    if (!sectionRecord) {
+      return section;
+    }
+    const nextSection: Record<string, unknown> = { ...sectionRecord };
+    if (nextSection.type === "section" || nextSection.type === "content") {
+      delete nextSection.type;
+      changed = true;
+    }
+    if (
+      typeof nextSection.id !== "string" ||
+      nextSection.id.trim().length === 0
+    ) {
+      nextSection.id = `section-${(index + 1).toString()}`;
+      changed = true;
+    }
+    if (typeof nextSection.label !== "string") {
+      if (typeof nextSection.title === "string") {
+        nextSection.label = nextSection.title;
+        delete nextSection.title;
+        changed = true;
+      } else if (
+        nextSection.type !== "hook" &&
+        (Array.isArray(nextSection.questions) ||
+          typeof nextSection.theory === "string" ||
+          nextSection.infoBox !== undefined)
+      ) {
+        nextSection.label = `Section ${(index + 1).toString()}`;
+        changed = true;
+      }
+    }
+    if (Array.isArray(nextSection.questions)) {
+      nextSection.questions = nextSection.questions.map((question) =>
+        normalizeQuestionEntry(question),
+      );
+    }
+    return nextSection;
+  });
+
+  if (!changed) {
+    return { value, changed: false };
+  }
+
+  if (rootSheet) {
+    nextRoot.sheet = nextSheet;
+    if (nextReview) {
+      nextRoot.review = nextReview;
+    }
+    return { value: nextRoot, changed: true };
+  }
+
+  if (nextReview) {
+    nextSheet.review = nextReview;
+  }
+
+  return { value: nextSheet, changed: true };
+}
+
+async function normalizeRawGraderQuestionReviewsForPublish(options: {
+  rootDir: string;
+  sheetPath: string;
+  sheetJson: unknown;
+  onWorkspaceFileChanged?: (filePath: string) => void;
+}): Promise<{
+  sheetJson: unknown;
+  sheetRaw: string | null;
+}> {
+  const root = asJsonObject(options.sheetJson);
+  const review = asJsonObject(root?.review);
+  const questions = asJsonObject(review?.questions);
+  if (!questions) {
+    return {
+      sheetJson: options.sheetJson,
+      sheetRaw: null,
+    };
+  }
+
+  let changed = false;
+  for (const questionReviewValue of Object.values(questions)) {
+    const questionReview = asJsonObject(questionReviewValue);
+    if (!questionReview) {
+      continue;
+    }
+    if (!isSupportedQuestionReviewStatus(questionReview.status)) {
+      questionReview.status = inferQuestionReviewStatusFromRawScore(
+        asJsonObject(questionReview.score),
+      );
+      changed = true;
+    }
+    if (typeof questionReview.note !== "string") {
+      questionReview.note = "";
+      changed = true;
+    }
+    const questionReviewNote =
+      typeof questionReview.note === "string" ? questionReview.note : "";
+    if (
+      questionReview.status !== "correct" &&
+      questionReviewNote.trim().length === 0
+    ) {
+      questionReview.note =
+        "Review this part against the mark scheme and identify the missing step or evidence.";
+      changed = true;
+    }
+  }
+
+  if (!changed) {
+    return {
+      sheetJson: options.sheetJson,
+      sheetRaw: null,
+    };
+  }
+
+  const sheetRaw = JSON.stringify(options.sheetJson, null, 2).concat("\n");
+  await writeFile(resolveWorkspacePath(options.rootDir, options.sheetPath), sheetRaw, {
+    encoding: "utf8",
+  });
+  options.onWorkspaceFileChanged?.(options.sheetPath);
+
+  return {
+    sheetJson: options.sheetJson,
+    sheetRaw,
+  };
 }
 
 function formatUsdTotal(value: number): string {
@@ -977,6 +1853,236 @@ function parseOptionalPositiveInt(value: unknown): number | undefined {
   return value;
 }
 
+function renderWorkspaceFileReadResult(input: {
+  readonly filePath: string;
+  readonly content: string;
+  readonly startLine?: number;
+  readonly lineCount?: number;
+  readonly maxChars?: number;
+  readonly largeOutlineReadCount?: number;
+}): string {
+  const lines = input.content.split(/\r?\n/u);
+  const hasExplicitBounds =
+    input.startLine !== undefined ||
+    input.lineCount !== undefined ||
+    input.maxChars !== undefined;
+  const totalLines = lines.length;
+  const requestedStartLine = input.startLine ?? 1;
+  const startLine = Math.min(Math.max(requestedStartLine, 1), totalLines);
+  const requestedLineCount =
+    input.lineCount ??
+    (input.startLine !== undefined
+      ? READ_WORKSPACE_FILE_DEFAULT_RANGE_LINES
+      : totalLines);
+  const lineCount = Math.min(
+    Math.max(requestedLineCount, 1),
+    READ_WORKSPACE_FILE_MAX_RANGE_LINES,
+  );
+  const endLine = Math.min(startLine + lineCount - 1, totalLines);
+  const isLineRange =
+    input.startLine !== undefined ||
+    input.lineCount !== undefined ||
+    endLine < totalLines ||
+    startLine > 1;
+  const normalizedFilePath = input.filePath.replace(/\\/gu, "/");
+  const shouldUseLargeFilePreview =
+    normalizedFilePath.startsWith("grader/output/") ||
+    normalizedFilePath.startsWith("sheet/output/");
+  if (
+    !hasExplicitBounds &&
+    shouldUseLargeFilePreview &&
+    input.content.length > READ_WORKSPACE_FILE_DEFAULT_MAX_CHARS
+  ) {
+    if (
+      input.largeOutlineReadCount !== undefined &&
+      input.largeOutlineReadCount > 1
+    ) {
+      return [
+        `[read_workspace_file] ${input.filePath}`,
+        `large generated output/reference file already returned a compact outline in this run (repeat #${input.largeOutlineReadCount.toString()})`,
+        "content omitted=true; do not call this file unbounded again; use grep_workspace_files with specific question/page labels, then read_workspace_file with startLine/lineCount for exact sections",
+      ].join("; ");
+    }
+    return renderLargeGeneratedWorkspaceFileOutline({
+      filePath: input.filePath,
+      lines,
+      contentChars: input.content.length,
+    });
+  }
+  const maxChars = Math.min(
+    Math.max(input.maxChars ?? READ_WORKSPACE_FILE_DEFAULT_MAX_CHARS, 1),
+    READ_WORKSPACE_FILE_MAX_CHARS,
+  );
+  const selected = lines.slice(startLine - 1, endLine).join("\n");
+  if (!isLineRange && selected.length <= maxChars) {
+    return selected;
+  }
+  const truncatedContent =
+    selected.length > maxChars ? selected.slice(0, maxChars) : selected;
+  const contentTruncated = selected.length > truncatedContent.length;
+  const rangeTruncated = startLine > 1 || endLine < totalLines;
+  const notices = [
+    `[read_workspace_file] ${input.filePath}`,
+    `showing lines ${startLine.toString()}-${endLine.toString()} of ${totalLines.toString()}`,
+    `chars ${truncatedContent.length.toString()} of ${selected.length.toString()} selected`,
+  ];
+  if (contentTruncated || rangeTruncated) {
+    notices.push(
+      "truncated=true; use grep_workspace_files to locate headings/question labels, then read_workspace_file with startLine/lineCount for exact sections; use maxChars only when a larger bounded preview is necessary",
+    );
+  }
+  return `${notices.join("; ")}\n\n${truncatedContent}`;
+}
+
+function parseWorkspaceFileReadPathHints(filePath: string): {
+  readonly filePath: string;
+  readonly startLine?: number;
+  readonly lineCount?: number;
+} {
+  let normalizedPath = filePath.trim();
+  let startLine: number | undefined;
+  let endLine: number | undefined;
+  let lineCount: number | undefined;
+
+  const queryIndex = normalizedPath.indexOf("?");
+  if (queryIndex !== -1) {
+    const query = normalizedPath.slice(queryIndex + 1);
+    normalizedPath = normalizedPath.slice(0, queryIndex);
+    const params = new URLSearchParams(query);
+    startLine = parseOptionalPositiveInt(
+      params.get("startLine") ?? params.get("line") ?? params.get("start"),
+    );
+    lineCount = parseOptionalPositiveInt(
+      params.get("lineCount") ?? params.get("lines") ?? params.get("count"),
+    );
+    endLine = parseOptionalPositiveInt(
+      params.get("endLine") ?? params.get("end"),
+    );
+  }
+
+  const fragmentMatch = /#L(\d+)(?:-L?(\d+))?$/iu.exec(normalizedPath);
+  if (fragmentMatch) {
+    normalizedPath = normalizedPath.slice(0, fragmentMatch.index);
+    startLine = Number.parseInt(fragmentMatch[1] ?? "", 10);
+    endLine =
+      fragmentMatch[2] !== undefined
+        ? Number.parseInt(fragmentMatch[2], 10)
+        : undefined;
+  }
+
+  const genericFragmentIndex = normalizedPath.indexOf("#");
+  if (
+    genericFragmentIndex !== -1 &&
+    /\.(?:md|txt|json|jsonl)#/iu.test(normalizedPath)
+  ) {
+    normalizedPath = normalizedPath.slice(0, genericFragmentIndex);
+  }
+
+  const namedSuffixMatch =
+    /[:,](?:startLine|start|line)=\d+(?:(?:,|&)(?:lineCount|lines|count|endLine|end)=\d+)*$/iu.exec(
+      normalizedPath,
+    );
+  if (
+    namedSuffixMatch &&
+    /\.(?:md|txt|json|jsonl)[:,](?:startLine|start|line)=/iu.test(
+      normalizedPath,
+    )
+  ) {
+    const suffix = normalizedPath
+      .slice(namedSuffixMatch.index + 1)
+      .replaceAll(",", "&");
+    normalizedPath = normalizedPath.slice(0, namedSuffixMatch.index);
+    const params = new URLSearchParams(suffix);
+    startLine = parseOptionalPositiveInt(
+      params.get("startLine") ?? params.get("line") ?? params.get("start"),
+    );
+    lineCount = parseOptionalPositiveInt(
+      params.get("lineCount") ?? params.get("lines") ?? params.get("count"),
+    );
+    endLine = parseOptionalPositiveInt(
+      params.get("endLine") ?? params.get("end"),
+    );
+  }
+
+  const suffixMatch = /:(\d+)(?:-(\d+))?$/u.exec(normalizedPath);
+  if (suffixMatch && /\.(?:md|txt|json|jsonl):\d/iu.test(normalizedPath)) {
+    normalizedPath = normalizedPath.slice(0, suffixMatch.index);
+    startLine = Number.parseInt(suffixMatch[1] ?? "", 10);
+    endLine =
+      suffixMatch[2] !== undefined
+        ? Number.parseInt(suffixMatch[2], 10)
+        : undefined;
+  }
+
+  if (
+    startLine !== undefined &&
+    endLine !== undefined &&
+    Number.isFinite(startLine) &&
+    Number.isFinite(endLine) &&
+    endLine >= startLine
+  ) {
+    lineCount = endLine - startLine + 1;
+  }
+
+  return {
+    filePath: normalizedPath,
+    ...(startLine !== undefined && Number.isFinite(startLine)
+      ? { startLine }
+      : {}),
+    ...(lineCount !== undefined && Number.isFinite(lineCount)
+      ? { lineCount }
+      : {}),
+  };
+}
+
+function renderLargeGeneratedWorkspaceFileOutline(input: {
+  readonly filePath: string;
+  readonly lines: readonly string[];
+  readonly contentChars: number;
+}): string {
+  const referenceLinePattern =
+    /(?:^#{1,6}\s|^question\s+\d+\b|^\s*\d{1,2}\s*\.\s*\d+\b|^\s*0\s*\d\s*\.\s*\d+\b|\b\d{2}\.\d\b|\b(?:figure|table)\s+\d+\b|\[\d+\s+marks?\]|\bgrade\b|\bboundar|\bthreshold|\bmedal|\bprize)/iu;
+  const outlineLines: string[] = [];
+  for (const [index, line] of input.lines.entries()) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) {
+      continue;
+    }
+    if (!referenceLinePattern.test(trimmed)) {
+      continue;
+    }
+    outlineLines.push(`${(index + 1).toString()}: ${trimmed.slice(0, 500)}`);
+    if (outlineLines.length >= READ_WORKSPACE_FILE_LARGE_OUTLINE_MAX_LINES) {
+      break;
+    }
+  }
+  if (outlineLines.length === 0) {
+    const fallbackStride = Math.max(
+      1,
+      Math.ceil(input.lines.length / READ_WORKSPACE_FILE_LARGE_OUTLINE_MAX_LINES),
+    );
+    for (
+      let index = 0;
+      index < input.lines.length &&
+      outlineLines.length < READ_WORKSPACE_FILE_LARGE_OUTLINE_MAX_LINES;
+      index += fallbackStride
+    ) {
+      const trimmed = input.lines[index]?.trim();
+      if (!trimmed) {
+        continue;
+      }
+      outlineLines.push(`${(index + 1).toString()}: ${trimmed.slice(0, 500)}`);
+    }
+  }
+  const notices = [
+    `[read_workspace_file] ${input.filePath}`,
+    `large generated output/reference file: ${input.lines.length.toString()} lines, ${input.contentChars.toString()} chars`,
+    `showing compact line-numbered outline (${outlineLines.length.toString()} entries, max ${READ_WORKSPACE_FILE_LARGE_OUTLINE_MAX_LINES.toString()})`,
+    "truncated=true; use grep_workspace_files for specific labels or read_workspace_file with startLine/lineCount for exact source-paper or mark-scheme sections",
+  ];
+  return `${notices.join("; ")}\n\n${outlineLines.join("\n")}`;
+}
+
 const AgentAttachmentInputSchema = z.object({
   id: z.preprocess(
     (value) => parseOptionalString(value),
@@ -1226,11 +2332,23 @@ export function resolveSparkAgentSubagentSelection(): AgentSubagentToolSelection
     promptPattern: "codex",
     maxAgents: 6,
     instructions: [
-      "Grader subagent policy: when this workspace contains grader/task.md, never use spawn_agent for intake, upload inventory, workspace file reading, file summaries, or transcription. The main grader agent has the required tools for those tasks.",
-      "In grader runs, generic spawn_agent is disabled; final figure/image crop validation must use the dedicated validate_crop_with_fresh_agent tool with exactly one final crop, crop path, and question context per validation call.",
+      "Grader subagent policy: when this workspace contains grader/task.md, keep intake, upload inventory, workspace file reading, transcription, final grading synthesis, and worksheet assembly on the main grader agent. The main grader has the required tools and must own the final outputs.",
+      "In grader runs, spawn_agent may be used only for bounded sidecar work that keeps context clean: official-source lookup/verification when request.json allows online official references, or visual localization/proposal work for ambiguous source images. Do not delegate the final scoring or sheet JSON.",
+      "If the main grader is worried it is on the wrong path, it should use the dedicated review_run_progress_with_fresh_agent tool rather than generic spawn_agent.",
+      "Final figure/image crop validation must use the dedicated validate_crop_with_fresh_agent tool with exactly one final crop, crop path, and question context per validation call.",
       "If you are tempted to ask a subagent to read brief.md, request.json, grader/task.md, grader/uploads/index.json, transcription files, or reference text, do not spawn; read those files yourself.",
     ].join("\n"),
   };
+}
+
+function isTruthyEnv(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase();
+  return (
+    normalized === "1" ||
+    normalized === "true" ||
+    normalized === "yes" ||
+    normalized === "on"
+  );
 }
 
 type SparkAgentMetricType = "chat" | "lesson" | "grader" | "tutor";
@@ -1714,7 +2832,9 @@ const SUBPART_DISPLAY_NUMBER_PATTERN = /^0?\d+(?:\.\d+|\([^)]+\))/u;
 const MARKDOWN_IMAGE_PATTERN = /!\[[^\]]*\]\([^)]+\)/u;
 const FIGURE_REFERENCE_PATTERN = /\b(?:figure|diagram|photo|graph|chart)\b/iu;
 const VISUAL_CONTEXT_PROMPT_PATTERN =
-  /\b(?:figure|fig\.?|diagram|photo(?:graph)?|graph|chart|map|network)\b|\bimage\s+(?:shows?|below|above|labelled|labeled|of)\b|\b(?:shown|labelled|labeled)\s+in\s+the\s+image\b/iu;
+  /\b(?:figure|fig\.?|diagram|photo(?:graph)?|graph|chart|map)\b|\bimage\s+(?:shows?|below|above|labelled|labeled|of)\b|\b(?:shown|labelled|labeled)\s+in\s+the\s+image\b/iu;
+const SOURCE_PDF_VISUAL_REFERENCE_PATTERN =
+  /\b(?:linked|original|source|uploaded|official)(?:\s+(?:linked|original|source|uploaded|official))*\s+(?:PDF|paper|question\s+paper|document)\b|\b(?:PDF|paper|question\s+paper|document)\s+(?:link|reference)\b|\blink\s+to\s+(?:the\s+)?(?:linked|original|source|uploaded|official)(?:\s+(?:PDF|paper|question\s+paper|document))?\b/iu;
 const ABOVE_VISUAL_REFERENCE_PATTERN =
   /\b(?:Figure|Fig\.?|Diagram)\s+\d+(?:\.\d+)*[A-Za-z]?\b[^.?!\n]{0,120}\babove\b|\babove\b[^.?!\n]{0,120}\b(?:Figure|Fig\.?|Diagram)\s+\d+(?:\.\d+)*[A-Za-z]?\b/iu;
 const ANCHORED_VISUAL_REFERENCE_PATTERN =
@@ -1738,14 +2858,18 @@ const FRESH_CROP_REVIEW_TOOL_PATTERN =
 const CROP_VALIDATION_SUBAGENT_PATTERN = /\b(?:fresh-context\s+)?subagent\b/iu;
 const CROP_VALIDATION_PASS_PATTERN =
   /\b(?:pass(?:ed)?|validated|complete|all\s+(?:required\s+)?(?:content|information)|visible|not\s+clipped|included)\b/iu;
-const CROP_VALIDATION_FAILURE_PATTERN =
-  /(?:\b(?:not\s+checked|unchecked|no\s+subagent|without\s+subagent|fail(?:ed)?|missing|clipped|not\s+visible|cut\s+off|overbroad|noisy|full\s+page|whole\s+page|broad\s+page|page\s+context|image-edit\s+budget|unrelated\s+neighbouring|unrelated\s+neighboring|touch(?:es|ing)\s+(?:an\s+)?edge)\b|(?:^|[;,\n-]\s*)(?:pass\/fail|visible|included|complete|safe|(?:all\s+)?question[-\s]?relevant\s+(?:content|information)\s+(?:visible|included|complete|safe)|(?:required|important)\s+(?:content|information)\s+(?:visible|included|complete|safe)|(?:content|information)\s+(?:visible|included|complete|safe))\s*:\s*(?:no|fail|failed)\b|(?:^|[;,\n-]\s*)(?:unrelated|non[-\s]?target|edge\s+clipping|edge\s+touching|page\s+border|separator\s+line)[^:\n]{0,80}:\s*(?:yes|present|true)\b)/iu;
 const CROP_VALIDATION_RESOLVED_PATTERN =
   /\b(?:pass(?:ed)?|after\s+recrop|recropped|fixed|resolved|corrected|now\s+(?:visible|included|present|safe)|confirmed)\b/iu;
 const CROP_VALIDATION_UNRESOLVED_PATTERN =
-  /(?:\b(?:fail(?:ed)?|unresolved|still|remains|not\s+(?:visible|fixed|resolved|included|safe)|unsafe|overbroad|noisy|full\s+page|whole\s+page|broad\s+page|page\s+context|image-edit\s+budget|unrelated\s+neighbouring|unrelated\s+neighboring|touch(?:es|ing)\s+(?:an\s+)?edge)\b|(?:^|[;,\n-]\s*)(?:pass\/fail|visible|included|complete|safe|(?:all\s+)?question[-\s]?relevant\s+(?:content|information)\s+(?:visible|included|complete|safe)|(?:required|important)\s+(?:content|information)\s+(?:visible|included|complete|safe)|(?:content|information)\s+(?:visible|included|complete|safe))\s*:\s*(?:no|fail|failed)\b|(?:^|[;,\n-]\s*)(?:unrelated|non[-\s]?target|edge\s+clipping|edge\s+touching|page\s+border|separator\s+line)[^:\n]{0,80}:\s*(?:yes|present|true)\b)/iu;
+  /(?:\b(?:fail(?:ed)?|unresolved|still|not\s+(?:visible|fixed|resolved|included|safe)|unsafe|overbroad|noisy|full\s+page|whole\s+page|broad\s+page|page\s+context|image-edit\s+budget)\b|(?:^|[;,\n-]\s*)(?:pass\/fail|visible|included|complete|safe|(?:all\s+)?question[-\s]?relevant\s+(?:content|information)\s+(?:visible|included|complete|safe)|(?:required|important)\s+(?:content|information)\s+(?:visible|included|complete|safe)|(?:content|information)\s+(?:visible|included|complete|safe))\s*:\s*(?:no|fail|failed)\b)/iu;
 const CROP_VALIDATION_NEGATIVE_FIELD_PATTERN =
-  /^\s*(?:[-*]\s*)?(?:(?:pass\/fail|all\s+question[-\s]?relevant\s+content\s+visible|all\s+question[-\s]?relevant\s+information\s+visible|required\s+content\s+visible|required\s+information\s+visible|important\s+content\s+visible|important\s+information\s+visible|duplicated\s+caption\/question\/table\s+text\s+excluded)\s*:\s*(?:no|fail|failed)|(?:unrelated|non[-\s]?target|edge\s+clipping|edge\s+touching|page\s+border|separator\s+line)[^:\n]{0,80}:\s*(?:yes|present|true))\b/iu;
+  /^\s*(?:[-*]\s*)?(?:pass\/fail|all\s+question[-\s]?relevant\s+content\s+visible|all\s+question[-\s]?relevant\s+information\s+visible|required\s+content\s+visible|required\s+information\s+visible|important\s+content\s+visible|important\s+information\s+visible)\s*:\s*(?:no|fail|failed)\b/iu;
+const CROP_VALIDATION_PASS_FAIL_FAIL_FIELD_PATTERN =
+  /^\s*(?:[-*]\s*)?pass\/fail\s*:\s*(?:fail|failed)\b/iu;
+const CROP_VALIDATION_VISIBLE_CONTENT_YES_FIELD_PATTERN =
+  /^\s*(?:[-*]\s*)?(?:all\s+question[-\s]?relevant\s+content\s+visible|all\s+question[-\s]?relevant\s+information\s+visible|required\s+content\s+visible|required\s+information\s+visible|important\s+content\s+visible|important\s+information\s+visible)\s*:\s*yes\b/iu;
+const CROP_VALIDATION_DUPLICATE_NOT_EXCLUDED_FIELD_PATTERN =
+  /^\s*(?:[-*]\s*)?duplicated\s+caption\/question\/table\s+text\s+excluded\s*:\s*no\b/iu;
 const CROP_VALIDATION_NEGATED_RISK_FIELD_PATTERN =
   /^\s*(?:[-*]\s*)?(?=[^:\n]*(?:unrelated|non[-\s]?target|edge\s+clipping|edge\s+touching|touching\s+(?:an\s+)?edge|page\s+borders?|separator\s+lines?|answer\s+lines?|neighbou?r(?:ing)?[-\s]?question))[^:\n]+:\s*(?:no|none|not[_\s-]?applicable|n\/a|false|absent)\b/iu;
 const CROP_VALIDATION_ASSET_SUBAGENT_CHECK_PATTERN =
@@ -1762,7 +2886,7 @@ const PARTIAL_OPTION_CROP_VALIDATION_PATTERN =
 const ADMIN_BOILERPLATE_PATTERN =
   /\b(?:do not open the paper until|invigilator|use\s+B\s+or\s+HB\s+pencil|answer sheet will be read|candidates in england|calculators and measuring instruments are forbidden|rough paper is allowed)\b/iu;
 const USER_VISIBLE_PROCESS_METADATA_PATTERN =
-  /\b(?:question\s+paper\s+transcription|transcription|transcribed|ocr|extracted\s+text|source\s+transcript|worksheet\s+json|artifact|publish(?:ed)?\s+sheet)\b/iu;
+  /\b(?:question\s+paper\s+transcription|transcription|transcribed|ocr\s+(?:text|output|cleanup|artifact|transcription)|optical\s+character\s+recognition|extracted\s+text|source\s+transcript|worksheet\s+json|artifact|publish(?:ed)?\s+sheet)\b/iu;
 const ANSWER_REVEAL_NOTE_PATTERN = new RegExp(
   [
     String.raw`\b(?:the\s+)?correct\s+(?:answer|response|option|choice|cell\s+type|term|value)\s+is\b`,
@@ -1800,10 +2924,10 @@ const MARKDOWN_IMAGE_OCCURRENCE_PATTERN = /!\[([^\]]*)\]\(<?([^)>\s]+)>?\)/gu;
 const AGENT_LOG_IMAGE_EDIT_STARTED_PATTERN =
   /^(?:\[[^\]]+\]\s+)?(?<timestamp>\d{4}-\d{2}-\d{2}T[^\s]+)\s+\[[^\]]+\]\s+tool_call_started:.*\btool=(?<tool>crop_image|trim_image|pad_image)\b/iu;
 const AGENT_LOG_TOOL_INPUT_PREFIX = "tool_call_input:";
-const CROP_EDGE_BAND_PX = 20;
+const CROP_EDGE_BAND_PX = 6;
 const CROP_EDGE_DARK_PIXEL_THRESHOLD = 245;
 const CROP_EDGE_TOUCH_RATIO_THRESHOLD = 0.001;
-const DEFAULT_CROP_IMAGE_MARGIN_PX = 18;
+const DEFAULT_CROP_IMAGE_MARGIN_PX = 36;
 const GRADER_WORKSHEET_ASSET_MAX_DIMENSION = 512;
 const GRADER_WORKSHEET_ASSET_JPEG_QUALITY = 82;
 
@@ -1948,6 +3072,29 @@ function hasNearbyMarkdownImage(
   return false;
 }
 
+function hasNearbySourcePdfVisualReference(
+  text: string,
+  kind: "Figure" | "Table",
+  label: string,
+): boolean {
+  if (kind !== "Figure") {
+    return false;
+  }
+  const escapedLabel = escapeRegExpLiteral(label);
+  const labelPattern = new RegExp(
+    `\\b(?:Figure|Fig\\.?|Diagram)\\s+${escapedLabel}\\b`,
+    "giu",
+  );
+  for (const match of text.matchAll(labelPattern)) {
+    const index = match.index ?? 0;
+    const nearby = text.slice(Math.max(0, index - 250), index + 700);
+    if (SOURCE_PDF_VISUAL_REFERENCE_PATTERN.test(nearby)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function hasNearbyMarkdownTable(text: string, label: string): boolean {
   const escapedLabel = escapeRegExpLiteral(label);
   const labelPattern = new RegExp(`\\bTable\\s+${escapedLabel}\\b`, "giu");
@@ -2045,6 +3192,9 @@ function promptNeedsVisibleImage(promptText: string): boolean {
   if (ANCHORED_VISUAL_REFERENCE_PATTERN.test(promptText)) {
     return false;
   }
+  if (SOURCE_PDF_VISUAL_REFERENCE_PATTERN.test(promptText)) {
+    return false;
+  }
   return !MARKDOWN_IMAGE_PATTERN.test(promptText);
 }
 
@@ -2067,6 +3217,36 @@ function collectRepeatedCropImageIssues(markdown: string): string[] {
     string,
     { target: string; label: string }
   >();
+  const extractArtifactLabel = (
+    text: string,
+  ): {
+    key: string;
+    label: string;
+    anchor: string;
+  } | null => {
+    const figure = Array.from(text.matchAll(NAMED_FIGURE_REFERENCE_PATTERN)).at(
+      -1,
+    )?.[1];
+    if (figure) {
+      return {
+        key: `figure:${figure.toLowerCase()}`,
+        label: `Figure ${figure}`,
+        anchor: `[Figure ${figure}](${formatArtifactAnchorFragment("figure", figure)})`,
+      };
+    }
+    const table = Array.from(text.matchAll(NAMED_TABLE_REFERENCE_PATTERN)).at(
+      -1,
+    )?.[1];
+    if (table) {
+      return {
+        key: `table:${table.toLowerCase()}`,
+        label: `Table ${table}`,
+        anchor: `[Table ${table}](${formatArtifactAnchorFragment("table", table)})`,
+      };
+    }
+    return null;
+  };
+
   for (const match of markdown.matchAll(MARKDOWN_IMAGE_OCCURRENCE_PATTERN)) {
     const rawAlt = match[1]?.trim() ?? "";
     const target = match[2]?.trim();
@@ -2079,34 +3259,11 @@ function collectRepeatedCropImageIssues(markdown: string): string[] {
     }
     const occurrenceIndex = match.index ?? 0;
     const contextBefore = markdown.slice(
-      Math.max(0, occurrenceIndex - 350),
+      Math.max(0, occurrenceIndex - 220),
       occurrenceIndex,
     );
-    const contextAfter = markdown.slice(occurrenceIndex, occurrenceIndex + 120);
-    const contextLabel = [contextBefore, rawAlt, contextAfter].join("\n");
-    const artifactLabel = (() => {
-      const figure = Array.from(
-        contextLabel.matchAll(NAMED_FIGURE_REFERENCE_PATTERN),
-      ).at(-1)?.[1];
-      if (figure) {
-        return {
-          key: `figure:${figure.toLowerCase()}`,
-          label: `Figure ${figure}`,
-          anchor: `[Figure ${figure}](${formatArtifactAnchorFragment("figure", figure)})`,
-        };
-      }
-      const table = Array.from(
-        contextLabel.matchAll(NAMED_TABLE_REFERENCE_PATTERN),
-      ).at(-1)?.[1];
-      if (table) {
-        return {
-          key: `table:${table.toLowerCase()}`,
-          label: `Table ${table}`,
-          anchor: `[Table ${table}](${formatArtifactAnchorFragment("table", table)})`,
-        };
-      }
-      return null;
-    })();
+    const artifactLabel =
+      extractArtifactLabel(rawAlt) ?? extractArtifactLabel(contextBefore);
     if (artifactLabel !== null) {
       const first = firstByArtifactLabel.get(artifactLabel.key);
       if (first === undefined) {
@@ -2161,8 +3318,18 @@ function collectFigureImageOrderingIssues(promptText: string): string[] {
       continue;
     }
     const textBeforeImage = afterFigureLabel.slice(0, imageMatch.index ?? 0);
+    const figureLabelsBeforeImage = Array.from(
+      textBeforeImage.matchAll(NAMED_FIGURE_REFERENCE_PATTERN),
+    ).filter((candidate) => candidate[1]?.trim() === label);
+    const nearestFigureLabel = figureLabelsBeforeImage.at(-1);
+    const textSinceNearestFigureLabel =
+      nearestFigureLabel !== undefined
+        ? textBeforeImage.slice(
+            (nearestFigureLabel.index ?? 0) + nearestFigureLabel[0].length,
+          )
+        : textBeforeImage;
     const interveningTable = /\bTable\s+(\d+(?:\.\d+)*[A-Za-z]?)\b/iu.exec(
-      textBeforeImage,
+      textSinceNearestFigureLabel,
     );
     if (!interveningTable?.[1]) {
       continue;
@@ -2197,34 +3364,67 @@ function hasPositiveCropValidationReport(markdown: string): boolean {
   if (!CROP_VALIDATION_PASS_PATTERN.test(markdown)) {
     return false;
   }
-  const normalized = markdown
-    .replace(/\bnot\s+clipped\s+or\s+cut\s+off\b/giu, "crop-safe")
-    .replace(/\bnot\s+cut\s+off\s+or\s+clipped\b/giu, "crop-safe")
-    .replace(/\bnot\s+clipped\b/giu, "crop-safe")
-    .replace(/\bnot\s+cut\s+off\b/giu, "crop-safe")
-    .replace(/\bno\s+clipping\b/giu, "crop-safe")
-    .replace(/\bno\s+missing\b/giu, "crop-safe")
-    .replace(/\bwithout\s+missing\b/giu, "crop-safe")
-    .replace(/\bno\s+unresolved\s+(?:issues?|problems?)\b/giu, "crop-safe")
-    .replace(/\bno\s+(?:issues?|problems?)\b/giu, "crop-safe");
-  for (const rawLine of normalized.split(/\r?\n/gu)) {
-    const line = rawLine.trim();
+  return CROP_VALIDATION_VISIBLE_TEXT_PATTERN.test(markdown);
+}
+
+function isBenignDuplicateOnlyFailedCropValidationRecord(
+  record: string,
+): boolean {
+  const lines = record
+    .split(/\r?\n/gu)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  if (!CROP_VALIDATION_ASSET_SUBAGENT_CHECK_PATTERN.test(record)) {
+    return false;
+  }
+  if (!CROP_VALIDATION_VISIBLE_TEXT_PATTERN.test(record)) {
+    return false;
+  }
+  if (
+    !lines.some((line) =>
+      CROP_VALIDATION_PASS_FAIL_FAIL_FIELD_PATTERN.test(line),
+    )
+  ) {
+    return false;
+  }
+  if (
+    !lines.some((line) =>
+      CROP_VALIDATION_VISIBLE_CONTENT_YES_FIELD_PATTERN.test(line),
+    )
+  ) {
+    return false;
+  }
+  if (
+    !lines.some((line) =>
+      CROP_VALIDATION_DUPLICATE_NOT_EXCLUDED_FIELD_PATTERN.test(line),
+    )
+  ) {
+    return false;
+  }
+
+  for (const line of lines) {
+    if (CROP_VALIDATION_PASS_FAIL_FAIL_FIELD_PATTERN.test(line)) {
+      continue;
+    }
+    if (CROP_VALIDATION_VISIBLE_CONTENT_YES_FIELD_PATTERN.test(line)) {
+      continue;
+    }
+    if (CROP_VALIDATION_DUPLICATE_NOT_EXCLUDED_FIELD_PATTERN.test(line)) {
+      continue;
+    }
     if (CROP_VALIDATION_HISTORY_FIELD_PATTERN.test(line)) {
       continue;
     }
     if (CROP_VALIDATION_NEGATED_RISK_FIELD_PATTERN.test(line)) {
       continue;
     }
-    if (!CROP_VALIDATION_FAILURE_PATTERN.test(line)) {
-      continue;
+    if (CROP_VALIDATION_NEGATIVE_FIELD_PATTERN.test(line)) {
+      return false;
     }
     if (
       CROP_VALIDATION_UNRESOLVED_PATTERN.test(line) &&
       !CROP_VALIDATION_RESOLVED_PATTERN.test(line)
     ) {
-      return false;
-    }
-    if (!CROP_VALIDATION_RESOLVED_PATTERN.test(line)) {
       return false;
     }
   }
@@ -2268,6 +3468,36 @@ function isSourcePaperOnlyNoStudentRequest(
     .filter((part): part is string => typeof part === "string")
     .join("\n");
   return NO_STUDENT_ANSWERS_REQUEST_PATTERN.test(requestText);
+}
+
+function isCompactHandwrittenGradingRequest(
+  requestPayload: SparkGraderRequestPayload | null | undefined,
+): boolean {
+  if (!requestPayload || isSourcePaperOnlyNoStudentRequest(requestPayload)) {
+    return false;
+  }
+  const hasImageSubmission = requestPayload.attachments.some((attachment) =>
+    attachment.contentType.toLowerCase().startsWith("image/"),
+  );
+  if (!hasImageSubmission) {
+    return false;
+  }
+  const hasPdfContext = requestPayload.attachments.some(
+    (attachment) => attachment.contentType.toLowerCase() === "application/pdf",
+  );
+  const requestText = [
+    requestPayload.sourceText,
+    requestPayload.input.title,
+    requestPayload.input.notes,
+  ]
+    .filter((part): part is string => typeof part === "string")
+    .join("\n");
+  return (
+    hasPdfContext ||
+    /\b(?:grade|mark|graded|scored|student\s+submission|handwritten|notebook|answer\s+booklet|uploaded\s+work|maintenance\s+rerun)\b/iu.test(
+      requestText,
+    )
+  );
 }
 
 function requestRequiresProblemStatementTranscription(
@@ -2629,11 +3859,13 @@ function replaceJsonStringReferences(
 function parseAgentLogImageEditEvents(agentLogMarkdown: string): Array<{
   timestampMs: number | null;
   toolName: "crop_image" | "trim_image" | "pad_image";
+  sourcePath: string | null;
   outputPath: string;
 }> {
   const events: Array<{
     timestampMs: number | null;
     toolName: "crop_image" | "trim_image" | "pad_image";
+    sourcePath: string | null;
     outputPath: string;
   }> = [];
   let pending: {
@@ -2681,9 +3913,17 @@ function parseAgentLogImageEditEvents(agentLogMarkdown: string): Array<{
         ? parsed.outputPath.replace(/\\/gu, "/").replace(/^\/+/u, "")
         : null;
     if (outputPath) {
+      const sourcePath =
+        parsed !== null &&
+        typeof parsed === "object" &&
+        "sourcePath" in parsed &&
+        typeof parsed.sourcePath === "string"
+          ? parsed.sourcePath.replace(/\\/gu, "/").replace(/^\/+/u, "")
+          : null;
       events.push({
         timestampMs: pending.timestampMs,
         toolName: pending.toolName,
+        sourcePath,
         outputPath,
       });
     }
@@ -2806,6 +4046,9 @@ function collectCropValidationAssetIssues(options: {
   const freshReviewPaths = collectFreshCropReviewToolCallPaths(
     options.agentLogMarkdown,
   );
+  const imageEditEvents = parseAgentLogImageEditEvents(
+    options.agentLogMarkdown,
+  );
 
   const validationLines = options.cropValidationMarkdown
     .split(/\r?\n/gu)
@@ -2816,18 +4059,37 @@ function collectCropValidationAssetIssues(options: {
     .map((block) => block.trim())
     .filter((block) => block.length > 0);
   for (const assetPath of assetPaths) {
-    const equivalentCropReviewPaths =
-      resolveEquivalentCropReviewPaths(assetPath);
-    if (!equivalentCropReviewPaths.some((path) => freshReviewPaths.has(path))) {
+    const equivalentCropReviewPaths = new Set(
+      resolveEquivalentCropReviewPaths(assetPath),
+    );
+    const paddedSourcePaths = imageEditEvents
+      .filter((event) => {
+        return (
+          event.toolName === "pad_image" &&
+          event.sourcePath !== null &&
+          resolveEquivalentCropReviewPaths(event.outputPath).includes(assetPath)
+        );
+      })
+      .map((event) => event.sourcePath)
+      .filter((path): path is string => path !== null);
+    for (const sourcePath of paddedSourcePaths) {
+      for (const equivalentSourcePath of resolveEquivalentCropReviewPaths(
+        sourcePath,
+      )) {
+        equivalentCropReviewPaths.add(equivalentSourcePath);
+      }
+    }
+    const equivalentPaths = [...equivalentCropReviewPaths];
+    if (!equivalentPaths.some((path) => freshReviewPaths.has(path))) {
       issues.push(
         `crop image "${assetPath}" is linked in the worksheet but the agent log has no validate_crop_with_fresh_agent call for that final crop path`,
       );
     }
     const matchingBlocks = validationBlocks.filter((block) =>
-      block.includes(assetPath),
+      equivalentPaths.some((path) => block.includes(path)),
     );
     const matchingLines = validationLines.filter((line) =>
-      line.includes(assetPath),
+      equivalentPaths.some((path) => line.includes(path)),
     );
     const matchingRecords =
       matchingBlocks.length > 0 ? matchingBlocks : matchingLines;
@@ -2865,6 +4127,9 @@ function collectCropValidationAssetIssues(options: {
       );
     }
     const unresolvedRecord = matchingRecords.find((record) => {
+      if (isBenignDuplicateOnlyFailedCropValidationRecord(record)) {
+        return false;
+      }
       for (const rawLine of record.split(/\r?\n/gu)) {
         const line = rawLine.trim();
         if (CROP_VALIDATION_HISTORY_FIELD_PATTERN.test(line)) {
@@ -3253,10 +4518,15 @@ function collectGraderWorksheetPublishIssues(
   const sheetHasLinkedFigure = MARKDOWN_IMAGE_PATTERN.test(
     renderedSheetMarkdown,
   );
+  const sheetHasSourcePdfVisualReference =
+    SOURCE_PDF_VISUAL_REFERENCE_PATTERN.test(renderedSheetMarkdown);
   const sheetHasMarkdownTable = MARKDOWN_TABLE_PATTERN.test(
     renderedSheetMarkdown,
   );
   const sourcePaperOnlyNoStudent = isSourcePaperOnlyNoStudentRequest(
+    options?.requestPayload,
+  );
+  const compactHandwrittenGrading = isCompactHandwrittenGradingRequest(
     options?.requestPayload,
   );
   const needsProblemStatementTranscription =
@@ -3458,6 +4728,7 @@ function collectGraderWorksheetPublishIssues(
       return entry.type === "group" && entry.questions.length > 1;
     });
     if (
+      !compactHandwrittenGrading &&
       QUESTIONS_RANGE_SECTION_LABEL_PATTERN.test(section.label) &&
       multiPartGroups.length > 1
     ) {
@@ -3483,44 +4754,46 @@ function collectGraderWorksheetPublishIssues(
           firstChild !== undefined
             ? normalizeDisplayNumberForComparison(firstChild.displayNumber)
             : null;
-        for (const label of groupFigureLabels) {
-          const sourceOwners = sourceFigureOwnersByLabel.get(label);
-          if (!sourceOwners || sourceOwners.size === 0) {
-            continue;
+        if (!compactHandwrittenGrading) {
+          for (const label of groupFigureLabels) {
+            const sourceOwners = sourceFigureOwnersByLabel.get(label);
+            if (!sourceOwners || sourceOwners.size === 0) {
+              continue;
+            }
+            const ownedChildren = entry.questions.filter((question) => {
+              const displayNumber = normalizeDisplayNumberForComparison(
+                question.displayNumber,
+              );
+              return displayNumber !== null && sourceOwners.has(displayNumber);
+            });
+            const startsAtFirstChild =
+              firstChildDisplayNumber !== null &&
+              sourceOwners.has(firstChildDisplayNumber);
+            if (ownedChildren.length > 0 && !startsAtFirstChild) {
+              issues.push(
+                `group question "${entry.id}" places Figure ${label} in the parent prompt, but the source transcript ties it to later child question "${ownedChildren[0]?.id ?? "unknown"}"; move that figure crop and label into the relevant child prompt so it renders near the source subquestion`,
+              );
+            }
           }
-          const ownedChildren = entry.questions.filter((question) => {
-            const displayNumber = normalizeDisplayNumberForComparison(
-              question.displayNumber,
-            );
-            return displayNumber !== null && sourceOwners.has(displayNumber);
-          });
-          const startsAtFirstChild =
-            firstChildDisplayNumber !== null &&
-            sourceOwners.has(firstChildDisplayNumber);
-          if (ownedChildren.length > 0 && !startsAtFirstChild) {
-            issues.push(
-              `group question "${entry.id}" places Figure ${label} in the parent prompt, but the source transcript ties it to later child question "${ownedChildren[0]?.id ?? "unknown"}"; move that figure crop and label into the relevant child prompt so it renders near the source subquestion`,
-            );
-          }
-        }
-        for (const label of groupTableLabels) {
-          const sourceOwners = sourceTableOwnersByLabel.get(label);
-          if (!sourceOwners || sourceOwners.size === 0) {
-            continue;
-          }
-          const ownedChildren = entry.questions.filter((question) => {
-            const displayNumber = normalizeDisplayNumberForComparison(
-              question.displayNumber,
-            );
-            return displayNumber !== null && sourceOwners.has(displayNumber);
-          });
-          const startsAtFirstChild =
-            firstChildDisplayNumber !== null &&
-            sourceOwners.has(firstChildDisplayNumber);
-          if (ownedChildren.length > 0 && !startsAtFirstChild) {
-            issues.push(
-              `group question "${entry.id}" places Table ${label} in the parent prompt, but the source transcript ties it to later child question "${ownedChildren[0]?.id ?? "unknown"}"; move that table into the relevant child prompt so it renders near the source subquestion`,
-            );
+          for (const label of groupTableLabels) {
+            const sourceOwners = sourceTableOwnersByLabel.get(label);
+            if (!sourceOwners || sourceOwners.size === 0) {
+              continue;
+            }
+            const ownedChildren = entry.questions.filter((question) => {
+              const displayNumber = normalizeDisplayNumberForComparison(
+                question.displayNumber,
+              );
+              return displayNumber !== null && sourceOwners.has(displayNumber);
+            });
+            const startsAtFirstChild =
+              firstChildDisplayNumber !== null &&
+              sourceOwners.has(firstChildDisplayNumber);
+            if (ownedChildren.length > 0 && !startsAtFirstChild) {
+              issues.push(
+                `group question "${entry.id}" places Table ${label} in the parent prompt, but the source transcript ties it to later child question "${ownedChildren[0]?.id ?? "unknown"}"; move that table into the relevant child prompt so it renders near the source subquestion`,
+              );
+            }
           }
         }
         for (const child of entry.questions) {
@@ -3539,22 +4812,27 @@ function collectGraderWorksheetPublishIssues(
                 return child.segments.join(" ");
             }
           })();
-          for (const label of groupFigureLabels) {
-            if (hasReferenceLabel(childPrompt, "Figure", label)) {
-              issues.push(
-                `group question "${entry.id}" places Figure ${label} in the parent prompt even though child question "${child.id}" references it; move the figure crop and label into that child prompt so it renders next to the source subquestion`,
-              );
+          if (!compactHandwrittenGrading) {
+            for (const label of groupFigureLabels) {
+              if (hasReferenceLabel(childPrompt, "Figure", label)) {
+                issues.push(
+                  `group question "${entry.id}" places Figure ${label} in the parent prompt even though child question "${child.id}" references it; move the figure crop and label into that child prompt so it renders next to the source subquestion`,
+                );
+              }
             }
-          }
-          for (const label of groupTableLabels) {
-            if (hasReferenceLabel(childPrompt, "Table", label)) {
-              issues.push(
-                `group question "${entry.id}" places Table ${label} in the parent prompt even though child question "${child.id}" references it; move the table into that child prompt so it renders next to the source subquestion`,
-              );
+            for (const label of groupTableLabels) {
+              if (hasReferenceLabel(childPrompt, "Table", label)) {
+                issues.push(
+                  `group question "${entry.id}" places Table ${label} in the parent prompt even though child question "${child.id}" references it; move the table into that child prompt so it renders next to the source subquestion`,
+                );
+              }
             }
           }
         }
-        if (promptNeedsVisibleImage(entry.prompt)) {
+        if (
+          promptNeedsVisibleImage(entry.prompt) &&
+          !compactHandwrittenGrading
+        ) {
           issues.push(
             `group question "${entry.id}" references a visual but does not link a visible worksheet crop in group.prompt; keep question-critical figures visible near the source stem instead of hiding them in references`,
           );
@@ -3779,7 +5057,7 @@ function collectGraderWorksheetPublishIssues(
         issues.push(`question "${question.id}" ${orderingIssue}`);
       }
 
-      if (promptNeedsVisibleImage(promptText)) {
+      if (promptNeedsVisibleImage(promptText) && !compactHandwrittenGrading) {
         issues.push(
           `question "${question.id}" references a visual but does not link a visible worksheet crop in the prompt; do not hide question-critical figures in source references or transcription`,
         );
@@ -3788,15 +5066,18 @@ function collectGraderWorksheetPublishIssues(
   }
 
   if (
+    !compactHandwrittenGrading &&
     referenceMarkdown.length > 0 &&
     FIGURE_REFERENCE_PATTERN.test(referenceMarkdown) &&
-    !sheetHasLinkedFigure
+    !sheetHasLinkedFigure &&
+    !sheetHasSourcePdfVisualReference
   ) {
     issues.push(
-      "reference markdown mentions a figure/diagram/photo/graph/chart but the worksheet contains no linked image asset",
+      "reference markdown mentions a figure/diagram/photo/graph/chart but the worksheet contains no linked image asset or visible source-PDF visual reference",
     );
   }
   if (
+    !compactHandwrittenGrading &&
     referenceMarkdown.length > 0 &&
     MARKDOWN_TABLE_PATTERN.test(referenceMarkdown) &&
     !sheetHasMarkdownTable
@@ -3812,6 +5093,9 @@ function collectGraderWorksheetPublishIssues(
       NAMED_FIGURE_REFERENCE_PATTERN,
     );
     for (const label of sourceFigureLabels) {
+      if (compactHandwrittenGrading) {
+        continue;
+      }
       if (!hasReferenceLabel(renderedSheetMarkdown, "Figure", label)) {
         issues.push(
           `source transcription mentions Figure ${label} but the worksheet omits that named figure`,
@@ -3819,9 +5103,17 @@ function collectGraderWorksheetPublishIssues(
         continue;
       }
       if (!hasNearbyMarkdownImage(renderedSheetMarkdown, "Figure", label)) {
-        issues.push(
-          `source transcription mentions Figure ${label} but the worksheet does not link an image near that figure label`,
-        );
+        if (
+          !hasNearbySourcePdfVisualReference(
+            renderedSheetMarkdown,
+            "Figure",
+            label,
+          )
+        ) {
+          issues.push(
+            `source transcription mentions Figure ${label} but the worksheet does not link an image or visible source-PDF reference near that figure label`,
+          );
+        }
       }
     }
 
@@ -3830,6 +5122,9 @@ function collectGraderWorksheetPublishIssues(
       NAMED_TABLE_REFERENCE_PATTERN,
     );
     for (const label of sourceTableLabels) {
+      if (compactHandwrittenGrading) {
+        continue;
+      }
       if (!hasReferenceLabel(renderedSheetMarkdown, "Table", label)) {
         issues.push(
           `source transcription mentions Table ${label} but the worksheet omits that named table`,
@@ -3927,7 +5222,7 @@ async function validateGraderWorkspaceForPublish(options: {
   const resolvedSummaryPath = normalizeWorkspacePath(options.summaryPath);
   const resolvedSheetPath = normalizeWorkspacePath(options.sheetPath);
 
-  const summaryRaw = await readFile(
+  let summaryRaw = await readFile(
     resolveWorkspacePath(options.rootDir, resolvedSummaryPath),
     {
       encoding: "utf8",
@@ -3945,13 +5240,24 @@ async function validateGraderWorkspaceForPublish(options: {
       `Grader summary "${resolvedSummaryPath}" is invalid JSON: ${errorAsString(error)}`,
     );
   }
+  const normalizedSummaryMetadata =
+    await normalizeRawGraderSummaryMetadataForPublish({
+      rootDir: options.rootDir,
+      summaryPath: resolvedSummaryPath,
+      summaryJson,
+      onWorkspaceFileChanged: options.onWorkspaceFileChanged,
+    });
+  summaryJson = normalizedSummaryMetadata.summaryJson;
+  if (normalizedSummaryMetadata.summaryRaw !== null) {
+    summaryRaw = normalizedSummaryMetadata.summaryRaw;
+  }
   const parsedSummary = GraderRunSummarySchema.safeParse(summaryJson);
   if (!parsedSummary.success) {
     throw new Error(
       `Grader summary "${resolvedSummaryPath}" failed schema validation: ${formatZodIssueSummary(parsedSummary.error)}`,
     );
   }
-  const summary = parsedSummary.data;
+  let summary = parsedSummary.data;
 
   if (normalizeWorkspacePath(summary.sheet.filePath) !== resolvedSheetPath) {
     throw new Error(
@@ -4007,6 +5313,55 @@ async function validateGraderWorkspaceForPublish(options: {
       `Worksheet artifact "${resolvedSheetPath}" is invalid JSON: ${errorAsString(error)}`,
     );
   }
+  const normalizedSheetShape = normalizeRawPaperSheetShapeForPublish(sheetJson);
+  if (normalizedSheetShape.changed) {
+    sheetJson = normalizedSheetShape.value;
+    sheetRaw = JSON.stringify(sheetJson, null, 2).concat("\n");
+    await writeFile(
+      resolveWorkspacePath(options.rootDir, resolvedSheetPath),
+      sheetRaw,
+      { encoding: "utf8" },
+    );
+    options.onWorkspaceFileChanged?.(resolvedSheetPath);
+  }
+  const coercedReport = coerceBareGraderWorksheetReportForPublish(sheetJson);
+  if (coercedReport !== null) {
+    sheetJson = coercedReport;
+    sheetRaw = JSON.stringify(coercedReport, null, 2).concat("\n");
+    await writeFile(
+      resolveWorkspacePath(options.rootDir, resolvedSheetPath),
+      sheetRaw,
+      { encoding: "utf8" },
+    );
+    options.onWorkspaceFileChanged?.(resolvedSheetPath);
+  }
+  const normalizedQuestionReviews =
+    await normalizeRawGraderQuestionReviewsForPublish({
+      rootDir: options.rootDir,
+      sheetPath: resolvedSheetPath,
+      sheetJson,
+      onWorkspaceFileChanged: options.onWorkspaceFileChanged,
+    });
+  sheetJson = normalizedQuestionReviews.sheetJson;
+  if (normalizedQuestionReviews.sheetRaw !== null) {
+    sheetRaw = normalizedQuestionReviews.sheetRaw;
+  }
+  const normalizedScores = await normalizeRawGraderAggregateScoresForPublish({
+    rootDir: options.rootDir,
+    summaryPath: resolvedSummaryPath,
+    sheetPath: resolvedSheetPath,
+    sheetJson,
+    summary,
+    onWorkspaceFileChanged: options.onWorkspaceFileChanged,
+  });
+  sheetJson = normalizedScores.sheetJson;
+  if (normalizedScores.sheetRaw !== null) {
+    sheetRaw = normalizedScores.sheetRaw;
+  }
+  if (normalizedScores.summaryRaw !== null) {
+    summaryRaw = normalizedScores.summaryRaw;
+  }
+  summary = normalizedScores.summary;
   const parsedSheet = SparkGraderWorksheetReportSchema.safeParse(sheetJson);
   if (!parsedSheet.success) {
     throw new Error(
@@ -4047,6 +5402,22 @@ async function validateGraderWorkspaceForPublish(options: {
   });
   sheetRaw = normalizedImages.sheetRaw;
   report = normalizedImages.report;
+  const normalizedSummaryTotals = summary.totals;
+  if (!normalizedSummaryTotals) {
+    throw new Error(
+      `Grader summary "${resolvedSummaryPath}" is missing totals.`,
+    );
+  }
+  if (normalizedSummaryTotals.awardedMarks !== report.review.score.got) {
+    throw new Error(
+      `Grader summary totals.awardedMarks (${normalizedSummaryTotals.awardedMarks.toString()}) must equal worksheet review.score.got (${report.review.score.got.toString()}).`,
+    );
+  }
+  if (normalizedSummaryTotals.maxMarks !== report.review.score.total) {
+    throw new Error(
+      `Grader summary totals.maxMarks (${normalizedSummaryTotals.maxMarks.toString()}) must equal worksheet review.score.total (${report.review.score.total.toString()}).`,
+    );
+  }
   const sourceTranscriptMarkdown = await readFile(
     resolveWorkspacePath(options.rootDir, "grader/output/transcription.md"),
     { encoding: "utf8" },
@@ -4092,17 +5463,6 @@ async function validateGraderWorkspaceForPublish(options: {
   if (publishIssues.length > 0) {
     throw new Error(
       `Worksheet artifact "${resolvedSheetPath}" failed publish guards: ${publishIssues.slice(0, 10).join("; ")}`,
-    );
-  }
-
-  if (summary.totals.awardedMarks !== report.review.score.got) {
-    throw new Error(
-      `Grader summary totals.awardedMarks (${summary.totals.awardedMarks.toString()}) must equal worksheet review.score.got (${report.review.score.got.toString()}).`,
-    );
-  }
-  if (summary.totals.maxMarks !== report.review.score.total) {
-    throw new Error(
-      `Grader summary totals.maxMarks (${summary.totals.maxMarks.toString()}) must equal worksheet review.score.total (${report.review.score.total.toString()}).`,
     );
   }
 
@@ -6800,6 +8160,7 @@ export function buildSparkAgentSystemPrompt(options?: {
     "- extract_text does not automatically know source filenames/paths; include identifying details inside instructions when needed.",
     "- For multi-page extraction tasks, you can request explicit page markers in the extracted markdown.",
     "- For PDF transcription, render workspace PDFs with pdf_to_images and inspect page images with view_image. When extract_pdf_reference_text is available for a text-selectable PDF, use it once as a navigation/transcription aid before bulk page viewing.",
+    "- Use extract_pdf_images as a deterministic first pass when a PDF may contain embedded raster figures, maps, charts, or photos; validate useful extracted images before linking them. It does not locate vector diagrams or on-page coordinates, so still use pdf_to_images plus grid/crop tools for layout-sensitive or vector visuals.",
     "- Use extract_pdf_diagrams when you need Gemini-assisted coarse diagram bounding boxes from a PDF; treat them as proposals and validate/refine crops with rendered page images and view_image. If one manual crop-and-view correction for the same target is still clipped/noisy/uncertain, call propose_crop_bbox_with_fresh_agent or extract_pdf_diagrams for that source page and target label before spending more turns on hand-tuned crop boxes.",
     "- For figure crop refinement, do not do mask segmentation. Use a rectangular bbox workflow: inspect the selected base image and grid overlay with view_image, return or apply a single pixel bbox with origin top-left and right/bottom exclusive, prefer small safe margins over clipping, and reject surrounding question text, mark text, answer lines, page borders, next-question content, or standalone Figure/Table captions already rendered by the worksheet. Use propose_crop_bbox_with_fresh_agent when a fresh visual agent should choose the bbox, then apply the returned bbox with crop_image.",
     "- The workspace tools listed for this run are actually available. Never respond that you cannot read files, execute tool steps, access the PDF, or publish outputs when the relevant tool is present; call the tool instead.",
@@ -6809,17 +8170,17 @@ export function buildSparkAgentSystemPrompt(options?: {
     "",
     "Grader / worksheet publishing pipeline (CRITICAL):",
     "When the workspace contains grader/task.md or request.json describes a grader run, you are not finished after extracting text, inspecting images, or cropping figures.",
-    "You MUST write grader/output/sheet.json and grader/output/run-summary.json, then call publish_sheet({}) and fix any validation errors until it returns status='published'.",
+    "You MUST write grader/output/sheet.json and grader/output/run-summary.json, then call publish_sheet({}). Use validation errors as diagnostics, repair the artifacts coherently, and retry only while you are fixing a new class of issue rather than repeating the same failed branch.",
     "For grader/output/run-summary.json, include totals.awardedMarks, totals.maxMarks, presentation.title, presentation.subtitle, presentation.summaryMarkdown, presentation.footer, and sheet.filePath exactly equal to grader/output/sheet.json.",
     "Do not copy request.json, brief.md, upload manifests, planning JSON, answer lists, or process summaries into grader/output/sheet.json or grader/output/run-summary.json. Those files must contain only the worksheet report schema and publish summary schema.",
     "For source-paper-only/no-student grader runs, do not solve the paper, derive correct options, list an answer key, or include worked solutions. Build an unanswered worksheet with blank answers and review.mode='awaiting_answers'.",
     "Do not use generate_json for grader/output/sheet.json or grader/output/run-summary.json; generate_json is a lesson-output helper and request.json/grader/task.md are not JSON schemas. Write grader JSON outputs directly with write_workspace_file and use publish_sheet for validation.",
-    "Do not spawn subagents for grader intake, upload inventory, workspace file reading, or transcription. Generic subagent orchestration is disabled for grader runs; use the main agent's file tools for intake, propose_crop_bbox_with_fresh_agent for uncertain crop bbox planning, and validate_crop_with_fresh_agent for final crop visual validation.",
+    "Do not spawn subagents for grader intake, upload inventory, workspace file reading, transcription, final grading synthesis, or worksheet assembly. Do not use direct view_image in grader-publish runs; use extract_text for student/photo transcription, propose_crop_bbox_with_fresh_agent for uncertain crop bbox planning, and validate_crop_with_fresh_agent for final crop visual validation. Use bounded subagents only for official-source lookup/verification when allowed by request.json or for visual localization proposals.",
     "Use pad_image only for a crop that has already passed fresh visual validation and only needs a clean white border after publish_sheet reports dark edge contact. Never use pad_image to fix a crop-review failure, missing content, clipping, unrelated text, or a duplicated standalone caption; recrop from the high-resolution source page and validate again.",
-    "Every final linked figure/image crop must be validated by its own validate_crop_with_fresh_agent call. The fresh reviewer uses view_image, transcribes all visible text in the crop, and then judges whether all question-relevant labels/axes/options/table cells are present, duplicated caption/question/table text is excluded, unrelated visible text/non-target ink is absent, and required content does not touch or clip at an edge.",
+    "Every final linked figure/image crop must be validated by its own validate_crop_with_fresh_agent call. Pass expectedContent with the exact visual labels/axes/options/table cells/annotations that must be visible, and duplicatedTextToExclude for surrounding prompt/caption/table text rendered separately; pass `none` only when no surrounding duplicated text needs exclusion. The fresh reviewer uses view_image, transcribes all visible text in the crop, and then judges whether those required visual elements are present, major duplicated caption/question/table text is excluded, unrelated neighbouring content outside the target visual is absent, and required content does not touch or clip at an edge. Treat missing/clipped/wrong target content as blocking; treat small duplicate caption fragments or safe whitespace as minor issues, not reasons for endless recropping.",
     "If you use crop_image or trim_image on a linked worksheet asset after writing grader/output/crop-validation.md, rerun the fresh-context crop check and rewrite crop-validation.md for the final asset before publishing. pad_image is allowed only after a completed passing validation because it only adds a white border.",
-    "Do not publish known-failed crop validation. For uncertain crops or after any validate_crop_with_fresh_agent result reports fail/blocking feedback, stop hand-guessing coordinates and use the bad-crop/full-page/grid JSON workflow through propose_crop_bbox_with_fresh_agent; apply the returned rectangle once, then validate again with validate_crop_with_fresh_agent.",
-    "Use at most six crop_image calls for one output asset before switching strategy. If an image tool reports a repeated-crop or pre-publish image-edit budget error, stop guessing boxes for that output: call propose_crop_bbox_with_fresh_agent or extract_pdf_diagrams if available, and do not relabel unresolved crop failures as passing or link full-page fallbacks.",
+    "Do not publish known blocking crop failures. For uncertain crops or after validate_crop_with_fresh_agent reports clipped/missing/wrong content, a broad fallback, or confusing neighbouring content, stop hand-guessing coordinates and use the bad-crop/full-page/grid JSON workflow through propose_crop_bbox_with_fresh_agent. If the same validation problem recurs after a proposal-assisted retry, treat it as a wrong-path signal and call review_run_progress_with_fresh_agent before continuing crop polishing. If the remaining issue is only a small duplicated caption/prompt fragment and all expected content is visible, record it as minor and continue.",
+    "If an image tool reports a repeated-crop or pre-publish image-edit budget error, stop guessing boxes for that output: call review_run_progress_with_fresh_agent, switch to propose_crop_bbox_with_fresh_agent / extract_pdf_images / extract_pdf_diagrams if appropriate, and do not relabel unresolved crop failures as passing or link full-page fallbacks.",
     "Only after publish_sheet succeeds may you call done({summary}). Never end the run with a normal assistant final response before publish_sheet; continue using tools instead.",
     "",
     "Lesson creation pipeline (CRITICAL):",
@@ -6887,10 +8248,9 @@ export function buildSparkAgentSystemPrompt(options?: {
   if (options?.includePdfTranscriptionSkill) {
     lines.push(
       "",
-      "PDF transcription workflow (required when handling PDF/image grading tasks):",
-      "~~~markdown",
-      PDF_TRANSCRIPTION_SKILL_TEXT,
-      "~~~",
+      "Reusable worksheet skills:",
+      "Read the workspace skill files named below before PDF/image transcription, crop planning, sheet conversion, answer capture, or grading work. The task file remains the source of run-specific paths and publishing requirements.",
+      renderSparkAgentSkillReadList(SPARK_GRADER_SKILL_IDS),
     );
   }
   return lines.join("\n");
@@ -7310,7 +8670,7 @@ function buildAgentTools(options: {
     const normalizedPath = outputPath.replace(/\\/gu, "/");
     const parsed = path.posix.parse(normalizedPath);
     const normalizedName = parsed.name.replace(
-      /(?:-(?:candidate|clean|corrected|crop|final|fixed|gemini|recrop|refined|retry|revised|tight|v\d+|\d+))+$/u,
+      /(?:-(?:(?:candidate|clean|corrected|crop|final|fixed|gemini|recrop|refined|retry|revised|tight)(?:-\d+)?|v\d+))+$/u,
       "",
     );
     return path.posix.join(parsed.dir, `${normalizedName}${parsed.ext}`);
@@ -7318,6 +8678,8 @@ function buildAgentTools(options: {
 
   type LoggedToolCall = {
     readonly name: string;
+    readonly timestamp: string;
+    readonly arguments?: Record<string, unknown>;
     readonly outputPath?: string;
   };
 
@@ -7362,6 +8724,10 @@ function buildAgentTools(options: {
       }),
     );
     for (const toolCallFile of toolCallFiles) {
+      const stepDir = path.basename(path.dirname(path.dirname(toolCallFile)));
+      const timestamp =
+        /^(?<timestamp>\d{4}-\d{2}-\d{2}T.*Z)-\d+$/u.exec(stepDir)?.groups
+          ?.timestamp ?? new Date(0).toISOString();
       const parsed = toolCallSchema.safeParse(
         JSON.parse(await readFile(toolCallFile, "utf8")),
       );
@@ -7371,11 +8737,15 @@ function buildAgentTools(options: {
       for (const call of parsed.data) {
         loggedCalls.push({
           name: call.name,
+          timestamp,
+          ...(call.arguments ? { arguments: call.arguments } : {}),
           outputPath: call.arguments?.outputPath,
         });
       }
     }
-    return loggedCalls;
+    return loggedCalls.sort((left, right) =>
+      left.timestamp.localeCompare(right.timestamp),
+    );
   };
 
   const inferSingleUploadedPdfPath = async (): Promise<string | null> => {
@@ -7510,8 +8880,87 @@ function buildAgentTools(options: {
     if (effectiveImageEditCount <= GRADER_PRE_PUBLISH_IMAGE_EDIT_BUDGET) {
       return null;
     }
-    prePublishGlobalImageEditBlockedReason = `${toolName} pre-publish image-edit budget exceeded for this grader run. No crop/trim was written. Stop crop polishing now and do not publish known-failed crop validation. Use existing validated crops only; if an important figure is still unresolved, leave it as an explicit unresolved crop failure rather than relabelling it as passing or linking a full-page fallback.`;
+    prePublishGlobalImageEditBlockedReason = `${toolName} pre-publish image-edit budget exceeded for this grader run. No crop/trim was written. Stop crop polishing now and do not publish known blocking crop failures. Use existing validated crops only; if an important figure is still unresolved, leave it as an explicit unresolved crop failure rather than relabelling it as passing or linking a full-page fallback.`;
     return prePublishGlobalImageEditBlockedReason;
+  };
+
+  const runProgressReviewSchema = z
+    .object({
+      decision: z.enum(["continue", "switch_strategy", "stop_and_report"]),
+      confidence: z.number().min(0).max(1).optional(),
+      wrongPathSignals: z.array(z.string().trim().min(1)).max(8),
+      recommendedNextAction: z.string().trim().min(1),
+      rationale: z.string().trim().min(1),
+    })
+    .strict();
+
+  const readAgentLogTail = async (maxChars: number): Promise<string> => {
+    const raw = await readFile(path.join(rootDir, "logs/agent/agent.log"), {
+      encoding: "utf8",
+    }).catch(() => "");
+    if (raw.length <= maxChars) {
+      return raw;
+    }
+    return `...\n${raw.slice(-maxChars)}`;
+  };
+
+  const buildRunProgressSnapshot = async (options: {
+    maxRecentToolCalls: number;
+  }): Promise<Record<string, unknown>> => {
+    const loggedToolCalls = await readLoggedToolCalls();
+    const toolCounts = new Map<string, number>();
+    for (const call of loggedToolCalls) {
+      toolCounts.set(call.name, (toolCounts.get(call.name) ?? 0) + 1);
+    }
+
+    const cropAttemptsByOutput = new Map<string, number>();
+    for (const call of loggedToolCalls) {
+      if (call.name !== "crop_image" || call.outputPath === undefined) {
+        continue;
+      }
+      const key = normalizePrePublishCropAttemptKey(call.outputPath);
+      cropAttemptsByOutput.set(key, (cropAttemptsByOutput.get(key) ?? 0) + 1);
+    }
+    const repeatedCropOutputs = Array.from(cropAttemptsByOutput.entries())
+      .filter(([, count]) => count > 1)
+      .sort(([, leftCount], [, rightCount]) => rightCount - leftCount)
+      .slice(0, 12)
+      .map(([outputPath, count]) => ({ outputPath, count }));
+
+    const recentToolCalls = loggedToolCalls
+      .slice(-options.maxRecentToolCalls)
+      .map((call) => ({
+        timestamp: call.timestamp,
+        name: call.name,
+        ...(call.outputPath ? { outputPath: call.outputPath } : {}),
+        arguments: formatToolLogSnippet(
+          sanitizeJsonLikeValue(call.arguments ?? {}),
+        ),
+      }));
+
+    const agentLogTail = await readAgentLogTail(12_000);
+    return {
+      toolCallCount: loggedToolCalls.length,
+      toolCounts: Object.fromEntries(
+        Array.from(toolCounts.entries()).sort(([left], [right]) =>
+          left.localeCompare(right),
+        ),
+      ),
+      repeatedCropOutputs,
+      imageEditBudget: {
+        prePublishImageEditCount,
+        prePublishDiagramExtractionCount,
+        cropAttemptsPerOutputBudget:
+          GRADER_PRE_PUBLISH_CROP_ATTEMPTS_PER_OUTPUT_BUDGET,
+        imageEditBudget: GRADER_PRE_PUBLISH_IMAGE_EDIT_BUDGET,
+        diagramExtractionBudget: GRADER_PRE_PUBLISH_DIAGRAM_EXTRACTION_BUDGET,
+        ...(prePublishGlobalImageEditBlockedReason
+          ? { blockedReason: prePublishGlobalImageEditBlockedReason }
+          : {}),
+      },
+      recentToolCalls,
+      agentLogTail,
+    };
   };
 
   const validate_json = tool({
@@ -7894,7 +9343,8 @@ function buildAgentTools(options: {
       | "extract_text"
       | "extract_pdf_text"
       | "read_pdf"
-      | "extract_pdf_diagrams";
+      | "extract_pdf_diagrams"
+      | "extract_pdf_images";
     pdfPath: string;
   }): Promise<{ pdfBytes: Buffer; resolvedPdfPath: string }> => {
     const resolvedPdfPath = options.pdfPath.trim();
@@ -8371,6 +9821,9 @@ function buildAgentTools(options: {
     let llmResult: LlmTextResult | null = null;
     let extractedText = "";
     let modelCallElapsedMs: number | null = null;
+    let finalExtractTextModelId: LlmTextModelId = DEFAULT_EXTRACT_TEXT_MODEL_ID;
+    let finalCallStartedAt = Date.now();
+    let extractTextTotalCostUsd = 0;
     const callStartedAt = Date.now();
     let callHeartbeatTimer: NodeJS.Timeout | undefined;
     try {
@@ -8390,8 +9843,11 @@ function buildAgentTools(options: {
         modelId: DEFAULT_EXTRACT_TEXT_MODEL_ID,
         result: llmResult,
       });
+      extractTextTotalCostUsd += llmResult.costUsd;
       streamedThinkingText = llmResult.thoughts;
       extractedText = llmResult.text;
+      finalExtractTextModelId = DEFAULT_EXTRACT_TEXT_MODEL_ID;
+      finalCallStartedAt = callStartedAt;
       logExtractTextProgress(
         `generate_text_call completed elapsedMs=${(Date.now() - callStartedAt).toString()} extractedChars=${extractedText.length.toString()}`,
       );
@@ -8402,7 +9858,48 @@ function buildAgentTools(options: {
       }
     }
 
-    const normalizedText = extractedText.trim();
+    let normalizedText = extractedText.trim();
+    if (normalizedText.length === 0) {
+      const fallbackModelId = DEFAULT_AGENT_MODEL_ID;
+      const fallbackThinkingLevel =
+        resolveSparkAgentThinkingLevel(fallbackModelId);
+      const fallbackCallStartedAt = Date.now();
+      logExtractTextProgress(
+        `empty_response; retrying_with_model=${fallbackModelId}`,
+      );
+      const fallbackResult = await generateText({
+        model: fallbackModelId,
+        input: buildSingleUserInput([
+          {
+            type: "text",
+            text: [
+              "The first transcription attempt returned empty text.",
+              "These inputs may be messy handwritten student work. Transcribe every legible student answer, number, diagram label, formula, and prompt fragment you can see.",
+              "Use [illegible] for uncertain words or symbols. Do not return an empty response.",
+            ].join("\n"),
+          },
+          ...extractionParts,
+        ]),
+        ...(fallbackThinkingLevel ? { thinkingLevel: fallbackThinkingLevel } : {}),
+      });
+      recordLlmTextResult({
+        progress,
+        modelId: fallbackModelId,
+        result: fallbackResult,
+      });
+      extractTextTotalCostUsd += fallbackResult.costUsd;
+      llmResult = fallbackResult;
+      streamedThinkingText = fallbackResult.thoughts;
+      extractedText = fallbackResult.text;
+      normalizedText = extractedText.trim();
+      finalExtractTextModelId = fallbackModelId;
+      finalCallStartedAt = fallbackCallStartedAt;
+      modelCallElapsedMs = Date.now() - fallbackCallStartedAt;
+      logExtractTextProgress(
+        `fallback_generate_text_call completed elapsedMs=${modelCallElapsedMs.toString()} extractedChars=${extractedText.length.toString()}`,
+      );
+    }
+
     const cappedText = capUtf8Text(
       normalizedText,
       EXTRACT_TEXT_DEFAULT_MAX_CHARS * 6,
@@ -8410,15 +9907,15 @@ function buildAgentTools(options: {
     const truncated = cappedText.length < normalizedText.length;
     const submodelSummary = llmResult
       ? createTrackedSubmodelCallSummary({
-          modelId: DEFAULT_EXTRACT_TEXT_MODEL_ID,
-          startedAt: callStartedAt,
+          modelId: finalExtractTextModelId,
+          startedAt: finalCallStartedAt,
           result: llmResult,
         })
       : null;
     recordToolLlmCost(
       onToolLlmCost,
       "extract_text",
-      submodelSummary?.costUsd ?? null,
+      extractTextTotalCostUsd,
     );
     const finalThinkingTokensRaw = submodelSummary?.usageTokens?.thinkingTokens;
     const finalThinkingTokens =
@@ -8446,7 +9943,7 @@ function buildAgentTools(options: {
         toolIdSegment,
         responseText: extractedText,
         thinkingText: streamedThinkingText,
-        modelId: DEFAULT_EXTRACT_TEXT_MODEL_ID,
+        modelId: finalExtractTextModelId,
         ...(typeof submodelSummary?.modelVersion === "string" &&
         submodelSummary.modelVersion.trim().length > 0
           ? { modelVersion: submodelSummary.modelVersion }
@@ -8466,6 +9963,12 @@ function buildAgentTools(options: {
       }).catch(() => undefined);
       logExtractTextProgress(
         `debug_response_written dir=${path.join("extract_text", toolIdSegment)}`,
+      );
+    }
+    if (normalizedText.length === 0) {
+      logExtractTextProgress("empty_response");
+      throw new Error(
+        "extract_text returned an empty transcription after fallback. Do not repeat the same extraction call. Use review_run_progress_with_fresh_agent to decide whether to switch strategy, or use a dedicated fresh visual helper for localized image inspection; do not treat an empty output file as evidence.",
       );
     }
 
@@ -9067,19 +10570,83 @@ function buildAgentTools(options: {
     })
     .strict();
 
+  const largeGeneratedFileOutlineReadCounts = new Map<string, number>();
+
   const tools: LlmToolSet = {
-    ...(workspaceViewImageTool ? { view_image: workspaceViewImageTool } : {}),
+    ...(workspaceViewImageTool && !isGraderPublishingRun
+      ? { view_image: workspaceViewImageTool }
+      : {}),
     read_workspace_file: tool({
       description:
-        "Read a UTF-8 text file from the Spark agent workspace using a workspace-relative path. Use this for brief.md, request.json, grader/task.md, transcription markdown, and JSON artifacts.",
+        "Read a UTF-8 text file from the Spark agent workspace using a workspace-relative path. Use this for brief.md, request.json, grader/task.md, transcription markdown, and JSON artifacts. Large generated output/reference files without startLine/lineCount return a compact line-numbered outline only on first unbounded read; repeated unbounded reads return a reminder only. Use grep_workspace_files first, then targeted startLine/lineCount reads for exact source-paper or mark-scheme sections without loading the whole reference into context.",
       inputSchema: z
         .object({
           filePath: z.string().trim().min(1),
+          startLine: z.preprocess(
+            parseOptionalPositiveInt,
+            z.number().int().min(1).optional(),
+          ),
+          lineCount: z.preprocess(
+            parseOptionalPositiveInt,
+            z
+              .number()
+              .int()
+              .min(1)
+              .max(READ_WORKSPACE_FILE_MAX_RANGE_LINES)
+              .optional(),
+          ),
+          maxChars: z.preprocess(
+            parseOptionalPositiveInt,
+            z
+              .number()
+              .int()
+              .min(1)
+              .max(READ_WORKSPACE_FILE_MAX_CHARS)
+              .optional(),
+          ),
         })
         .strict(),
-      execute: async ({ filePath }) => {
-        return await readFile(resolveWorkspacePath(rootDir, filePath), {
+      execute: async ({ filePath, startLine, lineCount, maxChars }) => {
+        const pathHints = parseWorkspaceFileReadPathHints(filePath);
+        const resolvedStartLine = startLine ?? pathHints.startLine;
+        const resolvedLineCount = lineCount ?? pathHints.lineCount;
+        const resolvedFilePath = pathHints.filePath;
+        const content = await readFile(resolveWorkspacePath(rootDir, resolvedFilePath), {
           encoding: "utf8",
+        });
+        const normalizedFilePath = resolvedFilePath.replace(/\\/gu, "/");
+        const hasExplicitBounds =
+          resolvedStartLine !== undefined ||
+          resolvedLineCount !== undefined ||
+          maxChars !== undefined;
+        const isLargeGeneratedOutput =
+          (normalizedFilePath.startsWith("grader/output/") ||
+            normalizedFilePath.startsWith("sheet/output/")) &&
+          content.length > READ_WORKSPACE_FILE_DEFAULT_MAX_CHARS;
+        const largeOutlineReadCount =
+          !hasExplicitBounds && isLargeGeneratedOutput
+            ? (largeGeneratedFileOutlineReadCounts.get(normalizedFilePath) ??
+                0) + 1
+            : undefined;
+        if (largeOutlineReadCount !== undefined) {
+          largeGeneratedFileOutlineReadCounts.set(
+            normalizedFilePath,
+            largeOutlineReadCount,
+          );
+        }
+        return renderWorkspaceFileReadResult({
+          filePath: resolvedFilePath,
+          content,
+          ...(resolvedStartLine !== undefined
+            ? { startLine: resolvedStartLine }
+            : {}),
+          ...(resolvedLineCount !== undefined
+            ? { lineCount: resolvedLineCount }
+            : {}),
+          ...(maxChars !== undefined ? { maxChars } : {}),
+          ...(largeOutlineReadCount !== undefined
+            ? { largeOutlineReadCount }
+            : {}),
         });
       },
     }),
@@ -9141,7 +10708,7 @@ function buildAgentTools(options: {
     }),
     grep_workspace_files: tool({
       description:
-        "Search UTF-8 workspace text files under a directory with a JavaScript regular expression pattern. Use this to find figure/table references or schema fields in workspace artifacts.",
+        "Search UTF-8 workspace text files under a directory with a JavaScript regular expression pattern. Use this to find figure/table references or schema fields in workspace artifacts. Binary uploads and large non-text files are skipped. Matches in generated output/reference files include short surrounding context by default so you can avoid whole-file reads.",
       inputSchema: z
         .object({
           directoryPath: z.preprocess(
@@ -9155,15 +10722,55 @@ function buildAgentTools(options: {
             }
             return value;
           }, z.number().int().min(1).max(500).optional()),
+          contextLines: z.preprocess((value) => {
+            if (value === null || value === undefined) {
+              return undefined;
+            }
+            return value;
+          }, z.number().int().min(0).max(20).optional()),
         })
         .strict(),
-      execute: async ({ directoryPath, pattern, maxMatches }) => {
+      execute: async ({ directoryPath, pattern, maxMatches, contextLines }) => {
         const baseDirectory = directoryPath ?? ".";
         const rootAbsolute = resolveWorkspacePath(rootDir, baseDirectory);
-        const regex = new RegExp(pattern, "iu");
+        let regex: RegExp;
+        let patternMode: "regex" | "literal" = "regex";
+        try {
+          regex = new RegExp(pattern, "iu");
+        } catch {
+          try {
+            regex = new RegExp(pattern, "i");
+          } catch {
+            regex = new RegExp(escapeRegExpLiteral(pattern), "iu");
+            patternMode = "literal";
+          }
+        }
         const limit = maxMatches ?? 100;
-        const matches: Array<{ filePath: string; line: number; text: string }> =
-          [];
+        const searchableTextExtensions = new Set([
+          ".css",
+          ".csv",
+          ".html",
+          ".js",
+          ".json",
+          ".jsonl",
+          ".log",
+          ".md",
+          ".mjs",
+          ".svelte",
+          ".toml",
+          ".ts",
+          ".tsx",
+          ".txt",
+          ".xml",
+          ".yaml",
+          ".yml",
+        ]);
+        const matches: Array<{
+          filePath: string;
+          line: number;
+          text: string;
+          context?: string[];
+        }> = [];
         const visit = async (absoluteDirectory: string): Promise<void> => {
           if (matches.length >= limit) {
             return;
@@ -9180,6 +10787,7 @@ function buildAgentTools(options: {
               rootDir,
               absolutePath,
             );
+            const normalizedRelativePath = relativePath.replace(/\\/gu, "/");
             if (entry.isDirectory()) {
               if (
                 entry.name === "node_modules" ||
@@ -9195,6 +10803,23 @@ function buildAgentTools(options: {
             if (!entry.isFile()) {
               continue;
             }
+            if (
+              normalizedRelativePath.startsWith("grader/uploads/") ||
+              normalizedRelativePath.startsWith("sheet/uploads/")
+            ) {
+              continue;
+            }
+            const extension = path.extname(entry.name).toLowerCase();
+            if (
+              extension.length > 0 &&
+              !searchableTextExtensions.has(extension)
+            ) {
+              continue;
+            }
+            const fileStats = await stat(absolutePath).catch(() => null);
+            if (fileStats === null || fileStats.size > 2_000_000) {
+              continue;
+            }
             const content = await readFile(absolutePath, {
               encoding: "utf8",
             }).catch(() => null);
@@ -9204,10 +10829,39 @@ function buildAgentTools(options: {
             const lines = content.split(/\r?\n/u);
             for (const [index, line] of lines.entries()) {
               if (regex.test(line)) {
+                const defaultContextLines =
+                  normalizedRelativePath.startsWith("grader/output/") ||
+                  normalizedRelativePath.startsWith("sheet/output/")
+                    ? 2
+                    : 0;
+                const resolvedContextLines =
+                  contextLines ?? defaultContextLines;
+                const contextStartIndex = Math.max(
+                  0,
+                  index - resolvedContextLines,
+                );
+                const contextEndIndex = Math.min(
+                  lines.length - 1,
+                  index + resolvedContextLines,
+                );
+                const context =
+                  resolvedContextLines > 0
+                    ? lines
+                        .slice(contextStartIndex, contextEndIndex + 1)
+                        .map(
+                          (contextLine, contextIndex) =>
+                            `${(
+                              contextStartIndex +
+                              contextIndex +
+                              1
+                            ).toString()}: ${contextLine.slice(0, 500)}`,
+                        )
+                    : [];
                 matches.push({
                   filePath: relativePath,
                   line: index + 1,
                   text: line.slice(0, 500),
+                  ...(context.length > 0 ? { context } : {}),
                 });
                 if (matches.length >= limit) {
                   return;
@@ -9217,7 +10871,16 @@ function buildAgentTools(options: {
           }
         };
         await visit(rootAbsolute);
-        return { matches };
+        return {
+          matches,
+          ...(patternMode === "literal"
+            ? {
+                patternMode,
+                warning:
+                  "Invalid regular expression was treated as a literal text search.",
+              }
+            : {}),
+        };
       },
     }),
     publish_lesson: tool({
@@ -10504,10 +12167,247 @@ function buildAgentTools(options: {
         });
       },
     }),
+    extract_pdf_images: tool({
+      description: [
+        "Deterministically list and optionally extract embedded raster images from a workspace PDF using local Poppler pdfimages.",
+        "Use this as a cheap first pass before LLM-assisted figure cropping when the source PDF may contain embedded photos, maps, charts, apparatus images, or scanned figure bitmaps.",
+        "This extracts PDF image objects only. It does not locate vector diagrams, text labels drawn outside the image object, or the on-page coordinates of the image; use pdf_to_images plus grid/crop tools for those cases.",
+        "The tool writes a JSON manifest and extracted image files under outputDir. Filter tiny repeated strips/noise with minWidth/minHeight and validate useful outputs before linking them in a worksheet.",
+      ].join("\n"),
+      inputSchema: z
+        .object({
+          pdfPath: z.string().trim().min(1),
+          outputDir: z.string().trim().min(1),
+          firstPage: z.preprocess(
+            parseOptionalNumber,
+            z.number().int().min(1).optional(),
+          ),
+          lastPage: z.preprocess(
+            parseOptionalNumber,
+            z.number().int().min(1).optional(),
+          ),
+          minWidth: z.preprocess(
+            parseOptionalNumber,
+            z.number().int().min(1).optional(),
+          ),
+          minHeight: z.preprocess(
+            parseOptionalNumber,
+            z.number().int().min(1).optional(),
+          ),
+          maxImages: z.preprocess(
+            parseOptionalNumber,
+            z
+              .number()
+              .int()
+              .min(1)
+              .max(PDF_EMBEDDED_IMAGE_MAX_ITEMS)
+              .optional(),
+          ),
+          includeMasks: z.boolean().optional(),
+          extractFiles: z.boolean().optional(),
+          filenamePrefix: z.preprocess(
+            (value) => parseOptionalString(value),
+            z.string().trim().min(1).optional(),
+          ),
+        })
+        .strict()
+        .superRefine((value, context) => {
+          if (
+            value.firstPage !== undefined &&
+            value.lastPage !== undefined &&
+            value.lastPage < value.firstPage
+          ) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "lastPage must be greater than or equal to firstPage.",
+              path: ["lastPage"],
+            });
+          }
+        }),
+      execute: async ({
+        pdfPath,
+        outputDir,
+        firstPage,
+        lastPage,
+        minWidth,
+        minHeight,
+        maxImages,
+        includeMasks,
+        extractFiles,
+        filenamePrefix,
+      }) => {
+        const decoded = await decodePdfBytesFromWorkspace({
+          toolName: "extract_pdf_images",
+          pdfPath,
+        });
+        const normalizedOutputDir = outputDir
+          .replace(/\\/g, "/")
+          .replace(/\/+$/u, "");
+        if (normalizedOutputDir.length === 0) {
+          throw new Error("extract_pdf_images outputDir must not be empty.");
+        }
+        const absoluteOutputDir = resolveWorkspacePath(
+          rootDir,
+          normalizedOutputDir,
+        );
+        await ensureDir(absoluteOutputDir);
+
+        const sourceAbsolutePath = resolveWorkspacePath(
+          rootDir,
+          decoded.resolvedPdfPath,
+        );
+        const sourceBytes = await readFile(sourceAbsolutePath);
+        const pdfImagesPdfPath =
+          sourceBytes.subarray(0, 5).toString("utf8") === "%PDF-"
+            ? sourceAbsolutePath
+            : path.join(absoluteOutputDir, ".pdfimages-source.pdf");
+        if (pdfImagesPdfPath !== sourceAbsolutePath) {
+          await writeFile(pdfImagesPdfPath, decoded.pdfBytes);
+        }
+
+        const pageArgs: string[] = [];
+        if (firstPage !== undefined) {
+          pageArgs.push("-f", firstPage.toString());
+        }
+        if (lastPage !== undefined) {
+          pageArgs.push("-l", lastPage.toString());
+        }
+
+        let listStdout = "";
+        try {
+          const result = await execFileAsync(
+            "pdfimages",
+            [...pageArgs, "-list", pdfImagesPdfPath],
+            { maxBuffer: PDF_IMAGES_CLI_MAX_BUFFER },
+          );
+          listStdout = result.stdout;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+            return {
+              status: "unavailable",
+              reason: "pdfimages_not_found",
+              pdfPath: decoded.resolvedPdfPath,
+              outputDir: normalizedOutputDir,
+              message:
+                "The local pdfimages binary is not installed. Use pdf_to_images and crop tools, or install poppler-utils in the task runtime.",
+            };
+          }
+          throw new Error(
+            `extract_pdf_images failed to list PDF images: ${errorAsString(error)}`,
+          );
+        }
+
+        const allImages = parsePdfImagesListOutput(listStdout);
+        const resolvedMinWidth = minWidth ?? 80;
+        const resolvedMinHeight = minHeight ?? 80;
+        const resolvedMaxImages =
+          maxImages ?? PDF_EMBEDDED_IMAGE_DEFAULT_MAX_ITEMS;
+        const selectedImages = allImages
+          .filter((image) => {
+            if (includeMasks !== true && image.type !== "image") {
+              return false;
+            }
+            return (
+              image.width >= resolvedMinWidth &&
+              image.height >= resolvedMinHeight
+            );
+          })
+          .slice(0, resolvedMaxImages);
+
+        const uniquePrefix = `${sanitizePdfImageFilenamePrefix(filenamePrefix)}-${Date.now().toString(36)}`;
+        let extractedFiles: Array<{
+          path: string;
+          width: number | null;
+          height: number | null;
+          bytes: number;
+        }> = [];
+        if (extractFiles !== false && selectedImages.length > 0) {
+          const imageRoot = path.join(absoluteOutputDir, uniquePrefix);
+          try {
+            await execFileAsync(
+              "pdfimages",
+              ["-png", "-p", ...pageArgs, pdfImagesPdfPath, imageRoot],
+              { maxBuffer: PDF_IMAGES_CLI_MAX_BUFFER },
+            );
+          } catch (error) {
+            throw new Error(
+              `extract_pdf_images failed to extract PDF images: ${errorAsString(error)}`,
+            );
+          }
+          extractedFiles = await resolvePdfImagesExtractedFiles({
+            outputDir: normalizedOutputDir,
+            absoluteOutputDir,
+            filenamePrefix: uniquePrefix,
+          });
+          for (const file of extractedFiles) {
+            workspace.scheduleUpdate(file.path);
+          }
+        }
+
+        const selectedWithPaths = attachExtractedPdfImagePaths({
+          images: selectedImages,
+          files: extractedFiles,
+        });
+        const selectedPathSet = new Set(
+          selectedWithPaths.flatMap((image) => {
+            return typeof image.path === "string" ? [image.path] : [];
+          }),
+        );
+        if (selectedPathSet.size > 0) {
+          const unusedFiles = extractedFiles.filter(
+            (file) => !selectedPathSet.has(file.path),
+          );
+          for (const file of unusedFiles) {
+            await rm(resolveWorkspacePath(rootDir, file.path), {
+              force: true,
+            }).catch(() => undefined);
+          }
+          extractedFiles = extractedFiles.filter((file) =>
+            selectedPathSet.has(file.path),
+          );
+        }
+        const manifest = {
+          status: "written",
+          extractionMode: "pdfimages",
+          pdfPath: decoded.resolvedPdfPath,
+          outputDir: normalizedOutputDir,
+          manifestPath: `${normalizedOutputDir}/manifest.json`,
+          ...(firstPage !== undefined ? { firstPage } : {}),
+          ...(lastPage !== undefined ? { lastPage } : {}),
+          minWidth: resolvedMinWidth,
+          minHeight: resolvedMinHeight,
+          includeMasks: includeMasks === true,
+          extractFiles: extractFiles !== false,
+          imageCount: allImages.length,
+          selectedCount: selectedWithPaths.length,
+          extractedFileCount: extractedFiles.length,
+          images: selectedWithPaths,
+          allImages: allImages.slice(0, Math.min(allImages.length, 200)),
+          notes: [
+            "pdfimages extracts embedded raster image objects; it does not return on-page crop coordinates.",
+            "Vector diagrams, text drawn outside an image object, and layout-sensitive figures still require pdf_to_images plus grid/crop validation.",
+            "Exam PDFs may contain repeated decorative strips or tiny artifacts; ignore outputs that fail the minimum size filter or visual validation.",
+          ],
+        };
+        const manifestPath = resolveWorkspacePath(
+          rootDir,
+          manifest.manifestPath,
+        );
+        await writeFile(
+          manifestPath,
+          JSON.stringify(manifest, null, 2) + "\n",
+          {
+            encoding: "utf8",
+          },
+        );
+        workspace.scheduleUpdate(manifest.manifestPath);
+        return manifest;
+      },
+    }),
     pdf_to_images: tool({
       description: [
         "Render pages from a workspace PDF into PNG images in the workspace.",
-        "Use this for agentic diagram extraction loops before calling crop_image.",
+        "Use this for agentic diagram extraction loops before calling crop_image. For long PDFs, pass pageNumbers for the exact pages needed; rendering every page is blocked.",
       ].join("\n"),
       inputSchema: z
         .object({
@@ -10554,6 +12454,14 @@ function buildAgentTools(options: {
         });
         const pdfBytes = Uint8Array.from(decoded.pdfBytes);
         const pageCount = await getPdfPageCount({ pdfBytes });
+        if (
+          pageCount > 12 &&
+          (pageNumbers === undefined || pageNumbers.length === 0)
+        ) {
+          throw new Error(
+            `pdf_to_images requires pageNumbers for PDFs longer than 12 pages (pageCount=${pageCount.toString()}). Use extract_pdf_reference_text/grep first to choose the exact pages needed.`,
+          );
+        }
         const requestedPages =
           pageNumbers && pageNumbers.length > 0
             ? [...new Set(pageNumbers)].sort((a, b) => a - b)
@@ -11006,6 +12914,119 @@ function buildAgentTools(options: {
         };
       },
     }),
+    review_run_progress_with_fresh_agent: tool({
+      description: [
+        "Ask a fresh-context introspection agent to review this run's completed tool trace and decide whether the current workflow is still productive.",
+        "Use this when repeated crop/validation loops, repeated extraction attempts, recurring publish errors, budget warnings, or confusing source-document decisions suggest the run may be on the wrong path.",
+        "This tool does not grade, transcribe, crop, or publish. It reads only sanitized completed-call logs and returns a continue/switch/stop recommendation with a concrete next action.",
+      ].join("\n"),
+      inputSchema: z
+        .object({
+          currentGoal: z.string().trim().min(1),
+          currentStep: z.preprocess(
+            (value) => parseOptionalString(value),
+            z.string().trim().min(1).optional(),
+          ),
+          concern: z.preprocess(
+            (value) => parseOptionalString(value),
+            z.string().trim().min(1).optional(),
+          ),
+          maxRecentToolCalls: z.preprocess(
+            parseOptionalNumber,
+            z.number().int().min(10).max(80).optional(),
+          ),
+        })
+        .strict(),
+      execute: async ({
+        currentGoal,
+        currentStep,
+        concern,
+        maxRecentToolCalls,
+      }) => {
+        const snapshot = await buildRunProgressSnapshot({
+          maxRecentToolCalls: maxRecentToolCalls ?? 40,
+        });
+        const reviewPrompt = [
+          "You are a fresh-context Spark grader run introspection agent.",
+          "Review the completed tool-call trace snapshot and decide if the main agent should continue, switch strategy, or stop and report a blocking workflow issue.",
+          "",
+          "Important boundaries:",
+          "- Do not grade the student's work, transcribe files, assemble JSON, or decide final marks.",
+          "- Do not impose a fixed wall-clock time limit. Base the decision on wrong-path signals in the trace.",
+          "- Treat repeated same-output crop attempts, repeated crop-review failures, budget warnings, full-page fallback pressure, repeated extraction of the same source, and recurring publish errors as wrong-path signals.",
+          "- For PDF visual extraction, prefer deterministic embedded-image extraction or rendered-page/grid workflows over endless manual coordinate guessing.",
+          "- If the remaining issue is only minor duplicate caption text with complete expected visual content, recommend continuing instead of cosmetic recropping.",
+          "",
+          `Current goal: ${currentGoal}`,
+          currentStep ? `Current step: ${currentStep}` : "",
+          concern ? `Operator/agent concern: ${concern}` : "",
+          "",
+          "Trace snapshot JSON:",
+          JSON.stringify(snapshot, null, 2),
+          "",
+          "Return JSON only with exactly these keys:",
+          "{",
+          '  "decision": "continue" | "switch_strategy" | "stop_and_report",',
+          '  "confidence": 0.0,',
+          '  "wrongPathSignals": ["short signal"],',
+          '  "recommendedNextAction": "one concrete next action",',
+          '  "rationale": "brief explanation"',
+          "}",
+        ]
+          .filter((part) => part.trim().length > 0)
+          .join("\n");
+
+        progress?.log("fresh run-progress review");
+        const thinkingLevel = resolveSparkAgentThinkingLevel(
+          DEFAULT_AGENT_MODEL_ID,
+        );
+        const result = await generateText({
+          model: DEFAULT_AGENT_MODEL_ID,
+          input: buildSingleUserInput([
+            {
+              type: "text",
+              text: [
+                "You are a bounded introspection reviewer. Return one JSON object only. Do not call tools.",
+                "",
+                reviewPrompt,
+              ].join("\n"),
+            },
+          ]),
+          ...(thinkingLevel ? { thinkingLevel } : {}),
+        });
+        recordLlmTextResult({
+          progress,
+          modelId: DEFAULT_AGENT_MODEL_ID,
+          result,
+        });
+        onToolLlmCost?.("generate_text", result.costUsd);
+
+        let parsedReview: z.infer<typeof runProgressReviewSchema> | null = null;
+        try {
+          parsedReview = runProgressReviewSchema.parse(
+            parseJsonFromLlmText(result.text),
+          );
+        } catch {
+          parsedReview = null;
+        }
+
+        return {
+          status: parsedReview === null ? "reviewed_raw" : "reviewed",
+          modelId: DEFAULT_AGENT_MODEL_ID,
+          costUsd: result.costUsd,
+          currentGoal,
+          ...(currentStep ? { currentStep } : {}),
+          ...(concern ? { concern } : {}),
+          ...(parsedReview ? { review: parsedReview } : {}),
+          rawText: result.text.trim(),
+          snapshotSummary: {
+            toolCallCount: snapshot.toolCallCount,
+            toolCounts: snapshot.toolCounts,
+            repeatedCropOutputs: snapshot.repeatedCropOutputs,
+          },
+        };
+      },
+    }),
     propose_crop_bbox_with_fresh_agent: tool({
       description: [
         "Ask a fresh-context visual agent to propose one rectangular crop bbox for one target exam figure.",
@@ -11220,7 +13241,8 @@ function buildAgentTools(options: {
       description: [
         "Validate one final worksheet figure/image crop with a fresh-context visual agent.",
         "Use this once per final linked crop before writing grader/output/crop-validation.md.",
-        "The fresh agent must call view_image on the crop, transcribe visible text, and judge clipping, edge contact, and duplicated or unrelated surrounding text/ink.",
+        "Pass expectedContent with the exact visual content that must be visible, and duplicatedTextToExclude for surrounding prompt/caption/table text rendered separately.",
+        "The fresh agent must call view_image on the crop, transcribe visible text, and judge missing/clipped target content, edge contact, major duplicated text, and unrelated neighbouring content outside the target visual.",
         "Do not use generic spawn_agent for grader intake or file summaries; use this dedicated tool only for final crop visual validation.",
       ].join("\n"),
       inputSchema: z
@@ -11230,11 +13252,23 @@ function buildAgentTools(options: {
           questionContext: z.string().trim().min(1),
           expectedContent: z.preprocess(
             (value) => parseOptionalString(value),
-            z.string().trim().min(1).optional(),
+            z
+              .string()
+              .trim()
+              .min(1)
+              .describe(
+                "Exact visual labels, axes, option letters, table cells, annotations, or shapes that must be visible in this crop. Do not include prompt/caption/table text that is rendered elsewhere.",
+              ),
           ),
           duplicatedTextToExclude: z.preprocess(
             (value) => parseOptionalString(value),
-            z.string().trim().min(1).optional(),
+            z
+              .string()
+              .trim()
+              .min(1)
+              .describe(
+                "Surrounding prompt, caption, table, question-number, or answer-line text that should be excluded from the crop because the worksheet renders it separately. Use `none` only when no surrounding duplicated text needs exclusion.",
+              ),
           ),
         })
         .strict(),
@@ -11269,12 +13303,17 @@ function buildAgentTools(options: {
         const reviewPrompt = [
           "You are a fresh-context crop validation agent.",
           "Use the `view_image` tool on the crop path before judging it. Do not answer from text alone.",
-          "Be strict: a pass is allowed only when the intended target is complete, has a small safe margin, and contains no unrelated neighbouring text/lines/artifacts.",
-          "Fail or flag the crop if the target visual occupies only a small part of the frame because of large empty internal whitespace; crops should look like figures, not mostly blank placeholders.",
+          "Be practical and judge against the explicit Expected visual content below. A pass is allowed when the target visual is complete, has a safe margin, and contains no confusing neighbouring content outside the target visual.",
+          "Fail only for blocking visual problems: missing required expected content, clipped/touching required content, wrong figure/table/option association, broken/blank image, broad page fallback, or neighbouring content that would confuse the worksheet.",
+          "Do not fail solely for small duplicate caption/prompt fragments, isolated Figure/Table labels, harmless scan artifacts, or extra whitespace when all Expected visual content is complete and readable. Record those as issues on a passing crop.",
+          "Do not fail merely because the target visual contains ink, graph gridlines, diagram outlines, arrows, labels, tick labels, option letters, or a Figure/Table label that is part of Expected visual content.",
+          "Do not require broader prompt text, data tables, captions, method steps, answer lines, or mark text that are not listed under Expected visual content.",
+          "Fail the crop if the target visual occupies only a small part of the frame because of large empty internal whitespace; crops should look like figures, not mostly blank placeholders.",
           "Fail the crop if any required line, shape, option, label, axis, legend, table cell, or annotation is cut off or touches the crop edge.",
-          "Fail the crop if you see any text or ink that is not part of the target figure according to the source label, question context, or expected visual content. Examples of unrelated content include standalone Figure/Table captions already rendered by the worksheet, neighbouring MCQ option text, question/prompt fragments, answer lines, page borders, separator rules, or pieces of the next/previous question.",
+          "Fail the crop if you see answer lines, page borders, separator rules, neighbouring-question text, or neighbouring visual fragments that are outside the target visual and would confuse a learner.",
+          "For text listed under Duplicated surrounding text to exclude, mark `duplicated caption/question/table text excluded: no` when it appears. Still use `pass/fail: pass` if that duplicated text is only a small caption/prompt fragment and the expected visual is complete.",
           "For diagram-option crops, every candidate label and every option diagram must be fully visible with margin; if any option outline is clipped by an edge, fail.",
-          "Use `not_applicable` for duplicated text only when there is no visible non-target caption/question/table text at all.",
+          "Use `not_applicable` for duplicated text only when Duplicated surrounding text to exclude is `none` and there is no visible non-target caption/question/table text.",
           "",
           `Crop path: ${resolvedCropPath}`,
           `Source label: ${sourceLabel}`,
@@ -11300,7 +13339,7 @@ function buildAgentTools(options: {
           "- pass/fail: pass|fail",
           "- all question-relevant content visible: yes|no",
           "- duplicated caption/question/table text excluded: yes|no|not_applicable",
-          "- unrelated visible text or non-target ink present: yes|no",
+          "- unrelated neighbouring content present: yes|no",
           "- edge clipping or content touching edge present: yes|no",
           "- page border, separator line, answer line, or neighbouring-question fragment present: yes|no",
           "- issues: <none or concise list of clipping/wrong association/noisy text problems; if reviewer-visible text contains unexpected text, name it here>",
@@ -11347,7 +13386,8 @@ function buildAgentTools(options: {
   if (graderPublish) {
     const publish_sheet = tool({
       description:
-        "Validate and publish the grader worksheet artifact for /spark/sheets. Requires a valid grader/output/run-summary.json plus grader/output/sheet.json. Fix any validation errors and retry until status='published'.",
+        "Validate and publish the grader worksheet artifact for /spark/sheets. Requires a valid grader/output/run-summary.json plus grader/output/sheet.json. Fix validation errors coherently; if the same class of failure recurs after repair, stop and fix the workflow before rerunning.",
+      terminal: true,
       inputSchema: z
         .object({
           summaryPath: z.string().trim().min(1).optional(),
@@ -11415,7 +13455,8 @@ function buildAgentTools(options: {
   if (sheetDraftPublish) {
     const publish_sheet_draft = tool({
       description:
-        "Validate and publish the worksheet draft artifact for /spark/sheets. Requires a valid sheet/output/run-summary.json plus sheet/output/draft.json. Fix any validation errors and retry until status='published'.",
+        "Validate and publish the worksheet draft artifact for /spark/sheets. Requires a valid sheet/output/run-summary.json plus sheet/output/draft.json. Fix validation errors coherently; if the same class of failure recurs after repair, stop and fix the workflow before rerunning.",
+      terminal: true,
       inputSchema: z
         .object({
           summaryPath: z.string().trim().min(1).optional(),
@@ -11757,6 +13798,7 @@ export async function runSparkAgentTask(
   let tutorSnapshot: TutorWorkspaceSnapshot | null = null;
   let publishedSheetDraft: PublishedSheetDraftArtifacts | null = null;
   let publishedGraderSheet: PublishedGraderSheetArtifacts | null = null;
+  let disableAutoGapsFinder = false;
   let agentMetricType: SparkAgentMetricType = "chat";
   let agentMetricStatus: "ok" | "error" | "stopped" = "error";
   const monitoringJob = "spark-task-runner";
@@ -11797,6 +13839,9 @@ export async function runSparkAgentTask(
     }
 
     const agentData = agentSnap.data ?? {};
+    disableAutoGapsFinder =
+      agentData.disableAutoGapsFinder === true ||
+      isTruthyEnv(process.env.SPARK_DISABLE_AUTO_GAPS_FINDER);
     agentMetricType = resolveSparkAgentMetricType(agentData);
     const rawSheetRunId =
       typeof agentData.sheetRunId === "string"
@@ -12210,6 +14255,7 @@ export async function runSparkAgentTask(
     const doneTool = tool({
       description:
         "Mark the agent run as complete. Flushes workspace updates and records a short summary.",
+      terminal: true,
       inputSchema: z
         .object({
           summary: z.string().trim().min(1).optional(),
@@ -12329,7 +14375,7 @@ export async function runSparkAgentTask(
               `warn: failed to patch grader run summary: ${errorAsString(error)}`,
             );
           }
-          if (patchedGraderRun) {
+          if (patchedGraderRun && !disableAutoGapsFinder) {
             await launchSparkGapsFinderForRun({
               serviceAccountJson,
               userId: options.userId,
@@ -12340,6 +14386,10 @@ export async function runSparkAgentTask(
                 `warn: failed to launch gaps finder: ${errorAsString(error)}`,
               );
             });
+          } else if (patchedGraderRun) {
+            logSync?.append(
+              "info: auto gap finder disabled for this grader run",
+            );
           }
         }
         if (sheetRunId && workspaceRoot) {
@@ -13005,10 +15055,9 @@ export async function runSparkAgentTask(
               : graderModelTools
                 ? { modelTools: graderModelTools }
                 : {}),
-          subagents:
-            tutorSessionId || graderRunId !== null
-              ? false
-              : resolveSparkAgentSubagentSelection(),
+          subagents: tutorSessionId
+            ? false
+            : resolveSparkAgentSubagentSelection(),
           maxSteps,
           ...(thinkingLevel ? { thinkingLevel } : {}),
           onEvent: (event) => {

@@ -1,6 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 
 import { Command } from "commander";
 import { z } from "zod";
@@ -10,7 +10,16 @@ import {
   formatUsd,
   listFilesRecursive,
   prepareSparkGraderReplayWorkspace,
+  buildSparkGraderBrief,
+  buildSparkAgentSystemPrompt,
+  buildSparkGraderAgentPrompt,
+  renderSparkGraderTask,
+  SparkGraderRequestPayloadSchema,
+  resolveSparkAgentSkillFiles,
   SPARK_AGENT_REPLAY_INITIAL_WORKSPACE_DIR,
+  SPARK_GRADER_SHEET_PATH,
+  SPARK_GRADER_SKILL_IDS,
+  SPARK_GRADER_SUMMARY_PATH,
   readSparkAgentReplayManifest,
   resolveSparkAgentThinkingLevel,
   runSparkGraderReplayLocal,
@@ -42,6 +51,8 @@ type CliArgs = {
   useSubagents?: boolean;
   maxSteps?: number;
   disableExtractTextTool: boolean;
+  currentPrompts: boolean;
+  freshOutput: boolean;
   outputRootDir: string;
 };
 
@@ -66,6 +77,8 @@ type BenchmarkResult = {
     useSubagents: boolean;
     maxSteps: number;
     disableExtractTextTool: boolean;
+    currentPrompts: boolean;
+    freshOutput: boolean;
   };
   sourceDefaults: {
     modelId: string;
@@ -113,6 +126,16 @@ function parseCliArgs(args: readonly string[]): CliArgs {
       false,
     )
     .option(
+      "--current-prompts",
+      "run with the current Spark grader prompt, task template, and skill files instead of captured prompt text",
+      false,
+    )
+    .option(
+      "--fresh-output",
+      "delete grader/output before replaying so the run must republish artifacts",
+      false,
+    )
+    .option(
       "--output-root <path>",
       "override benchmark output root",
       OUTPUT_ROOT_DIR,
@@ -126,6 +149,8 @@ function parseCliArgs(args: readonly string[]): CliArgs {
     useSubagents?: boolean | string;
     maxSteps?: string;
     disableExtractText?: boolean;
+    currentPrompts?: boolean;
+    freshOutput?: boolean;
     outputRoot?: string;
   }>();
 
@@ -152,6 +177,8 @@ function parseCliArgs(args: readonly string[]): CliArgs {
           return parsedCount;
         }),
       disableExtractTextTool: z.boolean().default(false),
+      currentPrompts: z.boolean().default(false),
+      freshOutput: z.boolean().default(false),
       outputRootDir: z.string().trim().min(1).default(OUTPUT_ROOT_DIR),
     })
     .parse({
@@ -160,6 +187,8 @@ function parseCliArgs(args: readonly string[]): CliArgs {
       thinking: options.thinking,
       maxSteps: options.maxSteps,
       disableExtractTextTool: options.disableExtractText,
+      currentPrompts: options.currentPrompts,
+      freshOutput: options.freshOutput,
       outputRootDir: options.outputRoot,
     });
 
@@ -226,6 +255,58 @@ function resolveReplayThinkingLevel(input: {
   return resolveSparkAgentThinkingLevel(input.chosenModelId) ?? null;
 }
 
+async function materializeCurrentGraderRuntime(options: {
+  workspaceDir: string;
+}): Promise<{ prompt: string; systemPrompt: string }> {
+  const graderTaskTemplate = await readFile(
+    path.join(REPO_ROOT_DIR, "web/src/lib/server/graderAgent/task-template.md"),
+    { encoding: "utf8" },
+  );
+  const requestPayload = SparkGraderRequestPayloadSchema.parse(
+    JSON.parse(
+      await readFile(path.join(options.workspaceDir, "request.json"), {
+        encoding: "utf8",
+      }),
+    ),
+  );
+  const graderInput = {
+    ...requestPayload.input,
+    ...(requestPayload.sourcePaperOnlyNoStudent !== undefined
+      ? { sourcePaperOnlyNoStudent: requestPayload.sourcePaperOnlyNoStudent }
+      : {}),
+  };
+  const brief = buildSparkGraderBrief({
+    sourceText: requestPayload.sourceText ?? undefined,
+    input: graderInput,
+    attachments: requestPayload.attachments,
+  });
+  const prompt = buildSparkGraderAgentPrompt({
+    summaryPath: SPARK_GRADER_SUMMARY_PATH,
+    sheetPath: SPARK_GRADER_SHEET_PATH,
+  });
+  const systemPrompt = buildSparkAgentSystemPrompt({
+    includePdfTranscriptionSkill: true,
+  });
+  await writeFile(
+    path.join(options.workspaceDir, "brief.md"),
+    brief,
+    { encoding: "utf8" },
+  );
+  await writeFile(
+    path.join(options.workspaceDir, "grader/task.md"),
+    renderSparkGraderTask(graderTaskTemplate),
+    { encoding: "utf8" },
+  );
+  for (const skillFile of resolveSparkAgentSkillFiles(SPARK_GRADER_SKILL_IDS)) {
+    const targetPath = path.join(options.workspaceDir, skillFile.path);
+    await mkdir(path.dirname(targetPath), { recursive: true });
+    await writeFile(targetPath, skillFile.content, {
+      encoding: "utf8",
+    });
+  }
+  return { prompt, systemPrompt };
+}
+
 function resolveSourceRunDir(runPath: string): string {
   if (path.isAbsolute(runPath)) {
     return runPath;
@@ -270,19 +351,28 @@ async function main(): Promise<void> {
     sourceRunDir,
     targetWorkspaceDir: workspaceDir,
   });
+  if (cli.freshOutput) {
+    await rm(path.join(workspaceDir, "grader/output"), {
+      recursive: true,
+      force: true,
+    });
+  }
+  const runtime = cli.currentPrompts
+    ? await materializeCurrentGraderRuntime({ workspaceDir })
+    : { prompt: prepared.prompt, systemPrompt: prepared.systemPrompt };
   const promptPath = path.join(runDir, "prompt.txt");
   const systemPromptPath = path.join(runDir, "system-prompt.txt");
-  await writeFile(promptPath, prepared.prompt.concat("\n"), {
+  await writeFile(promptPath, runtime.prompt.concat("\n"), {
     encoding: "utf8",
   });
-  await writeFile(systemPromptPath, prepared.systemPrompt.concat("\n"), {
+  await writeFile(systemPromptPath, runtime.systemPrompt.concat("\n"), {
     encoding: "utf8",
   });
 
   const result = await runSparkGraderReplayLocal({
     workspaceDir,
-    prompt: prepared.prompt,
-    systemPrompt: prepared.systemPrompt,
+    prompt: runtime.prompt,
+    systemPrompt: runtime.systemPrompt,
     modelId,
     ...(thinkingLevel ? { thinkingLevel } : {}),
     maxSteps: cli.maxSteps ?? prepared.sourceMaxSteps,
@@ -329,6 +419,8 @@ async function main(): Promise<void> {
       useSubagents: result.useSubagents,
       maxSteps: result.maxSteps,
       disableExtractTextTool: result.disableExtractTextTool,
+      currentPrompts: cli.currentPrompts,
+      freshOutput: cli.freshOutput,
     },
     sourceDefaults: {
       modelId: prepared.sourceModelId,
@@ -365,6 +457,8 @@ async function main(): Promise<void> {
     `- Subagents: ${result.useSubagents ? "on" : "off"}`,
     `- Max steps: ${result.maxSteps.toString()}`,
     `- Extract text: ${result.disableExtractTextTool ? "off" : "on"}`,
+    `- Current prompts: ${cli.currentPrompts ? "on" : "off"}`,
+    `- Fresh output: ${cli.freshOutput ? "on" : "off"}`,
     `- Model calls: ${toolLoopSummary.modelCalls.toString()}`,
     `- Tool calls: ${toolLoopSummary.toolCalls.toString()}`,
     `- Agent cost: ${formatUsd(toolLoopSummary.agentCostUsd)}`,

@@ -32,8 +32,14 @@ describe("resolveSparkAgentThinkingLevel", () => {
       "../src/agent/sparkAgentRunner"
     );
 
-    expect(resolveSparkAgentSubagentSelection()).toEqual({
+    const selection = resolveSparkAgentSubagentSelection();
+    expect(selection).toMatchObject({
       promptPattern: "codex",
     });
+    if (selection === false || selection === true) {
+      return;
+    }
+    expect(selection.maxAgents).toBe(6);
+    expect(selection.instructions).toContain("Grader subagent policy");
   });
 });

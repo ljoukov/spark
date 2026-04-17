@@ -20,7 +20,7 @@ import {
   buildSparkAgentTools,
 } from "@spark/llm/agent/sparkAgentRunner";
 import { applyPdfTranscriptionSkillTools } from "@spark/llm/agent/skills/pdfTranscription";
-import { HANDWRITING_TRANSCRIPTION_SKILL_TEXT } from "@spark/llm/agent/skills/handwritingTranscription";
+import { resolveSparkAgentSkill } from "@spark/llm/agent/sparkAgentSkills";
 import {
   assertFileExists,
   createRepoPathHelpers,
@@ -59,6 +59,9 @@ const REQUIRED_CUSTOM_TOOL_NAMES = [
   "crop_image",
   "done",
 ] as const;
+const HANDWRITING_TRANSCRIPTION_SKILL_TEXT = resolveSparkAgentSkill(
+  "handwritten-answers-to-sheet",
+).content;
 
 type AgentPathConfig = {
   runRootDir: string;

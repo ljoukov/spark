@@ -13,7 +13,7 @@ import {
 } from "./sparkAgentRunner";
 
 const DEFAULT_LOCAL_GRADER_MODEL_ID = "chatgpt-gpt-5.4-fast" as const;
-const DEFAULT_LOCAL_GRADER_MAX_STEPS = 200;
+const DEFAULT_LOCAL_GRADER_MAX_STEPS = 120;
 
 export type SparkLocalGraderRunHandle = {
   runId: string;
@@ -63,6 +63,11 @@ async function materializeSparkLocalGraderWorkspace(options: {
     ).concat("\n"),
     { encoding: "utf8" },
   );
+  for (const skillFile of options.plan.skillFiles) {
+    const targetPath = path.join(options.rootDir, skillFile.path);
+    await mkdir(path.dirname(targetPath), { recursive: true });
+    await writeFile(targetPath, skillFile.content, { encoding: "utf8" });
+  }
   for (const attachment of options.plan.runWorkspaceAttachments) {
     if (!attachment.localPath) {
       throw new Error(

@@ -30,6 +30,7 @@ Use this workflow for high-fidelity PDF transcription with diagrams.
 ## Page Discovery
 
 - Convert the full PDF to page images with 'pdf_to_images' before per-problem extraction.
+- If 'extract_pdf_images' is available, run it once for the relevant page range before manual diagram cropping. It is a deterministic first pass for embedded raster figures/maps/photos/charts, but it does not locate vector diagrams or on-page coordinates, and extracted images may omit labels drawn separately on the page.
 - If 'extract_pdf_reference_text' is available:
   - Extract once into 'output/reference/pdf-text.md'.
   - Read tool response metadata ('problemPages' and 'pages') to prioritize likely relevant pages.
@@ -50,8 +51,10 @@ Use this workflow for high-fidelity PDF transcription with diagrams.
 
 ## Diagram Crop Loop
 
-Use at most two attempts per diagram in the main agent, and never more than six 'crop_image' calls for the same output asset before switching strategy.
-If one manual crop-and-view correction for the same target is still clipped, noisy, or uncertain, call 'propose_crop_bbox_with_fresh_agent' when available, or 'extract_pdf_diagrams' for that source page and target label, before spending more turns on hand-tuned crop boxes.
+When the same diagram crop fails for the same reason after a manual correction, treat that as a wrong-path signal and switch strategy instead of continuing hand-tuned crop boxes in the main agent.
+If one manual crop-and-view correction for the same target is still clipped, noisy, or uncertain, call 'propose_crop_bbox_with_fresh_agent' when available, 'extract_pdf_images' for embedded raster candidates, or 'extract_pdf_diagrams' for that source page and target label, before spending more turns on hand-tuned crop boxes.
+
+For each target visual, keep an explicit image-cutting step count. Do not exceed 8 image-cutting steps for one target visual without calling 'review_run_progress_with_fresh_agent' and switching strategy or reporting the blocker.
 
 - Attempt pattern:
   - 'crop_image' with 'bboxPixels' from the original page image or selected complete bad crop
@@ -70,6 +73,7 @@ If one manual crop-and-view correction for the same target is still clipped, noi
 - For objective questions whose choices are diagrams, crop one complete options block or separate complete option crops. Every candidate label and every option diagram/shape must be fully visible; do not let a candidate option be cut at the crop edge.
 - For worksheet/grading outputs, source/reference markdown is only an audit trail. If a problem statement mentions a diagram, figure, graph, chart, map, network, photo, or other answer-critical visual, the final visible worksheet prompt must include the linked crop near that text; do not hide the visual in references.
 - If 'view_image' fails on any workspace image or rendered PDF page because file upload/canonical-file configuration is unavailable, use 'crop_image' to create a local PNG overview or relevant crop under the output/assets directory, then inspect that generated image with 'view_image' before grading or publishing. Do not switch to 'extract_pdf_diagrams' as a fallback for 'view_image' failures.
+- If repeated crop attempts, repeated fresh-validation failures, publish-image guard errors, or extraction-tool budget warnings occur, call 'review_run_progress_with_fresh_agent' before continuing the same workflow.
 
 ## Subagent and Non-Subagent Execution
 
@@ -85,7 +89,7 @@ For each final diagram, verify:
 - no unrelated text fragments are present,
 - crop bounds are tight around the diagram.
 - for grading outputs, have 'validate_crop_with_fresh_agent' inspect each final linked figure/image crop with the question context and 'view_image' before completion.
-- write 'grader/output/crop-validation.md' (or the caller's requested validation path) listing each final linked crop path, source question/figure/table label, 'fresh-context subagent checked: yes', reviewer-visible text transcribed from the crop, exact pass/fail, whether all required content is visible, whether unrelated visible text/non-target ink is present, whether required content touches or clips at an edge, and whether page borders/separator lines/answer lines/neighbouring-question fragments are present.
+- write 'grader/output/crop-validation.md' (or the caller's requested validation path) listing each final linked crop path, source question/figure/table label, 'fresh-context subagent checked: yes', reviewer-visible text transcribed from the crop, exact pass/fail, whether all required content is visible, whether unrelated neighbouring content outside the target visual is present, whether required content touches or clips at an edge, and whether page borders/separator lines/answer lines/neighbouring-question fragments are present.
 
 Then re-read each problem statement with its diagram and resolve any inconsistencies against page images.
 
@@ -382,7 +386,9 @@ function detectForegroundBounds(options: {
     throw new Error("Image dimensions must be positive.");
   }
   if (options.channels < 3) {
-    throw new Error(`Expected RGB(A) image, received ${options.channels.toString()} channel(s).`);
+    throw new Error(
+      `Expected RGB(A) image, received ${options.channels.toString()} channel(s).`,
+    );
   }
 
   const samplePoints = [
@@ -406,7 +412,10 @@ function detectForegroundBounds(options: {
     }),
   );
   const background = averageColor(cornerColors);
-  const tolerance = Math.max(0, Math.min(255, Math.round((options.fuzzPercent / 100) * 255)));
+  const tolerance = Math.max(
+    0,
+    Math.min(255, Math.round((options.fuzzPercent / 100) * 255)),
+  );
 
   let minX = options.width;
   let minY = options.height;
@@ -492,7 +501,9 @@ export function applyPdfTranscriptionSkillTools(options: {
 }): LlmToolSet {
   const toolsRecord = options.tools as Record<string, unknown>;
   const onFileWritten =
-    typeof options.onFileWritten === "function" ? options.onFileWritten : () => {};
+    typeof options.onFileWritten === "function"
+      ? options.onFileWritten
+      : () => {};
 
   const cropToolCandidate = toolsRecord.crop_image;
   if (
@@ -574,9 +585,21 @@ export function applyPdfTranscriptionSkillTools(options: {
         showLabels: z.boolean().optional(),
       })
       .strict(),
-    execute: async ({ sourcePath, outputPath, stepPx, lineWidth, showLabels }) => {
-      const sourceAbsolutePath = resolveWorkspacePath(options.rootDir, sourcePath);
-      const outputAbsolutePath = resolveWorkspacePath(options.rootDir, outputPath);
+    execute: async ({
+      sourcePath,
+      outputPath,
+      stepPx,
+      lineWidth,
+      showLabels,
+    }) => {
+      const sourceAbsolutePath = resolveWorkspacePath(
+        options.rootDir,
+        sourcePath,
+      );
+      const outputAbsolutePath = resolveWorkspacePath(
+        options.rootDir,
+        outputPath,
+      );
       const sourceBytes = await readFile(sourceAbsolutePath);
       const sharp = getSharp();
       const metadata = await sharp(sourceBytes).metadata();
@@ -636,8 +659,14 @@ export function applyPdfTranscriptionSkillTools(options: {
       })
       .strict(),
     execute: async ({ sourcePath, outputPath, fuzzPercent, paddingPx }) => {
-      const sourceAbsolutePath = resolveWorkspacePath(options.rootDir, sourcePath);
-      const outputAbsolutePath = resolveWorkspacePath(options.rootDir, outputPath);
+      const sourceAbsolutePath = resolveWorkspacePath(
+        options.rootDir,
+        sourcePath,
+      );
+      const outputAbsolutePath = resolveWorkspacePath(
+        options.rootDir,
+        outputPath,
+      );
       const sourceBytes = await readFile(sourceAbsolutePath);
       const sharp = getSharp();
       const decoded = await sharp(sourceBytes).ensureAlpha().raw().toBuffer({
@@ -717,24 +746,18 @@ export function applyPdfTranscriptionSkillTools(options: {
         .object({
           pdfPath: z.string().trim().min(1),
           outputPath: z.string().trim().min(1),
-          maxChars: z.preprocess(
-            (value) => {
-              if (value === null || value === undefined) {
-                return undefined;
-              }
-              return value;
-            },
-            z.number().int().min(200).max(180_000).optional(),
-          ),
-          modelId: z.preprocess(
-            (value) => {
-              if (value === null || value === undefined) {
-                return undefined;
-              }
-              return value;
-            },
-            z.string().trim().min(1).optional(),
-          ),
+          maxChars: z.preprocess((value) => {
+            if (value === null || value === undefined) {
+              return undefined;
+            }
+            return value;
+          }, z.number().int().min(200).max(180_000).optional()),
+          modelId: z.preprocess((value) => {
+            if (value === null || value === undefined) {
+              return undefined;
+            }
+            return value;
+          }, z.string().trim().min(1).optional()),
         })
         .strict(),
       execute: async ({ pdfPath, outputPath, maxChars, modelId }) => {
@@ -747,7 +770,10 @@ export function applyPdfTranscriptionSkillTools(options: {
         let extractedReferenceText: string;
 
         try {
-          const resolvedPdfPath = resolveWorkspacePath(options.rootDir, pdfPath);
+          const resolvedPdfPath = resolveWorkspacePath(
+            options.rootDir,
+            pdfPath,
+          );
           const localExtraction = await extractReferenceTextWithPdftotext({
             pdfPath: resolvedPdfPath,
             maxChars: safeMaxChars,
@@ -821,7 +847,8 @@ export function applyPdfTranscriptionSkillTools(options: {
         };
       },
     });
-    (nextTools as Record<string, unknown>).extract_pdf_reference_text = extractPdfReferenceTextTool;
+    (nextTools as Record<string, unknown>).extract_pdf_reference_text =
+      extractPdfReferenceTextTool;
   }
 
   return nextTools;

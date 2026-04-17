@@ -46,6 +46,10 @@ RUN bun --cwd=web run build
 FROM oven/bun:1.3.8 AS production
 WORKDIR /usr/src/app
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends poppler-utils \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /workspace/node_modules ./node_modules
 COPY --from=build /workspace/web/node_modules ./build/node_modules
 COPY --from=build /workspace/packages/schemas/node_modules ./packages/schemas/node_modules

@@ -7,7 +7,9 @@ import {
 	buildSparkGraderBrief,
 	createTask,
 	renderSparkGraderTask,
+	resolveSparkAgentSkillFiles,
 	SparkChatAttachmentInputSchema,
+	SPARK_GRADER_SKILL_IDS,
 	SPARK_GRADER_UPLOADS_MANIFEST_PATH,
 	SPARK_GRADER_SHEET_PATH,
 	SPARK_GRADER_SUMMARY_PATH,
@@ -16,8 +18,16 @@ import {
 import { PaperSheetAnswersSchema } from '@spark/schemas';
 import { env } from '$env/dynamic/private';
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
-import { patchFirestoreDocument, setFirestoreDocument } from '$lib/server/gcp/firestoreRest';
+import {
+	getFirestoreDocument,
+	patchFirestoreDocument,
+	setFirestoreDocument
+} from '$lib/server/gcp/firestoreRest';
 import { getGraderRun, getWorkspaceTextFile } from '$lib/server/grader/repo';
+import {
+	safeParseGraderWorksheetReport,
+	safeParseSolveSheetDraft
+} from '$lib/server/grader/problemReport';
 import graderTaskTemplate from '$lib/server/graderAgent/task-template.md?raw';
 
 const paramsSchema = z.object({
@@ -25,11 +35,21 @@ const paramsSchema = z.object({
 });
 
 const requestSchema = z.object({
-	answers: PaperSheetAnswersSchema.optional()
+	answers: PaperSheetAnswersSchema.optional(),
+	disableAutoGapsFinder: z.boolean().optional()
 });
 
+const uploadManifestAttachmentSchema = SparkChatAttachmentInputSchema.omit({ id: true })
+	.extend({
+		id: z.string().trim().min(1).optional()
+	})
+	.transform((attachment) => ({
+		...attachment,
+		id: attachment.id ?? attachment.storagePath ?? attachment.localPath ?? attachment.filename ?? randomUUID()
+	}));
+
 const uploadManifestSchema = z.object({
-	attachments: z.array(SparkChatAttachmentInputSchema).default([])
+	attachments: z.array(uploadManifestAttachmentSchema).default([])
 });
 
 function buildDraftAnswersContent(answers: z.infer<typeof PaperSheetAnswersSchema>): string {
@@ -59,6 +79,23 @@ function buildGraderTaskWithDraftContext(): string {
 		.concat('\n');
 }
 
+function buildDirectGraderRerunTask(options: { sourcePaperOnlyNoStudent: boolean }): string {
+	return [
+		renderSparkGraderTask(graderTaskTemplate).trim(),
+		'',
+		'## Existing grader rerun context',
+		'- This is a rerun for an existing grader worksheet, not a grade-from-draft request.',
+		'- Use the uploaded/linked source material and any existing grader workspace artifacts only as context for rebuilding the worksheet.',
+		'- Do not require `sheet/output/draft.json` or `sheet/state/answers.json`; those files only exist for generated draft-sheet grading.',
+		options.sourcePaperOnlyNoStudent
+			? '- No student answers were provided in the original run. Publish an unanswered source worksheet with `review.mode` set to `"awaiting_answers"` and no per-question scores.'
+			: '- If student answers are present, include per-question scores for every question so the UI can show awarded/total marks.'
+	]
+		.join('\n')
+		.trim()
+		.concat('\n');
+}
+
 function requireServiceAccountJson(): string {
 	const value = env.GOOGLE_SERVICE_ACCOUNT_JSON;
 	if (!value || value.trim().length === 0) {
@@ -79,6 +116,18 @@ function requireTasksEnv(): { serviceUrl: string; apiKey: string } {
 	return { serviceUrl, apiKey };
 }
 
+async function hasStopRequestedAgent(options: {
+	serviceAccountJson: string;
+	userId: string;
+	agentId: string;
+}): Promise<boolean> {
+	const snapshot = await getFirestoreDocument({
+		serviceAccountJson: options.serviceAccountJson,
+		documentPath: `users/${options.userId}/agents/${options.agentId}`
+	});
+	return snapshot.exists && snapshot.data?.stop_requested === true;
+}
+
 export const POST: RequestHandler = async ({ request, params }) => {
 	const auth = await authenticateApiRequest(request);
 	if (!auth.ok) {
@@ -88,33 +137,46 @@ export const POST: RequestHandler = async ({ request, params }) => {
 
 	try {
 		const { sheetId } = paramsSchema.parse(params);
-		const { answers } = requestSchema.parse(await request.json().catch(() => ({})));
+		const { answers, disableAutoGapsFinder } = requestSchema.parse(
+			await request.json().catch(() => ({}))
+		);
 		const run = await getGraderRun(user.uid, sheetId);
 		if (!run) {
 			return json({ error: 'sheet_not_found' }, { status: 404 });
 		}
+		const serviceAccountJson = requireServiceAccountJson();
+		const tasksEnv = requireTasksEnv();
 		if (run.sheetPhase === 'building' && run.status !== 'done') {
 			return json(
 				{ error: 'sheet_not_ready', message: 'This sheet is still being prepared.' },
 				{ status: 409 }
 			);
 		}
-		if (run.sheetPhase === 'graded') {
-			return json(
-				{ error: 'sheet_already_graded', message: 'This sheet is already graded.' },
-				{ status: 409 }
-			);
-		}
 		if (run.sheetPhase === 'grading' && run.status === 'executing') {
-			return json(
-				{ error: 'grading_in_progress', message: 'This sheet is already being graded.' },
-				{ status: 409 }
-			);
+			if (
+				!(await hasStopRequestedAgent({
+					serviceAccountJson,
+					userId: user.uid,
+					agentId: run.agentId
+				}))
+			) {
+				return json(
+					{ error: 'grading_in_progress', message: 'This sheet is already being graded.' },
+					{ status: 409 }
+				);
+			}
 		}
 
-		const serviceAccountJson = requireServiceAccountJson();
-		const tasksEnv = requireTasksEnv();
 		const now = new Date();
+		const currentArtifactPath = run.sheet?.filePath ?? run.sheetPath;
+		const currentArtifactRaw = await getWorkspaceTextFile(user.uid, run.workspaceId, currentArtifactPath);
+		const currentReport = currentArtifactRaw
+			? safeParseGraderWorksheetReport(currentArtifactRaw)
+			: null;
+		const currentDraft = currentArtifactRaw ? safeParseSolveSheetDraft(currentArtifactRaw) : null;
+		const gradeFromDraft = currentReport === null && (currentDraft !== null || run.sheetPhase === 'solving');
+		const sourcePaperOnlyNoStudent =
+			!gradeFromDraft && !answers && currentReport?.review.mode === 'awaiting_answers';
 		const answersPath =
 			run.draftAnswersPath && run.draftAnswersPath.trim().length > 0
 				? run.draftAnswersPath
@@ -140,11 +202,21 @@ export const POST: RequestHandler = async ({ request, params }) => {
 		const uploads = uploadsRaw
 			? uploadManifestSchema.parse(JSON.parse(uploadsRaw)).attachments
 			: [];
+		const seedEmptyUploadManifest = uploadsRaw === null;
 		const agentId = randomUUID();
 		const input = {
 			referenceSourcePolicy: 'allow-official-references' as const,
-			notes:
-				'The worksheet draft already exists in sheet/output/draft.json and the recorded answers are in sheet/state/answers.json. Preserve that student-facing structure when building the graded sheet.'
+			...(sourcePaperOnlyNoStudent
+				? {
+						sourcePaperOnlyNoStudent: true,
+						notes:
+							'No student answers were provided in the original run. Rebuild the uploaded source as an unanswered worksheet and keep review.mode as awaiting_answers.'
+					}
+				: {
+						notes: gradeFromDraft
+							? 'The worksheet draft already exists in sheet/output/draft.json and the recorded answers are in sheet/state/answers.json. Preserve that student-facing structure when building the graded sheet.'
+							: 'Rerun the grader for the existing worksheet using the original uploaded material and linked workspace artifacts.'
+					})
 		};
 		const brief = buildSparkGraderBrief({
 			sourceText: run.userPrompt,
@@ -155,8 +227,13 @@ export const POST: RequestHandler = async ({ request, params }) => {
 			createdAt: now.toISOString(),
 			sourceText: run.userPrompt ?? null,
 			input,
-			attachments: uploads
+			attachments: uploads,
+			...(sourcePaperOnlyNoStudent ? { sourcePaperOnlyNoStudent: true } : {})
 		};
+		const skillFiles = resolveSparkAgentSkillFiles(SPARK_GRADER_SKILL_IDS);
+		const graderTask = gradeFromDraft
+			? buildGraderTaskWithDraftContext()
+			: buildDirectGraderRerunTask({ sourcePaperOnlyNoStudent });
 
 		await Promise.all([
 			upsertWorkspaceTextFileDoc({
@@ -164,7 +241,9 @@ export const POST: RequestHandler = async ({ request, params }) => {
 				userId: user.uid,
 				workspaceId: run.workspaceId,
 				filePath: 'brief.md',
-				content: `${brief.trim()}\n\n## Existing worksheet draft paths\n- sheet/output/draft.json\n- ${answersPath}\n`,
+				content: gradeFromDraft
+					? `${brief.trim()}\n\n## Existing worksheet draft paths\n- sheet/output/draft.json\n- ${answersPath}\n`
+					: `${brief.trim()}\n\n## Existing grader artifact path\n- ${currentArtifactPath}\n`,
 				contentType: 'text/markdown',
 				createdAt: now,
 				updatedAt: now
@@ -184,11 +263,37 @@ export const POST: RequestHandler = async ({ request, params }) => {
 				userId: user.uid,
 				workspaceId: run.workspaceId,
 				filePath: 'grader/task.md',
-				content: buildGraderTaskWithDraftContext(),
+				content: graderTask,
 				contentType: 'text/markdown',
 				createdAt: now,
 				updatedAt: now
-			})
+			}),
+			...(seedEmptyUploadManifest
+				? [
+						upsertWorkspaceTextFileDoc({
+							serviceAccountJson,
+							userId: user.uid,
+							workspaceId: run.workspaceId,
+							filePath: SPARK_GRADER_UPLOADS_MANIFEST_PATH,
+							content: `${JSON.stringify({ attachments: [] }, null, 2)}\n`,
+							contentType: 'application/json',
+							createdAt: now,
+							updatedAt: now
+						})
+					]
+				: []),
+			...skillFiles.map((skillFile) =>
+				upsertWorkspaceTextFileDoc({
+					serviceAccountJson,
+					userId: user.uid,
+					workspaceId: run.workspaceId,
+					filePath: skillFile.path,
+					content: skillFile.content,
+					contentType: skillFile.contentType,
+					createdAt: now,
+					updatedAt: now
+				})
+			)
 		]);
 
 		await setFirestoreDocument({
@@ -207,6 +312,7 @@ export const POST: RequestHandler = async ({ request, params }) => {
 				graderSheetPath: SPARK_GRADER_SHEET_PATH,
 				inputAttachments: uploads,
 				graderInputAttachments: uploads,
+				...(disableAutoGapsFinder === true ? { disableAutoGapsFinder: true } : {}),
 				createdAt: now,
 				updatedAt: now,
 				statesTimeline: [{ state: 'created', timestamp: now }]

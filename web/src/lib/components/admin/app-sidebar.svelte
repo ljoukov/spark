@@ -8,6 +8,7 @@
 	import ActivityIcon from '@lucide/svelte/icons/activity';
 	import Volume2Icon from '@lucide/svelte/icons/volume-2';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
+	import BookOpenIcon from '@lucide/svelte/icons/book-open';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import MoreVerticalIcon from '@lucide/svelte/icons/more-vertical';
 	import CopyIcon from '@lucide/svelte/icons/copy';
@@ -63,6 +64,12 @@
 			href: '/admin/tasks',
 			icon: PlayIcon,
 			highlight: (path) => path.startsWith('/admin/tasks')
+		},
+		{
+			title: 'Skills',
+			href: '/admin/skills',
+			icon: BookOpenIcon,
+			highlight: (path) => path.startsWith('/admin/skills')
 		},
 		{
 			title: 'Logs',

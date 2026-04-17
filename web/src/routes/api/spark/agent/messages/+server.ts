@@ -1761,6 +1761,16 @@ function buildSparkChatTools(options: {
 							),
 							now: plan.createdAt
 						}),
+						...plan.skillFiles.map((skillFile) =>
+							writeWorkspaceTextFile({
+								serviceAccountJson,
+								userId,
+								workspaceId: plan.workspaceId,
+								path: skillFile.path,
+								content: skillFile.content,
+								now: plan.createdAt
+							})
+						),
 						...plan.runWorkspaceAttachments.map((attachment) =>
 							writeWorkspaceStorageLinkFile({
 								serviceAccountJson,
@@ -1920,6 +1930,16 @@ function buildSparkChatTools(options: {
 							),
 							now: plan.createdAt
 						}),
+						...plan.skillFiles.map((skillFile) =>
+							writeWorkspaceTextFile({
+								serviceAccountJson,
+								userId,
+								workspaceId: plan.workspaceId,
+								path: skillFile.path,
+								content: skillFile.content,
+								now: plan.createdAt
+							})
+						),
 						...plan.runWorkspaceAttachments.map((attachment) =>
 							writeWorkspaceStorageLinkFile({
 								serviceAccountJson,

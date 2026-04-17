@@ -22,14 +22,17 @@ export function preferGoogleServiceAccountAuth(): void {
   process.env.GOOGLE_API_KEY = "";
   process.env.GEMINI_API_KEY = "";
 
-  if (
-    process.env.LLM_FILES_GCS_BUCKET === undefined &&
-    process.env.VERTEX_GCS_BUCKET === undefined
-  ) {
-    const projectId = parseServiceAccountProjectId(serviceAccountJson);
-    if (projectId !== null) {
-      process.env.LLM_FILES_GCS_BUCKET = `${projectId}.firebasestorage.app`;
-    }
+  const projectId = parseServiceAccountProjectId(serviceAccountJson);
+  if (projectId === null) {
+    return;
+  }
+
+  const defaultBucket = `${projectId}.firebasestorage.app`;
+  if (process.env.LLM_FILES_GCS_BUCKET === undefined) {
+    process.env.LLM_FILES_GCS_BUCKET = process.env.VERTEX_GCS_BUCKET ?? defaultBucket;
+  }
+  if (process.env.VERTEX_GCS_BUCKET === undefined) {
+    process.env.VERTEX_GCS_BUCKET = process.env.LLM_FILES_GCS_BUCKET ?? defaultBucket;
   }
 }
 

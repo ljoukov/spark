@@ -45,9 +45,11 @@ function restoreEnvVar(key: string, value: string | undefined): void {
   process.env[key] = value;
 }
 
-async function importFreshEnvModule() {
-  const cacheBust = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  return import(`../src/utils/env.ts?env-test=${cacheBust}`);
+let importFreshCounter = 0;
+
+async function importFreshEnvModule(): Promise<typeof import("../src/utils/env")> {
+  importFreshCounter += 1;
+  return import(`../src/utils/env.ts?env-test=${importFreshCounter}`);
 }
 
 describe("loadLocalEnv", () => {
@@ -119,6 +121,9 @@ describe("loadLocalEnv", () => {
     });
 
     expect(process.env.LLM_FILES_GCS_BUCKET).toBe(
+      "test-project.firebasestorage.app",
+    );
+    expect(process.env.VERTEX_GCS_BUCKET).toBe(
       "test-project.firebasestorage.app",
     );
   });

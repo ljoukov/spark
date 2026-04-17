@@ -21,6 +21,11 @@ import {
   buildWorkspaceFileDocPath,
   upsertWorkspaceTextFileDoc,
 } from "./workspaceFileStore";
+import {
+  renderSparkAgentSkillContentSection,
+  resolveSparkAgentSkillFiles,
+  SPARK_GAPS_FINDER_SKILL_IDS,
+} from "./sparkAgentSkills";
 import { errorAsString } from "../utils/error";
 import {
   commitFirestoreWrites,
@@ -849,39 +854,11 @@ function buildGenerationPrompt(options: {
   return [
     "You are Spark's gaps-finder agent for GCSE worksheet feedback.",
     "",
-    "Your job is to turn newly graded low-score worksheet questions into short, useful practice problems called gaps.",
-    "Do not write a scorecard, dashboard, general feedback, encouragement, or a list of strengths and weaknesses.",
+    renderSparkAgentSkillContentSection({
+      heading: "Gap Finder Skill",
+      skillIds: SPARK_GAPS_FINDER_SKILL_IDS,
+    }),
     "",
-    "Gap type definitions:",
-    "- knowledge_gap: the student is missing a clear fact, definition, process, sequence, rule, equation, or basic conceptual link. Use this when the next learning step is to learn or retrieve the idea.",
-    "- misconception: the student likely holds a wrong mental model or confused two related ideas. Use this when the answer suggests a common false belief or a concept conflict that needs correcting.",
-    "- oversight: the student likely knew the content but lost marks through exam technique, missing units, incomplete calculation, weak comparison wording, not using the command word, or a careless transcription/calculation mistake.",
-    "",
-    "Selection rules:",
-    "- 2 out of 3 marks is usually okay; do not make a gap from it unless the grader note identifies a serious misconception.",
-    "- 1 out of 4 marks, 0 marks, or half-or-less marks on a multi-mark question is usually a gap source.",
-    "- Omit duplicate gaps, including repeated submissions of the same paper. Use existing gaps and stable dedupe keys to avoid repetition.",
-    "- Create only the most useful gaps. It is okay to create zero gaps from a weak question if it duplicates an existing gap or is too vague.",
-    "- If the original problem is too broad for one card, split it into 1 to 3 small focused gaps.",
-    "",
-    "Card wording:",
-    "- cardQuestion must be 1 short sentence, or at most 2 short sentences.",
-    "- Make it self-contained: include necessary context from the sheet so the student can solve it without seeing the original paper.",
-    "- Sometimes you may reuse the sheet wording verbatim, but prefer a tighter formulation when the original is long.",
-    "",
-    "Learning-flow rules:",
-    "- Each gap must contain a short slide chain that leads the student toward a GCSE model answer.",
-    "- Prefer free_text steps. Use multiple_choice rarely, only when the options are substantial and useful.",
-    "- Make every free_text prompt a small reasoning check. The expected answer should be short.",
-    "- Every step may include label: a catchy 2 to 4 word student-facing tag for the slide, specific to the concept being practised. Use labels such as Water potential, Osmosis move, Guard-cell shape, Percent conversion, Command word. Never use generic labels like Step, Slide, or Stepping stone.",
-    "- End the chain with one model_answer step and one memory_chain step.",
-    "- The model_answer step should combine the preceding answers into a GCSE model answer.",
-    "- The memory_chain step should be very short, for example: glucose up → water potential down → water enters → turgid → stoma opens.",
-    "",
-    "Return JSON only. Use sourceCandidateId values exactly as provided.",
-    "The top-level JSON must be an object with one key, gaps.",
-    "Each gap object must use exactly these keys: sourceCandidateId, type, title, cardQuestion, shortRationale, dedupeKey, severity, steps.",
-    "Each step object must use kind plus the fields needed by that kind. Include label when you can make it specific. Do not use keys such as slides, learningSteps, category, gapType, question, or answerChain.",
     "Example shape:",
     JSON.stringify(
       {
@@ -1182,6 +1159,8 @@ async function writeGapFinderWorkspace(options: {
     content: [
       "# Gaps finder",
       "",
+      "Read and follow `skills/gap-finder/SKILL.md`.",
+      "",
       "Analyze the newly graded sheets in `gaps/input/new-runs.json` and the staged worksheet reports under `gaps/input/reports/`.",
       "Create concise, deduplicated learning gaps only for the most useful low-score questions.",
     ].join("\n"),
@@ -1189,6 +1168,18 @@ async function writeGapFinderWorkspace(options: {
     createdAt: now,
     updatedAt: now,
   });
+  for (const skillFile of resolveSparkAgentSkillFiles(SPARK_GAPS_FINDER_SKILL_IDS)) {
+    await upsertWorkspaceTextFileDoc({
+      serviceAccountJson: options.serviceAccountJson,
+      userId: options.userId,
+      workspaceId: options.workspaceId,
+      filePath: skillFile.path,
+      content: skillFile.content,
+      contentType: skillFile.contentType,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
   await upsertWorkspaceTextFileDoc({
     serviceAccountJson: options.serviceAccountJson,
     userId: options.userId,

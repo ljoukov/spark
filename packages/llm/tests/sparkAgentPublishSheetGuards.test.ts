@@ -23,6 +23,7 @@ vi.mock("../src/utils/gcp/firestoreRest", () => {
     patchFirestoreDocument: vi.fn(() => Promise.resolve({})),
     listFirestoreDocuments: vi.fn(() => Promise.resolve([])),
     deleteFirestoreDocument: vi.fn(() => Promise.resolve({})),
+    commitFirestoreWrites: vi.fn(() => Promise.resolve({})),
   };
 });
 
@@ -552,6 +553,250 @@ describe("Spark agent tool: publish_sheet guards", () => {
     });
   });
 
+  it("normalizes worksheet aggregate scores from per-question scores before publishing", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeValidSheetArtifacts(rootDir);
+      const sheetPath = path.join(rootDir, "grader/output/sheet.json");
+      const summaryPath = path.join(rootDir, "grader/output/run-summary.json");
+      const sheet = JSON.parse(await readFile(sheetPath, { encoding: "utf8" }));
+      sheet.review.score.got = 0;
+      sheet.review.label = "0/1";
+      await writeFile(sheetPath, JSON.stringify(sheet, null, 2).concat("\n"), {
+        encoding: "utf8",
+      });
+      const summary = JSON.parse(
+        await readFile(summaryPath, { encoding: "utf8" }),
+      );
+      summary.totals.awardedMarks = 0;
+      await writeFile(
+        summaryPath,
+        JSON.stringify(summary, null, 2).concat("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).resolves.toMatchObject({
+        status: "published",
+        awardedMarks: 1,
+        maxMarks: 1,
+      });
+      const normalizedSheet = JSON.parse(
+        await readFile(sheetPath, { encoding: "utf8" }),
+      );
+      const normalizedSummary = JSON.parse(
+        await readFile(summaryPath, { encoding: "utf8" }),
+      );
+      expect(normalizedSheet.review.score.got).toBe(1);
+      expect(normalizedSheet.review.label).toBe("1/1");
+      expect(normalizedSummary.totals.awardedMarks).toBe(1);
+    });
+  });
+
+  it("normalizes mechanical grader JSON misses before publishing", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeValidSheetArtifacts(rootDir);
+      const sheetPath = path.join(rootDir, "grader/output/sheet.json");
+      const summaryPath = path.join(rootDir, "grader/output/run-summary.json");
+      const sheet = JSON.parse(await readFile(sheetPath, { encoding: "utf8" }));
+      sheet.sheet.color = "green";
+      sheet.sheet.accent = "forest";
+      sheet.sheet.sections[0].type = "section";
+      sheet.sheet.sections[0].title = "Section A";
+      delete sheet.sheet.sections[0].id;
+      delete sheet.sheet.sections[0].label;
+      sheet.sheet.sections[0].questions[0] = {
+        id: "q1",
+        type: "lines",
+        marks: 1,
+        prompt: "Explain the answer.",
+      };
+      sheet.answers.q1 = "Because it matches the mark scheme.";
+      sheet.review.mode = "submitted";
+      delete sheet.review.questions.q1.status;
+      await writeFile(sheetPath, JSON.stringify(sheet, null, 2).concat("\n"), {
+        encoding: "utf8",
+      });
+      const summary = JSON.parse(
+        await readFile(summaryPath, { encoding: "utf8" }),
+      );
+      summary.year = 2024;
+      await writeFile(
+        summaryPath,
+        JSON.stringify(summary, null, 2).concat("\n"),
+        { encoding: "utf8" },
+      );
+
+      let publishedYear: string | undefined;
+      const scheduledPaths: string[] = [];
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: (filePath) => {
+            scheduledPaths.push(filePath);
+          },
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+        onPublishSheet: (publication) => {
+          publishedYear = publication.paper?.year;
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).resolves.toMatchObject({
+        status: "published",
+        awardedMarks: 1,
+        maxMarks: 1,
+      });
+      expect(publishedYear).toBe("2024");
+      const normalizedSheet = JSON.parse(
+        await readFile(sheetPath, { encoding: "utf8" }),
+      );
+      const normalizedSummary = JSON.parse(
+        await readFile(summaryPath, { encoding: "utf8" }),
+      );
+      expect(normalizedSheet.review.questions.q1.status).toBe("correct");
+      expect(normalizedSheet.sheet.color).toBe("#2F6F3E");
+      expect(normalizedSheet.sheet.accent).toBe("#327A45");
+      expect(normalizedSheet.sheet.sections[0].id).toBe("section-1");
+      expect(normalizedSheet.sheet.sections[0].label).toBe("Section A");
+      expect(normalizedSheet.sheet.sections[0].type).toBeUndefined();
+      expect(normalizedSheet.sheet.sections[0].questions[0].lines).toBe(4);
+      expect(normalizedSheet.review.mode).toBe("graded");
+      expect(normalizedSummary.year).toBe("2024");
+      expect(scheduledPaths).toEqual(
+        expect.arrayContaining([
+          "grader/output/sheet.json",
+          "grader/output/run-summary.json",
+        ]),
+      );
+    });
+  });
+
+  it("coerces a bare worksheet-shaped grader artifact before publishing", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "AQA Biology Paper 1H work",
+        awardedMarks: 1,
+        maxMarks: 2,
+        report: {
+          title: "AQA Biology Paper 1H work",
+          subtitle: "June 2024",
+          subject: "Biology",
+          level: "GCSE",
+          review: {
+            mode: "graded",
+            score: { got: 1, total: 2 },
+            message: "Good start.",
+            questions: {
+              q01_1: {
+                score: { got: 1, total: 2 },
+                note: "Add the second marking point.",
+              },
+            },
+          },
+          references: {
+            overallFeedbackMarkdown: "Compared with the uploaded mark scheme.",
+          },
+          sections: [
+            {
+              id: "sec01",
+              type: "group",
+              displayNumber: "01",
+              prompt: "Cardiovascular disease",
+              questions: [
+                {
+                  id: "q01_1",
+                  type: "lines",
+                  displayNumber: "01.1",
+                  marks: 2,
+                  prompt: "Explain why pressure on the heart helps.",
+                  answer: "It pushes blood.",
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      const scheduledPaths: string[] = [];
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: (filePath) => {
+            scheduledPaths.push(filePath);
+          },
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).resolves.toMatchObject({
+        status: "published",
+        awardedMarks: 1,
+        maxMarks: 2,
+      });
+      const normalizedSheet = JSON.parse(
+        await readFile(path.join(rootDir, "grader/output/sheet.json"), {
+          encoding: "utf8",
+        }),
+      );
+      expect(normalizedSheet.schemaVersion).toBe(1);
+      expect(normalizedSheet.sheet.sections[0].questions[0].questions[0].lines).toBe(
+        4,
+      );
+      expect(normalizedSheet.answers.q01_1).toBe("It pushes blood.");
+      expect(normalizedSheet.review.label).toBe("1/2");
+      expect(normalizedSheet.review.note).toBe("");
+      expect(normalizedSheet.review.questions.q01_1.status).toBe("incorrect");
+      expect(scheduledPaths).toContain("grader/output/sheet.json");
+    });
+  });
+
   it("publishes a source-paper-only unanswered MCQ worksheet with blank answers", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =
@@ -1038,6 +1283,388 @@ describe("Spark agent tool: publish_sheet guards", () => {
       await expect(publishSheetTool.execute({})).rejects.toThrow(
         /references a visual.*visible worksheet crop/iu,
       );
+    });
+  });
+
+  it("allows explicit linked-source PDF visual references without worksheet crops", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "GCSE Biology worksheet",
+        awardedMarks: 0,
+        maxMarks: 2,
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Biology",
+            level: "GCSE",
+            title: "GCSE Biology worksheet",
+            subtitle: "Uploaded paper",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q4",
+                label: "Question 4",
+                questions: [
+                  {
+                    id: "q4",
+                    type: "lines",
+                    displayNumber: "4",
+                    marks: 2,
+                    prompt:
+                      "Use Figure 3 in the linked original PDF. Explain how the structure is adapted.",
+                    lines: 3,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q4: "",
+          },
+          review: buildAwaitingAnswersReview(2, ["q4"]),
+          references: {
+            paperUrl: "https://example.com/original-paper.pdf",
+            officialProblemMarkdown:
+              "The source paper is linked as the original PDF for visual reference.",
+          },
+        },
+      });
+      await writeFile(
+        path.join(rootDir, "request.json"),
+        JSON.stringify(
+          {
+            createdAt: new Date(0).toISOString(),
+            sourceText:
+              "Render this question paper as a source-faithful worksheet. No student answers were provided; leave answers blank.",
+            input: {},
+            attachments: [],
+          },
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+      await writeSourceProblemStatementTranscription(
+        rootDir,
+        "## Source problem-statement transcription\n\n**Question 4** Figure 3 shows the structure used in this question.\n",
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).resolves.toMatchObject({
+        status: "published",
+        awardedMarks: 0,
+        maxMarks: 2,
+      });
+    });
+  });
+
+  it("allows compact handwritten grading reports without full source-paper visual reconstruction", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "GCSE Science grading report",
+        awardedMarks: 4,
+        maxMarks: 4,
+        footer: "Submitted answer booklet",
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Science",
+            level: "GCSE",
+            title: "GCSE Science grading report",
+            subtitle: "Uploaded work",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "questions-1-2",
+                label: "Questions 1-2",
+                questions: [
+                  {
+                    id: "q1",
+                    type: "group",
+                    displayNumber: "1",
+                    prompt:
+                      "Use Figure 1 in the linked original PDF for the source context.",
+                    questions: [
+                      {
+                        id: "q1a",
+                        type: "lines",
+                        displayNumber: "1(a)",
+                        marks: 1,
+                        prompt: "Explain the feature labelled in Figure 1.",
+                        lines: 2,
+                      },
+                      {
+                        id: "q1b",
+                        type: "lines",
+                        displayNumber: "1(b)",
+                        marks: 1,
+                        prompt: "Use the student's answer to grade the reason.",
+                        lines: 2,
+                      },
+                    ],
+                  },
+                  {
+                    id: "q2",
+                    type: "group",
+                    displayNumber: "2",
+                    prompt:
+                      "Use Table 1 in the linked original PDF for the source context.",
+                    questions: [
+                      {
+                        id: "q2a",
+                        type: "lines",
+                        displayNumber: "2(a)",
+                        marks: 1,
+                        prompt: "Compare the values in Table 1.",
+                        lines: 2,
+                      },
+                      {
+                        id: "q2b",
+                        type: "lines",
+                        displayNumber: "2(b)",
+                        marks: 1,
+                        prompt: "State the conclusion from the comparison.",
+                        lines: 2,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q1a: "Correct feature",
+            q1b: "Correct reason",
+            q2a: "Correct comparison",
+            q2b: "Correct conclusion",
+          },
+          review: {
+            score: {
+              got: 4,
+              total: 4,
+            },
+            label: "4/4",
+            message: "Strong answers across the submitted work.",
+            note: "The submitted answers meet the mark points.",
+            questions: {
+              q1a: {
+                status: "correct",
+                score: { got: 1, total: 1 },
+                note: "",
+              },
+              q1b: {
+                status: "correct",
+                score: { got: 1, total: 1 },
+                note: "",
+              },
+              q2a: {
+                status: "correct",
+                score: { got: 1, total: 1 },
+                note: "",
+              },
+              q2b: {
+                status: "correct",
+                score: { got: 1, total: 1 },
+                note: "",
+              },
+            },
+          },
+          references: {
+            paperUrl: "https://example.com/original-paper.pdf",
+            officialProblemMarkdown:
+              "Figure 1 and Table 1 appear in the linked original PDF.\n\n| Trial | Value |\n| --- | --- |\n| A | 1 |",
+          },
+        },
+      });
+      await writeFile(
+        path.join(rootDir, "request.json"),
+        JSON.stringify(
+          {
+            createdAt: new Date(0).toISOString(),
+            sourceText:
+              "Please grade my handwritten work against the uploaded PDF.",
+            input: {},
+            attachments: [
+              {
+                id: "student-page",
+                contentType: "image/png",
+                sizeBytes: 100,
+                filename: "student-page.png",
+              },
+              {
+                id: "source-paper",
+                contentType: "application/pdf",
+                sizeBytes: 1000,
+                filename: "source-paper.pdf",
+              },
+            ],
+          },
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+      await writeSourceProblemStatementTranscription(
+        rootDir,
+        [
+          "## Source problem-statement transcription",
+          "",
+          "**Question 1(a)** Figure 1 shows the labelled feature.",
+          "",
+          "**Question 2(a)** Table 1 gives the values to compare.",
+          "",
+        ].join("\n"),
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      const result = await publishSheetTool.execute({});
+
+      expect(result).toMatchObject({
+        status: "published",
+        awardedMarks: 4,
+        maxMarks: 4,
+      });
+    });
+  });
+
+  it("allows non-visual networking prompts without worksheet crops", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "Computer systems worksheet",
+        awardedMarks: 1,
+        maxMarks: 1,
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Computer Science",
+            level: "GCSE",
+            title: "Computer systems worksheet",
+            subtitle: "Uploaded paper",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "q2",
+                label: "Question 2",
+                questions: [
+                  {
+                    id: "q2",
+                    type: "lines",
+                    displayNumber: "2",
+                    marks: 1,
+                    prompt:
+                      "Describe one benefit of using a wired network in a local area network.",
+                    lines: 2,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q2: "Lower latency.",
+          },
+          review: {
+            score: {
+              got: 1,
+              total: 1,
+            },
+            label: "1/1",
+            message: "Checked.",
+            note: "Answer reviewed.",
+            questions: {
+              q2: {
+                status: "correct",
+                score: {
+                  got: 1,
+                  total: 1,
+                },
+                note: "Correct.",
+              },
+            },
+          },
+        },
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).resolves.toMatchObject({
+        status: "published",
+        awardedMarks: 1,
+        maxMarks: 1,
+      });
     });
   });
 
@@ -2364,6 +2991,108 @@ describe("Spark agent tool: publish_sheet guards", () => {
     });
   });
 
+  it("allows source instructions that mention a table before the adjacent figure crop caption", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+      const assetPath = "grader/output/assets/figure-1.png";
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "GCSE Biology worksheet",
+        awardedMarks: 1,
+        maxMarks: 1,
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Biology",
+            level: "GCSE",
+            title: "GCSE Biology worksheet",
+            subtitle: "Paper extract",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q1",
+                label: "Question 1",
+                questions: [
+                  {
+                    id: "q1_7",
+                    type: "lines",
+                    displayNumber: "1",
+                    marks: 1,
+                    prompt: `Complete Figure 1.\nYou should:\n- label the y-axis\n- add the correct scale to the y-axis\n- plot the data from Table 1\n- label each bar\n\nFigure 1\n[![Figure 1](${assetPath})](${assetPath})`,
+                    lines: 2,
+                    renderMode: "markdown",
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q1_7: "Bar chart drawn.",
+          },
+          review: {
+            score: {
+              got: 1,
+              total: 1,
+            },
+            label: "1/1",
+            message: "Complete.",
+            note: "Good work.",
+            questions: {
+              q1_7: {
+                status: "correct",
+                score: {
+                  got: 1,
+                  total: 1,
+                },
+                note: "",
+              },
+            },
+          },
+        },
+      });
+      await writeValidatedCropAsset({
+        rootDir,
+        assetPath,
+        sourceLabel: "Figure 1",
+      });
+      await writeFile(
+        path.join(rootDir, "grader/output/transcription.md"),
+        "## Source problem-statement transcription\n\n**1** Complete Figure 1 using the data shown above.\n",
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      const result = await publishSheetTool.execute({});
+      expect(result).toMatchObject({
+        status: "published",
+        mode: "mock",
+      });
+    });
+  });
+
   it("rejects prompts that repeat source tables instead of referring above", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =
@@ -2740,6 +3469,183 @@ describe("Spark agent tool: publish_sheet guards", () => {
       await expect(publishSheetTool.execute({})).rejects.toThrow(
         /links Figure 3 more than once/iu,
       );
+    });
+  });
+
+  it("allows adjacent different figure crops when the next figure label follows an image", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const figure4Asset = "grader/output/assets/figure-4.png";
+      const figure5Asset = "grader/output/assets/figure-5.png";
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "Chemistry worksheet",
+        awardedMarks: 1,
+        maxMarks: 1,
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Chemistry",
+            level: "GCSE",
+            title: "Chemistry worksheet",
+            subtitle: "Paper extract",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q5",
+                label: "Question 5",
+                questions: [
+                  {
+                    id: "g05",
+                    type: "group",
+                    displayNumber: "05",
+                    prompt: "This question is about electrolysis.",
+                    questions: [
+                      {
+                        id: "q5",
+                        type: "lines",
+                        displayNumber: "05.5",
+                        marks: 1,
+                        prompt: [
+                          `**Figure 4**\n\n[![Figure 4](${figure4Asset})](${figure4Asset})`,
+                          `**Figure 5**\n\n[![Figure 5](${figure5Asset})](${figure5Asset})`,
+                          "Explain the results shown in Figure 5.",
+                        ].join("\n\n"),
+                        lines: 2,
+                        renderMode: "markdown",
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q5: "Blue ions moved to the negative electrode.",
+          },
+          review: {
+            score: {
+              got: 1,
+              total: 1,
+            },
+            label: "1/1",
+            message: "Good source use.",
+            note: "The diagram evidence is used correctly.",
+            questions: {
+              q5: {
+                status: "correct",
+                score: { got: 1, total: 1 },
+                note: "Correct.",
+              },
+            },
+          },
+        },
+      });
+      await mkdir(path.join(rootDir, "grader/output/assets"), {
+        recursive: true,
+      });
+      await writeTestPng({
+        filePath: path.join(rootDir, figure4Asset),
+        width: 80,
+        height: 80,
+      });
+      await writeTestPng({
+        filePath: path.join(rootDir, figure5Asset),
+        width: 80,
+        height: 80,
+      });
+      await writeFile(
+        path.join(rootDir, "grader/output/crop-validation.md"),
+        [
+          "# Crop validation",
+          "",
+          `- crop path: ${figure4Asset}`,
+          "  - source label: Figure 4",
+          "  - fresh-context subagent checked: yes",
+          "  - reviewer-visible text: apparatus",
+          "  - pass/fail: pass",
+          "  - all question-relevant content visible: yes",
+          "",
+          `- crop path: ${figure5Asset}`,
+          "  - source label: Figure 5",
+          "  - fresh-context subagent checked: yes",
+          "  - reviewer-visible text: results",
+          "  - pass/fail: pass",
+          "  - all question-relevant content visible: yes",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+      await writeSourceProblemStatementTranscription(
+        rootDir,
+        "## Source problem-statement transcription\n\n**05.5** Figure 4 shows the apparatus. Figure 5 shows the results.\n",
+      );
+      await mkdir(
+        path.join(
+          rootDir,
+          "logs/agent/llm_calls/2026-04-13T10-00-00.000Z-0001/chatgpt-gpt-5.4-fast",
+        ),
+        { recursive: true },
+      );
+      await writeFile(
+        path.join(
+          rootDir,
+          "logs/agent/llm_calls/2026-04-13T10-00-00.000Z-0001/chatgpt-gpt-5.4-fast/tool_call.txt",
+        ),
+        JSON.stringify(
+          [
+            {
+              name: "validate_crop_with_fresh_agent",
+              arguments: {
+                cropPath: figure4Asset,
+                sourceLabel: "Figure 4",
+                questionContext: "Use Figure 4.",
+              },
+            },
+            {
+              name: "validate_crop_with_fresh_agent",
+              arguments: {
+                cropPath: figure5Asset,
+                sourceLabel: "Figure 5",
+                questionContext: "Use Figure 5.",
+              },
+            },
+          ],
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).resolves.toMatchObject({
+        status: "published",
+        awardedMarks: 1,
+        maxMarks: 1,
+      });
     });
   });
 
@@ -3531,7 +4437,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
       requireFunctionTool(publishSheetTool);
 
       await expect(publishSheetTool.execute({})).rejects.toThrow(
-        /failed publish guards.*crop-validation\.md.*passing fresh-context subagent validation/iu,
+        /failed publish guards.*crop-validation\.md.*unresolved failed crop review/iu,
       );
     });
   });
@@ -3580,6 +4486,11 @@ describe("Spark agent tool: publish_sheet guards", () => {
         "tool=validate_crop_with_fresh_agent crop validation\n",
         { encoding: "utf8" },
       );
+      await writeFreshCropReviewToolCall({
+        rootDir,
+        assetPath,
+        sourceLabel: "Figure 1",
+      });
 
       const tools = buildSparkAgentTools({
         workspace: {
@@ -3605,7 +4516,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
     });
   });
 
-  it("rejects crop validation records with unrelated visible crop content", async () => {
+  it("allows passing crop validation records with minor duplicate/context notes", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =
         await import("../src/agent/sparkAgentRunner");
@@ -3641,7 +4552,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
           "  - unrelated visible text or non-target ink present: yes",
           "  - edge clipping or content touching edge present: no",
           "  - page border, separator line, answer line, or neighbouring-question fragment present: no",
-          "  - issues: neighbouring option text is visible",
+          "  - issues: minor neighbouring caption fragment remains after fresh review",
           "",
         ].join("\n"),
         { encoding: "utf8" },
@@ -3653,6 +4564,11 @@ describe("Spark agent tool: publish_sheet guards", () => {
         "tool=validate_crop_with_fresh_agent crop validation\n",
         { encoding: "utf8" },
       );
+      await writeFreshCropReviewToolCall({
+        rootDir,
+        assetPath,
+        sourceLabel: "Figure 1",
+      });
 
       const tools = buildSparkAgentTools({
         workspace: {
@@ -3672,9 +4588,88 @@ describe("Spark agent tool: publish_sheet guards", () => {
       const publishSheetTool = tools.publish_sheet;
       requireFunctionTool(publishSheetTool);
 
-      await expect(publishSheetTool.execute({})).rejects.toThrow(
-        /failed publish guards.*crop-validation\.md.*passing fresh-context subagent validation/iu,
+      await expect(publishSheetTool.execute({})).resolves.toMatchObject({
+        status: "published",
+        awardedMarks: 1,
+        maxMarks: 1,
+      });
+    });
+  });
+
+  it("allows crop records marked fail only for duplicated prompt text when content is complete", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const assetPath = "grader/output/assets/figure-1.png";
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "Science worksheet",
+        awardedMarks: 1,
+        maxMarks: 1,
+        report: buildSingleImageQuestionReport(assetPath),
+      });
+      await mkdir(path.join(rootDir, "grader/output/assets"), {
+        recursive: true,
+      });
+      await writeTestPng({
+        filePath: path.join(rootDir, assetPath),
+        width: 20,
+        height: 20,
+      });
+      await writeFile(
+        path.join(rootDir, "grader/output/crop-validation.md"),
+        [
+          "# Crop validation",
+          "",
+          `- crop path: ${assetPath}`,
+          "  - source label: Figure 1",
+          "  - fresh-context subagent checked: yes",
+          "  - reviewer-visible text: Figure 1; Required label",
+          "  - pass/fail: fail",
+          "  - all question-relevant content visible: yes",
+          "  - duplicated caption/question/table text excluded: no",
+          "  - unrelated neighbouring content present: no",
+          "  - edge clipping or content touching edge present: no",
+          "  - page border, separator line, answer line, or neighbouring-question fragment present: no",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
       );
+      await writeSourceProblemStatementTranscription(rootDir);
+      await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "logs/agent/agent.log"),
+        "tool=validate_crop_with_fresh_agent crop validation\n",
+        { encoding: "utf8" },
+      );
+      await writeFreshCropReviewToolCall({
+        rootDir,
+        assetPath,
+        sourceLabel: "Figure 1",
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).resolves.toMatchObject({
+        status: "published",
+      });
     });
   });
 
@@ -3913,6 +4908,98 @@ describe("Spark agent tool: publish_sheet guards", () => {
       await writeFreshCropReviewToolCall({
         rootDir,
         assetPath,
+        sourceLabel: "Figure 1",
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).resolves.toMatchObject({
+        status: "published",
+        awardedMarks: 1,
+        maxMarks: 1,
+      });
+    });
+  });
+
+  it("allows pad_image to write a new linked worksheet asset after validating the source crop", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const sourceAssetPath = "grader/output/assets/figure-1.png";
+      const paddedAssetPath = "grader/output/assets/figure-1-pad.png";
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "Science worksheet",
+        awardedMarks: 1,
+        maxMarks: 1,
+        report: buildSingleImageQuestionReport(paddedAssetPath),
+      });
+      await mkdir(path.dirname(path.join(rootDir, sourceAssetPath)), {
+        recursive: true,
+      });
+      await writeTestPng({
+        filePath: path.join(rootDir, sourceAssetPath),
+        width: 30,
+        height: 30,
+      });
+      await writeTestPng({
+        filePath: path.join(rootDir, paddedAssetPath),
+        width: 40,
+        height: 40,
+      });
+      await writeFile(
+        path.join(rootDir, "grader/output/crop-validation.md"),
+        [
+          "# Crop validation",
+          "",
+          `- crop path: ${sourceAssetPath}`,
+          "  - fresh-context subagent checked: yes",
+          "  - reviewer-visible text: Figure 1",
+          "  - pass/fail: pass",
+          "  - all question-relevant content visible: yes",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+      const validationTime = new Date("2026-04-13T10:00:00.000Z");
+      const editTime = new Date("2026-04-13T10:02:00.000Z");
+      await utimes(
+        path.join(rootDir, "grader/output/crop-validation.md"),
+        validationTime,
+        validationTime,
+      );
+      await utimes(path.join(rootDir, paddedAssetPath), editTime, editTime);
+      await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "logs/agent/agent.log"),
+        [
+          "[spark-agent:test] 2026-04-13T09:59:00.000Z [agent:test] tool_call_started: turn=1 index=1 tool=spawn_agent callId=call_review",
+          "[spark-agent:test] 2026-04-13T10:02:00.000Z [agent:test] tool_call_started: turn=2 index=1 tool=pad_image callId=call_pad",
+          `[spark-agent:test] 2026-04-13T10:02:00.000Z [agent:test] tool_call_input: {"sourcePath":"${sourceAssetPath}","outputPath":"${paddedAssetPath}"}`,
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+      await writeFreshCropReviewToolCall({
+        rootDir,
+        assetPath: sourceAssetPath,
         sourceLabel: "Figure 1",
       });
 
@@ -5664,6 +6751,54 @@ describe("Spark agent tool: publish_sheet guards", () => {
       await expect(publishSheetTool.execute({})).rejects.toThrow(
         /failed publish guards.*presentation\.footer contains process wording/iu,
       );
+    });
+  });
+
+  it("allows OCR when it names the exam board in presentation metadata", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeValidSheetArtifacts(rootDir);
+      const summaryPath = path.join(rootDir, "grader/output/run-summary.json");
+      const summary = JSON.parse(
+        await readFile(summaryPath, { encoding: "utf8" }),
+      ) as {
+        presentation: {
+          summaryMarkdown: string;
+          footer: string;
+        };
+      };
+      summary.presentation.summaryMarkdown =
+        "This OCR paper went well on the short-answer questions.";
+      summary.presentation.footer = "OCR GCSE Computer Science J277/01";
+      await writeFile(
+        summaryPath,
+        JSON.stringify(summary, null, 2).concat("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).resolves.toMatchObject({
+        status: "published",
+      });
     });
   });
 

@@ -11,12 +11,13 @@
     "./*": "./src/*"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit",
+    "generate:agent-skills": "bun scripts/generate-agent-skills.ts",
+    "build": "bun run generate:agent-skills && tsc -p tsconfig.build.json",
+    "typecheck": "bun run generate:agent-skills && tsc --noEmit",
     "eslint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\"",
     "lint": "bun run typecheck && bun run eslint",
     "format": "prettier --write \"src/**/*.{ts,js,json}\" \"tests/**/*.{ts,js,json}\"",
-    "test": "vitest --run",
+    "test": "bun run generate:agent-skills && vitest --run",
     "smoke:lesson-agent": "bun --cwd=../../eval run tools:lesson-agent-smoke --",
     "test:llm-integration": "bun run smoke:lesson-agent --"
   },
@@ -38,11 +39,11 @@
     "zod": "^4.3.5"
   },
   "peerDependencies": {
-    "@ljoukov/llm": "7.0.6"
+    "@ljoukov/llm": "7.0.9"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
-    "@ljoukov/llm": "7.0.6",
+    "@ljoukov/llm": "7.0.9",
     "@types/node": "^25.0.9",
     "@types/pngjs": "^6.0.5",
     "eslint": "^9.39.2",

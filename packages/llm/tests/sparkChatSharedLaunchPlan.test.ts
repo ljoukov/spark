@@ -115,7 +115,15 @@ describe("spark chat launch plans", () => {
       graderTaskTemplate: "# Task",
     });
 
-    expect(plan.prompt).toContain("the validation is stale");
-    expect(plan.graderTask).toContain("the validation is stale");
+    const sourceImageCroppingSkill = plan.skillFiles.find(
+      (skillFile) =>
+        skillFile.path === "skills/source-image-cropping/SKILL.md",
+    );
+
+    expect(plan.prompt).toContain("skills/source-image-cropping/SKILL.md");
+    expect(plan.graderTask).toContain("skills/source-image-cropping/SKILL.md");
+    expect(sourceImageCroppingSkill?.content).toContain(
+      "validation is stale",
+    );
   });
 });
