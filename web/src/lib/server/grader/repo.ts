@@ -79,7 +79,9 @@ const sparkGraderPaperSchema = z
 		year: trimmedString.optional(),
 		paperName: trimmedString.optional(),
 		paperUrl: trimmedString.optional(),
-		markSchemeUrl: trimmedString.optional()
+		paperStoragePath: trimmedString.optional(),
+		markSchemeUrl: trimmedString.optional(),
+		markSchemeStoragePath: trimmedString.optional()
 	})
 	.transform(({ contextLabel, olympiad, ...rest }) => ({
 		...rest,
@@ -214,11 +216,18 @@ export async function getGraderRun(userId: string, runId: string): Promise<Spark
 	return parsed.data;
 }
 
-function conversationReferencesGraderRun(conversation: SparkAgentConversation, runId: string): boolean {
+function conversationReferencesGraderRun(
+	conversation: SparkAgentConversation,
+	runId: string
+): boolean {
 	const sheetHref = `/spark/sheets/${runId}`;
 	for (const message of conversation.messages) {
 		for (const part of message.content) {
-			if (part.type === 'agent_run' && part.runCard.kind === 'grader' && part.runCard.runId === runId) {
+			if (
+				part.type === 'agent_run' &&
+				part.runCard.kind === 'grader' &&
+				part.runCard.runId === runId
+			) {
 				return true;
 			}
 			if (part.type === 'text' && part.text.includes(sheetHref)) {

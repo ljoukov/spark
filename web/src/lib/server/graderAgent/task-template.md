@@ -86,8 +86,9 @@ Optional paper metadata is allowed only when known. If you include `year`, write
 - Keep upload inventory, workspace reading, primary transcription, final grading synthesis, and JSON assembly on the main agent.
 - Direct `view_image` is intentionally not available to the grader main agent. Use `extract_text` for student/photo transcription and the fresh visual helper tools for localized crop inspection.
 - Generic subagents may be used only for bounded official-reference lookup/verification or visual localization proposals. Final crop validation must use `validate_crop_with_fresh_agent`.
+- Before downloading official PDFs found online, check `knowledge-base/index.md` and call `kb_search_pdfs`. If a matching cached PDF exists, call `kb_download_pdf` and use the local file. If no match exists, download/cache the official PDF with `kb_cache_pdf_from_url`, using semi-structured classification text such as `gcse/aqa/biology/2024/<original filename>`, and carry the returned `storagePath` into worksheet references (`paperStoragePath` or `markSchemeStoragePath`). Keep original URLs only as provenance.
 - For long PDFs, pass explicit `pageNumbers` to `pdf_to_images`.
-- In handwritten-grading mode, prefer visible instructions like `Use Figure N in the linked original PDF.` for ordinary source-paper figures. Crop only when the visual is needed for feedback or cannot be located through the linked source.
+- In handwritten-grading mode, do not use `Use Figure N in the linked original PDF.` as the default for ordinary source-paper figures. Crop answer-critical figures/tables/diagrams into visible worksheet assets when the source pixels are available and feasible. Use a linked original/source PDF instruction only after bounded extraction/crop attempts show the visual is unavailable or not feasible to embed cleanly.
 - Do not use `generate_json` for grader artifacts.
 - Do not copy `request.json`, `brief.md`, upload manifests, planning JSON, answer lists, or process summaries into grader output JSON.
 - Do not end with a normal assistant final response before publishing. The run is complete only after `publish_sheet({})` returns `status: "published"`.

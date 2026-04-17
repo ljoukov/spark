@@ -6,6 +6,31 @@ import {
 } from "../src/agent/sparkChatShared";
 
 describe("spark chat launch plans", () => {
+  it("records the tool call time as launch plan creation time", () => {
+    const now = new Date("2026-04-16T17:56:14.587Z");
+    const graderPlan = buildSparkGraderLaunchPlan({
+      input: {
+        title: "GCSE Biology remark",
+      },
+      attachments: [],
+      graderTaskTemplate: "# Task",
+      now,
+    });
+    const sheetPlan = buildSparkSheetDraftLaunchPlan({
+      input: {
+        title: "Source paper worksheet",
+      },
+      attachments: [],
+      sheetTaskTemplate: "# Task",
+      now,
+    });
+
+    expect(graderPlan.createdAt).toBe(now);
+    expect(graderPlan.requestPayload.createdAt).toBe(now.toISOString());
+    expect(sheetPlan.createdAt).toBe(now);
+    expect(sheetPlan.requestPayload.createdAt).toBe(now.toISOString());
+  });
+
   it("disambiguates duplicate attachment filenames for grader runs", () => {
     const plan = buildSparkGraderLaunchPlan({
       input: {

@@ -21,9 +21,7 @@ import {
   type LlmToolLoopResult,
 } from "@ljoukov/llm";
 
-import {
-  SPARK_GRADER_UPLOADS_MANIFEST_PATH,
-} from "./graderAgentPrompt";
+import { SPARK_GRADER_UPLOADS_MANIFEST_PATH } from "./graderAgentPrompt";
 import {
   SparkGraderRequestPayloadSchema,
   resolveSparkGraderModelTools,
@@ -32,6 +30,7 @@ import {
   resolveSparkAgentSkillFiles,
   SPARK_GRADER_SKILL_IDS,
 } from "./sparkAgentSkills";
+import { writeKnowledgeBaseWorkspaceFiles } from "./sharedPdfKnowledgeBase";
 import {
   SPARK_AGENT_REPLAY_DIR,
   SPARK_AGENT_REPLAY_INITIAL_WORKSPACE_DIR,
@@ -312,6 +311,7 @@ export async function runSparkGraderLocal(options: {
   useSubagents?: boolean;
   disableExtractTextTool?: boolean;
   userId?: string;
+  serviceAccountJson?: string;
 }): Promise<SparkGraderReplayRunResult> {
   const systemPrompt =
     options.systemPrompt?.trim() && options.systemPrompt.trim().length > 0
@@ -325,6 +325,24 @@ export async function runSparkGraderLocal(options: {
   const useSubagents = options.useSubagents ?? false;
   const disableExtractTextTool = options.disableExtractTextTool ?? false;
   await ensureLocalGraderSkillFiles({ workspaceDir: options.workspaceDir });
+  const serviceAccountJson =
+    options.serviceAccountJson ??
+    (process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim()
+      ? process.env.GOOGLE_SERVICE_ACCOUNT_JSON
+      : "{}");
+  if (serviceAccountJson !== "{}") {
+    try {
+      await writeKnowledgeBaseWorkspaceFiles({
+        serviceAccountJson,
+        rootDir: options.workspaceDir,
+        limit: 100,
+      });
+    } catch (error) {
+      console.warn(
+        `Unable to materialize shared PDF knowledge base for local grader replay: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
 
   const workspace: SparkAgentWorkspace = {
     scheduleUpdate: () => {},
@@ -355,7 +373,7 @@ export async function runSparkGraderLocal(options: {
     workspace,
     rootDir: options.workspaceDir,
     userId: options.userId ?? "local-grader-replay",
-    serviceAccountJson: "{}",
+    serviceAccountJson,
     allowPythonExec: false,
     graderPublish: {
       mode: "mock",
@@ -444,7 +462,9 @@ export async function runSparkGraderLocal(options: {
     ...(initialInput ? {} : { instructions: systemPrompt }),
     tools,
     ...(modelTools ? { modelTools } : {}),
-    ...(useSubagents ? { subagents: resolveSparkAgentSubagentSelection() } : {}),
+    ...(useSubagents
+      ? { subagents: resolveSparkAgentSubagentSelection() }
+      : {}),
     maxSteps,
     ...(thinkingLevel ? { thinkingLevel } : {}),
     telemetry: createSparkAgentRunTelemetryConfig({

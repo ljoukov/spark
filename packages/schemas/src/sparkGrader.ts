@@ -80,7 +80,9 @@ export const SparkGraderPaperSchema = z
     year: trimmedString.optional(),
     paperName: trimmedString.optional(),
     paperUrl: trimmedString.optional(),
+    paperStoragePath: trimmedString.optional(),
     markSchemeUrl: trimmedString.optional(),
+    markSchemeStoragePath: trimmedString.optional(),
   })
   .transform(({ contextLabel, olympiad, ...rest }) => ({
     ...rest,

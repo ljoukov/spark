@@ -48,9 +48,19 @@ function buildSheetAttachmentUrl(options: {
 	return `/api/spark/sheets/${encodeURIComponent(options.sheetId)}/attachment?${params.toString()}`;
 }
 
+function buildSharedPdfUrl(options: { storagePath: string; filename: string }): string {
+	const params = new URLSearchParams({
+		path: options.storagePath,
+		filename: options.filename
+	});
+	return `/api/spark/shared-pdfs?${params.toString()}`;
+}
+
 function isPdfUpload(attachment: { workspacePath: string; contentType?: string }): boolean {
 	const contentType = attachment.contentType?.toLowerCase() ?? '';
-	return contentType === 'application/pdf' || attachment.workspacePath.toLowerCase().endsWith('.pdf');
+	return (
+		contentType === 'application/pdf' || attachment.workspacePath.toLowerCase().endsWith('.pdf')
+	);
 }
 
 function classifySourcePdfUpload(attachment: { workspacePath: string; filename?: string }): {
@@ -83,9 +93,13 @@ async function loadSourceLinks(options: {
 	conversationId?: string | undefined;
 	sourceAttachmentIds?: readonly string[] | undefined;
 	paperUrl?: string | undefined;
+	paperStoragePath?: string | undefined;
 	referencePaperUrl?: string | undefined;
+	referencePaperStoragePath?: string | undefined;
 	markSchemeUrl?: string | undefined;
+	markSchemeStoragePath?: string | undefined;
 	referenceMarkSchemeUrl?: string | undefined;
+	referenceMarkSchemeStoragePath?: string | undefined;
 }): Promise<SparkSheetPageState['sourceLinks']> {
 	const links: SparkSheetPageState['sourceLinks'] = [];
 	const addLink = (link: SparkSheetPageState['sourceLinks'][number]): void => {
@@ -110,7 +124,8 @@ async function loadSourceLinks(options: {
 		if (parsedManifest?.success) {
 			const pdfUploads = parsedManifest.data.attachments.filter(isPdfUpload);
 			for (const [index, attachment] of pdfUploads.entries()) {
-				const filename = attachment.filename ?? attachment.workspacePath.split('/').at(-1) ?? 'source.pdf';
+				const filename =
+					attachment.filename ?? attachment.workspacePath.split('/').at(-1) ?? 'source.pdf';
 				const classification = classifySourcePdfUpload(attachment);
 				addLink({
 					kind: classification.kind,
@@ -136,27 +151,55 @@ async function loadSourceLinks(options: {
 			});
 			addLink({
 				kind: 'upload',
-				label: options.sourceAttachmentIds.length === 1 ? 'Original upload' : `Original upload ${index + 1}`,
+				label:
+					options.sourceAttachmentIds.length === 1
+						? 'Original upload'
+						: `Original upload ${index + 1}`,
 				href: `/api/spark/agent/attachments?${params.toString()}`
 			});
 		}
 	}
 
-	const paperUrl = options.paperUrl ?? options.referencePaperUrl;
-	if (paperUrl) {
+	const paperStoragePath = options.paperStoragePath ?? options.referencePaperStoragePath;
+	if (paperStoragePath) {
 		addLink({
 			kind: 'paper',
 			label: 'Question paper PDF',
-			href: paperUrl
+			href: buildSharedPdfUrl({
+				storagePath: paperStoragePath,
+				filename: paperStoragePath.split('/').at(-1) ?? 'question-paper.pdf'
+			})
 		});
+	} else {
+		const paperUrl = options.paperUrl ?? options.referencePaperUrl;
+		if (paperUrl) {
+			addLink({
+				kind: 'paper',
+				label: 'Question paper PDF',
+				href: paperUrl
+			});
+		}
 	}
-	const markSchemeUrl = options.markSchemeUrl ?? options.referenceMarkSchemeUrl;
-	if (markSchemeUrl) {
+	const markSchemeStoragePath =
+		options.markSchemeStoragePath ?? options.referenceMarkSchemeStoragePath;
+	if (markSchemeStoragePath) {
 		addLink({
 			kind: 'mark_scheme',
 			label: 'Mark scheme PDF',
-			href: markSchemeUrl
+			href: buildSharedPdfUrl({
+				storagePath: markSchemeStoragePath,
+				filename: markSchemeStoragePath.split('/').at(-1) ?? 'mark-scheme.pdf'
+			})
 		});
+	} else {
+		const markSchemeUrl = options.markSchemeUrl ?? options.referenceMarkSchemeUrl;
+		if (markSchemeUrl) {
+			addLink({
+				kind: 'mark_scheme',
+				label: 'Mark scheme PDF',
+				href: markSchemeUrl
+			});
+		}
 	}
 	if (options.conversationId) {
 		const params = new URLSearchParams({ conversationId: options.conversationId });
@@ -241,7 +284,7 @@ export async function loadSparkSheetPageState(options: {
 			? await getWorkspaceTextFile(options.userId, run.workspaceId, run.draftAnswersPath)
 			: null;
 	const draftAnswers = draftAnswersRaw
-		? safeParseSolveSheetAnswers(draftAnswersRaw) ?? emptySolveSheetAnswers()
+		? (safeParseSolveSheetAnswers(draftAnswersRaw) ?? emptySolveSheetAnswers())
 		: emptySolveSheetAnswers();
 	const sheetPhase = resolveSheetPhase({
 		status: run.status,
@@ -269,7 +312,8 @@ export async function loadSparkSheetPageState(options: {
 			session,
 			reviewState: loadedWorkspace.reviewState
 		});
-		const currentSession = recovered?.session ?? (await getTutorSession(options.userId, session.id)) ?? session;
+		const currentSession =
+			recovered?.session ?? (await getTutorSession(options.userId, session.id)) ?? session;
 		const currentReviewState = recovered?.reviewState ?? loadedWorkspace.reviewState;
 		const renderableReviewState = currentReviewState
 			? {
@@ -304,9 +348,15 @@ export async function loadSparkSheetPageState(options: {
 		conversationId,
 		sourceAttachmentIds: run.sourceAttachmentIds,
 		paperUrl: run.paper?.paperUrl,
+		paperStoragePath: run.paper?.paperStoragePath,
 		referencePaperUrl: report?.references?.paperUrl ?? draft?.references?.paperUrl,
+		referencePaperStoragePath:
+			report?.references?.paperStoragePath ?? draft?.references?.paperStoragePath,
 		markSchemeUrl: run.paper?.markSchemeUrl,
-		referenceMarkSchemeUrl: report?.references?.markSchemeUrl ?? draft?.references?.markSchemeUrl
+		markSchemeStoragePath: run.paper?.markSchemeStoragePath,
+		referenceMarkSchemeUrl: report?.references?.markSchemeUrl ?? draft?.references?.markSchemeUrl,
+		referenceMarkSchemeStoragePath:
+			report?.references?.markSchemeStoragePath ?? draft?.references?.markSchemeStoragePath
 	});
 
 	return {

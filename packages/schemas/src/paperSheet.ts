@@ -10,9 +10,7 @@ export const PaperSheetHookSectionSchema = z.object({
   text: trimmedString,
 });
 
-export type PaperSheetHookSection = z.infer<
-  typeof PaperSheetHookSectionSchema
->;
+export type PaperSheetHookSection = z.infer<typeof PaperSheetHookSectionSchema>;
 
 export const PaperSheetInfoBoxSchema = z.object({
   icon: trimmedString,
@@ -146,7 +144,9 @@ export const PaperSheetCalcQuestionSchema = z.object({
   unit: trimmedMaybeEmptyString,
 });
 
-export type PaperSheetCalcQuestion = z.infer<typeof PaperSheetCalcQuestionSchema>;
+export type PaperSheetCalcQuestion = z.infer<
+  typeof PaperSheetCalcQuestionSchema
+>;
 
 export const PaperSheetMatchQuestionSchema = z.object({
   id: trimmedString,
@@ -205,8 +205,7 @@ export const PaperSheetClozeQuestionSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["segments"],
-        message:
-          "Cloze questions need exactly one more segment than blank.",
+        message: "Cloze questions need exactly one more segment than blank.",
       });
     }
   });
@@ -333,9 +332,7 @@ export const PaperSheetFlowRowItemSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-export type PaperSheetFlowRowItem = z.infer<
-  typeof PaperSheetFlowRowItemSchema
->;
+export type PaperSheetFlowRowItem = z.infer<typeof PaperSheetFlowRowItemSchema>;
 
 export const PaperSheetFlowRowSchema = z
   .object({
@@ -353,7 +350,8 @@ export const PaperSheetFlowRowSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["items", index],
-          message: "Flow rows must start with a box and alternate box / operation.",
+          message:
+            "Flow rows must start with a box and alternate box / operation.",
         });
       }
       if (!shouldBeBox && item.type !== "operation") {
@@ -486,26 +484,28 @@ export type PaperSheetQuestionEntry = z.infer<
   typeof PaperSheetQuestionEntrySchema
 >;
 
-export const PaperSheetContentSectionSchema = z.object({
-  id: trimmedString,
-  label: trimmedString,
-  theory: z.string().optional(),
-  infoBox: PaperSheetInfoBoxSchema.optional(),
-  questions: z.array(PaperSheetQuestionEntrySchema).optional(),
-}).superRefine((section, ctx) => {
-  const hasTheory =
-    typeof section.theory === "string" && section.theory.trim().length > 0;
-  const hasInfoBox = section.infoBox !== undefined;
-  const questionCount = section.questions?.length ?? 0;
-  if (!hasTheory && !hasInfoBox && questionCount === 0) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["questions"],
-      message:
-        "Worksheet content sections need at least one question, theory block, or info box.",
-    });
-  }
-});
+export const PaperSheetContentSectionSchema = z
+  .object({
+    id: trimmedString,
+    label: trimmedString,
+    theory: z.string().optional(),
+    infoBox: PaperSheetInfoBoxSchema.optional(),
+    questions: z.array(PaperSheetQuestionEntrySchema).optional(),
+  })
+  .superRefine((section, ctx) => {
+    const hasTheory =
+      typeof section.theory === "string" && section.theory.trim().length > 0;
+    const hasInfoBox = section.infoBox !== undefined;
+    const questionCount = section.questions?.length ?? 0;
+    if (!hasTheory && !hasInfoBox && questionCount === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["questions"],
+        message:
+          "Worksheet content sections need at least one question, theory block, or info box.",
+      });
+    }
+  });
 
 export type PaperSheetContentSection = z.infer<
   typeof PaperSheetContentSectionSchema
@@ -539,7 +539,11 @@ export const PaperSheetDataSchema = z
       entries: readonly PaperSheetQuestionEntry[] | undefined,
       path: (string | number)[],
     ): void => {
-      for (let entryIndex = 0; entryIndex < (entries?.length ?? 0); entryIndex += 1) {
+      for (
+        let entryIndex = 0;
+        entryIndex < (entries?.length ?? 0);
+        entryIndex += 1
+      ) {
         const entry = entries?.[entryIndex];
         if (!entry) {
           continue;
@@ -559,7 +563,11 @@ export const PaperSheetDataSchema = z
       }
     };
 
-    for (let sectionIndex = 0; sectionIndex < sheet.sections.length; sectionIndex += 1) {
+    for (
+      let sectionIndex = 0;
+      sectionIndex < sheet.sections.length;
+      sectionIndex += 1
+    ) {
       const section = sheet.sections[sectionIndex];
       if (!("id" in section)) {
         continue;
@@ -574,7 +582,11 @@ export const PaperSheetDataSchema = z
       } else {
         sectionIds.add(section.id);
       }
-      validateEntries(section.questions, ["sections", sectionIndex, "questions"]);
+      validateEntries(section.questions, [
+        "sections",
+        sectionIndex,
+        "questions",
+      ]);
     }
   });
 
@@ -694,7 +706,9 @@ export const SparkGraderWorksheetReferencesSchema = z.object({
   gradingMarkdown: z.string().optional(),
   overallFeedbackMarkdown: z.string().optional(),
   paperUrl: trimmedString.optional(),
+  paperStoragePath: trimmedString.optional(),
   markSchemeUrl: trimmedString.optional(),
+  markSchemeStoragePath: trimmedString.optional(),
 });
 
 export type SparkGraderWorksheetReferences = z.infer<
@@ -718,7 +732,10 @@ export function isPaperSheetQuestionGroup(
 
 export function visitPaperSheetQuestions(
   entries: readonly PaperSheetQuestionEntry[] | undefined,
-  visitor: (question: PaperSheetQuestion, parentGroup: PaperSheetQuestionGroup | null) => void,
+  visitor: (
+    question: PaperSheetQuestion,
+    parentGroup: PaperSheetQuestionGroup | null,
+  ) => void,
 ): void {
   const visitEntries = (
     currentEntries: readonly PaperSheetQuestionEntry[] | undefined,
@@ -862,7 +879,8 @@ function normalizeLegacyMcqOption(
   if (!record) {
     return null;
   }
-  const text = asTrimmedStringOrNull(record.text) ?? asTrimmedStringOrNull(record.value);
+  const text =
+    asTrimmedStringOrNull(record.text) ?? asTrimmedStringOrNull(record.value);
   const rawId = asTrimmedStringOrNull(record.id);
   const rawLabel = asTrimmedStringOrNull(record.label);
   if (!text && !rawId && !rawLabel) {
@@ -874,10 +892,7 @@ function normalizeLegacyMcqOption(
       text: rawLabel,
     };
   }
-  const label =
-    rawLabel ??
-    rawId ??
-    undefined;
+  const label = rawLabel ?? rawId ?? undefined;
   const id = rawId ?? label ?? `option-${(index + 1).toString()}`;
   return {
     id,
@@ -929,8 +944,7 @@ function normalizeLegacyAnswerBankOption(
     asTrimmedStringOrNull(record.label) ??
     asTrimmedStringOrNull(record.optionLabel) ??
     undefined;
-  const id =
-    asTrimmedStringOrNull(record.id) ?? label ?? `option-${index + 1}`;
+  const id = asTrimmedStringOrNull(record.id) ?? label ?? `option-${index + 1}`;
   const parsed = PaperSheetAnswerBankOptionSchema.safeParse({
     id,
     ...(label ? { label } : {}),
@@ -959,22 +973,31 @@ function normalizeLegacyFlowQuestion(
         return null;
       }
       const id = asTrimmedStringOrNull(record.id) ?? `box-${index + 1}`;
-      const initialValue = asTrimmedStringOrNull(record.initialValue) ?? undefined;
-      const placeholder = asTrimmedStringOrNull(record.placeholder) ?? undefined;
+      const initialValue =
+        asTrimmedStringOrNull(record.initialValue) ?? undefined;
+      const placeholder =
+        asTrimmedStringOrNull(record.placeholder) ?? undefined;
       const minWidth = asNumberOrNull(record.minWidth);
       const readonly =
-        record.readonly === true || record.editable === false ? true : undefined;
+        record.readonly === true || record.editable === false
+          ? true
+          : undefined;
       return {
         id,
         ...(placeholder ? { placeholder } : {}),
-        ...(typeof minWidth === "number" && Number.isInteger(minWidth) && minWidth > 0
+        ...(typeof minWidth === "number" &&
+        Number.isInteger(minWidth) &&
+        minWidth > 0
           ? { minWidth }
           : {}),
         ...(initialValue ? { initialValue } : {}),
         ...(readonly ? { readonly } : {}),
       };
     })
-    .filter((entry): entry is PaperSheetFlowQuestion["boxes"][number] => entry !== null);
+    .filter(
+      (entry): entry is PaperSheetFlowQuestion["boxes"][number] =>
+        entry !== null,
+    );
 
   if (boxes.length === 0) {
     return null;
@@ -1108,7 +1131,8 @@ function normalizeLegacyQuestion(
     return null;
   }
 
-  const displayNumber = asTrimmedStringOrNull(record.displayNumber) ?? undefined;
+  const displayNumber =
+    asTrimmedStringOrNull(record.displayNumber) ?? undefined;
   const badgeLabel = asTrimmedStringOrNull(record.badgeLabel) ?? undefined;
   const id =
     asTrimmedStringOrNull(record.id) ??
@@ -1213,7 +1237,9 @@ function normalizeLegacyQuestion(
         return null;
       }
 
-      const rawSegments = Array.isArray(record.segments) ? record.segments : null;
+      const rawSegments = Array.isArray(record.segments)
+        ? record.segments
+        : null;
       const rawBlanks = Array.isArray(record.blanks) ? record.blanks : null;
       if (rawSegments && rawBlanks) {
         const blanks = rawBlanks
@@ -1275,7 +1301,9 @@ function normalizeLegacyQuestion(
         marks,
         prompt,
         lines: Math.max(asNumberOrNull(record.lines) ?? 4, 1),
-        ...(record.renderMode === "markdown" ? { renderMode: "markdown" as const } : {}),
+        ...(record.renderMode === "markdown"
+          ? { renderMode: "markdown" as const }
+          : {}),
       });
       return parsed.success ? parsed.data : null;
     }
@@ -1351,7 +1379,8 @@ function normalizeLegacyQuestionEntry(
     return normalizeLegacyQuestion(value, options);
   }
 
-  const displayNumber = asTrimmedStringOrNull(record.displayNumber) ?? undefined;
+  const displayNumber =
+    asTrimmedStringOrNull(record.displayNumber) ?? undefined;
   const badgeLabel = asTrimmedStringOrNull(record.badgeLabel) ?? undefined;
   const id =
     asTrimmedStringOrNull(record.id) ??
@@ -1359,7 +1388,9 @@ function normalizeLegacyQuestionEntry(
   const prompt =
     asTrimmedStringOrNull(record.prompt) ??
     asTrimmedStringOrNull(record.promptMarkdown);
-  const rawQuestions = Array.isArray(record.questions) ? record.questions : null;
+  const rawQuestions = Array.isArray(record.questions)
+    ? record.questions
+    : null;
   if (!prompt || !rawQuestions) {
     return null;
   }
@@ -1579,9 +1610,9 @@ export const SparkGraderWorksheetReportSchema = z
       }
     }
 
-    const scoredQuestionReviews = Object.entries(report.review.questions).filter(
-      ([, review]) => review.score !== undefined,
-    );
+    const scoredQuestionReviews = Object.entries(
+      report.review.questions,
+    ).filter(([, review]) => review.score !== undefined);
     if (scoredQuestionReviews.length > 0) {
       if (scoredQuestionReviews.length !== questionIds.length) {
         ctx.addIssue({
@@ -1638,7 +1669,9 @@ export const SparkGraderWorksheetReportSchema = z
             message: `Question "${key}" expects a string answer.`,
           });
         } else if (question.type === "mcq" && answer.trim().length > 0) {
-          const optionIds = new Set(question.options.map((option) => option.id));
+          const optionIds = new Set(
+            question.options.map((option) => option.id),
+          );
           if (!optionIds.has(answer)) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
@@ -1660,7 +1693,9 @@ export const SparkGraderWorksheetReportSchema = z
       }
 
       if (question.type === "fill") {
-        const expectedKeys = question.blanks.map((_, index) => index.toString());
+        const expectedKeys = question.blanks.map((_, index) =>
+          index.toString(),
+        );
         for (const expectedKey of expectedKeys) {
           if (!(expectedKey in answer)) {
             ctx.addIssue({
@@ -1674,7 +1709,9 @@ export const SparkGraderWorksheetReportSchema = z
       }
 
       if (question.type === "cloze") {
-        const expectedKeys = question.blanks.map((_, index) => index.toString());
+        const expectedKeys = question.blanks.map((_, index) =>
+          index.toString(),
+        );
         for (const expectedKey of expectedKeys) {
           if (!(expectedKey in answer)) {
             ctx.addIssue({
@@ -1688,7 +1725,9 @@ export const SparkGraderWorksheetReportSchema = z
       }
 
       if (question.type === "answer_bank") {
-        const expectedKeys = question.blanks.map((_, index) => index.toString());
+        const expectedKeys = question.blanks.map((_, index) =>
+          index.toString(),
+        );
         const optionIds = new Set(question.options.map((option) => option.id));
         const usedOptionIds = new Set<string>();
         for (const expectedKey of expectedKeys) {

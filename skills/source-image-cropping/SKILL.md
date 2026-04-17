@@ -7,7 +7,7 @@ description: Use when a worksheet or grader run needs a visible crop of a source
 
 Use this skill to turn source-page visuals into worksheet-visible image assets.
 
-For handwritten grading, use this skill only for visuals that genuinely need to be visible in the scored feedback. If the uploaded/source PDF is available and a compact prompt can say `Use Figure N in the linked original PDF.`, prefer that path instead of producing many source-paper crops.
+For handwritten grading, use this skill for source visuals that the learner must see to understand the task, their answer, or the feedback. A linked original/source PDF instruction is a fallback, not the default, and should be used only when the source pixels are unavailable or a clean crop is not feasible after a bounded attempt.
 
 ## Inputs
 
@@ -85,11 +85,11 @@ Use `review_run_progress_with_fresh_agent` whenever the crop loop has repeated t
 
 ## Worksheet Placement
 
-- Source references and transcription files are audit trails only. If a prompt mentions an answer-critical diagram, graph, chart, map, table, network, photo, or other visual, the visible worksheet prompt must include the crop near that text or explicitly point to that exact figure in the linked original/source PDF when the visual should remain in the source document.
+- Source references and transcription files are audit trails only. If a prompt mentions an answer-critical diagram, graph, chart, map, table, network, photo, or other visual, the visible worksheet prompt must include the crop near that text whenever the source pixels are available.
 - Do not avoid image obligations by rewriting a figure question as text-only, omitting the `Figure N` reference, or saying the figure was not needed because the student left it blank. Source-faithful sheets must preserve the source visual reference for every source subquestion where the original paper uses that visual to answer the question.
-- Prefer crops for ordinary source visuals that are actually present in the uploaded/source PDF and feasible to crop. Use a linked original/source PDF reference as a fallback for visuals that are not available as pixels in the working source, are supplied only through a source link, or cannot be cropped without making a broken/fake visual.
-- For compact handwritten grading reports, linked original/source PDF instructions are acceptable and usually preferred for source-paper visuals. Do not start a crop-and-validation loop for every figure in a long source paper unless those crops are needed for the grading feedback itself.
-- Do not treat public-PDF figure omissions, source-insert omissions, or source notices as blockers. Spark is making a private student study UI that can link to the original/source PDF. When the visual should remain in that linked PDF instead of becoming a worksheet crop, keep the question and write a visible instruction such as `Use Figure N in the linked original PDF.` Do not exclude a source question, remove its marks, or call it ungradable solely because a public PDF omits a figure/map/photo or because an insert is missing.
+- Prefer crops for ordinary source visuals that are actually present in the uploaded/source PDF and feasible to crop. Use a linked original/source PDF reference only as a fallback for visuals that are not available as pixels in the working source, are supplied only through a source link, or cannot be cropped without making a broken/fake visual.
+- For compact handwritten grading reports, do not recreate irrelevant exam layout, but do crop the figure/table/diagram block that the learner must see to understand or answer the item.
+- Do not treat public-PDF figure omissions, source-insert omissions, or source notices as blockers. Spark is making a private student study UI that can link to the original/source PDF. When a required visual truly cannot be embedded, keep the question and write a visible instruction such as `Use Figure N in the linked original PDF.` Do not exclude a source question, remove its marks, or call it ungradable solely because a public PDF omits a figure/map/photo or because an insert is missing.
 - Only report a blocking issue when the question cannot be understood or graded from the uploaded/official source material and no useful source-PDF reference is available.
 - Put the crop at the nearest source-faithful level:
   - parent `group.prompt` when the visual is before the first subpart or shared by all subparts,
@@ -98,7 +98,7 @@ Use `review_run_progress_with_fresh_agent` whenever the crop loop has repeated t
 - Render a reused visual once at the first source-faithful location, then refer to it later with an anchor link or with `Figure N above` / `Table N above`.
 - Use clickable image Markdown with a real workspace-relative target, for example `[![Figure 1](grader/output/assets/q1-figure-1.jpg)](grader/output/assets/q1-figure-1.jpg)` or `[![Figure 1](grader/output/assets/q1-figure-1-border.png)](grader/output/assets/q1-figure-1-border.png)` when the final tool output is PNG.
 - Do not publish empty image frames, placeholder ovals, broken links, or broad blank crops. If the crop asset cannot be produced and validated, use an explicit linked original/source PDF reference instead of a fake crop when that gives the student access to the real visual.
-- Before publishing, compare worksheet Markdown against source/transcription references: every visible `Figure N` that matters must have a nearby image link or visible linked-source-PDF instruction, and every visible `Table N` that is text/numeric must have a nearby Markdown table.
+- Before publishing, compare worksheet Markdown against source/transcription references: every answer-critical `Figure N` that matters must have a nearby image link unless the validation record explains why embedding was impossible, and every visible `Table N` that is text/numeric must have a nearby Markdown table.
 
 ## Validation Record
 

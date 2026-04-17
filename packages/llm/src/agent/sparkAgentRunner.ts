@@ -103,10 +103,7 @@ import {
   publishSparkToolLoopStepMetricsFromEnv,
   resolveSparkMetricProviderLabel,
 } from "../utils/gcp/monitoring";
-import {
-  downloadStorageObject,
-  uploadStorageObject,
-} from "../utils/gcp/storageRest";
+import { downloadStorageObject } from "../utils/gcp/storageRest";
 import { applyPdfTranscriptionSkillTools } from "./skills/pdfTranscription";
 import {
   renderSparkAgentSkillReadList,
@@ -127,6 +124,16 @@ import {
   resolveWorkspaceFilePathFromFirestoreDocument,
   resolveWorkspacePathContentType,
 } from "./workspaceFileStore";
+import {
+  cacheSharedPdfFromUrl,
+  downloadSharedPdfToWorkspace,
+  findSharedPdfKnowledgeBaseByUrl,
+  listSharedPdfKnowledgeBase,
+  searchSharedPdfKnowledgeBaseEntries,
+  writeKnowledgeBaseWorkspaceFiles,
+  writeSharedPdfKnowledgeBaseEntryFile,
+  type SharedPdfKnowledgeBaseEntry,
+} from "./sharedPdfKnowledgeBase";
 import { launchSparkGapsFinderForRun } from "./gapsFinderAgent";
 import {
   encodeBgraBitmapToPng,
@@ -655,9 +662,7 @@ async function normalizeRawGraderSummaryMetadataForPublish(options: {
 
 function isSupportedQuestionReviewStatus(value: unknown): boolean {
   return (
-    value === "correct" ||
-    value === "incorrect" ||
-    value === "teacher-review"
+    value === "correct" || value === "incorrect" || value === "teacher-review"
   );
 }
 
@@ -854,23 +859,30 @@ function coerceBareGraderWorksheetReportForPublish(
   const rawReviewQuestions = asJsonObject(rawReview?.questions) ?? {};
   const answers: SparkGraderWorksheetReport["answers"] = {};
   const reviewQuestions: SparkGraderWorksheetReport["review"]["questions"] = {};
-  visitPaperSheetQuestions(draft.sheet.sections.flatMap((section) => {
-    return "questions" in section && section.questions ? section.questions : [];
-  }), (question) => {
-    answers[question.id] =
-      inlineAnswers.get(question.id) ??
-      defaultPaperSheetAnswerForQuestion(question);
-    const rawReviewEntry = asJsonObject(rawReviewQuestions[question.id]) ?? {};
-    const rawScore = asJsonObject(rawReviewEntry.score);
-    const status = isSupportedQuestionReviewStatus(rawReviewEntry.status)
-      ? (rawReviewEntry.status as "correct" | "incorrect" | "teacher-review")
-      : inferQuestionReviewStatusFromRawScore(rawScore);
-    reviewQuestions[question.id] = {
-      ...rawReviewEntry,
-      status,
-      note: typeof rawReviewEntry.note === "string" ? rawReviewEntry.note : "",
-    };
-  });
+  visitPaperSheetQuestions(
+    draft.sheet.sections.flatMap((section) => {
+      return "questions" in section && section.questions
+        ? section.questions
+        : [];
+    }),
+    (question) => {
+      answers[question.id] =
+        inlineAnswers.get(question.id) ??
+        defaultPaperSheetAnswerForQuestion(question);
+      const rawReviewEntry =
+        asJsonObject(rawReviewQuestions[question.id]) ?? {};
+      const rawScore = asJsonObject(rawReviewEntry.score);
+      const status = isSupportedQuestionReviewStatus(rawReviewEntry.status)
+        ? (rawReviewEntry.status as "correct" | "incorrect" | "teacher-review")
+        : inferQuestionReviewStatusFromRawScore(rawScore);
+      reviewQuestions[question.id] = {
+        ...rawReviewEntry,
+        status,
+        note:
+          typeof rawReviewEntry.note === "string" ? rawReviewEntry.note : "",
+      };
+    },
+  );
 
   const rawScore = asJsonObject(rawReview?.score);
   const got = rawScore?.got;
@@ -886,8 +898,7 @@ function coerceBareGraderWorksheetReportForPublish(
         : ("graded" as const),
     score,
     label:
-      typeof rawReview?.label === "string" &&
-      rawReview.label.trim().length > 0
+      typeof rawReview?.label === "string" && rawReview.label.trim().length > 0
         ? rawReview.label.trim()
         : `${score.got.toString()}/${score.total.toString()}`,
     message:
@@ -923,9 +934,10 @@ function isHexColor(value: unknown): value is string {
   return typeof value === "string" && /^#[0-9a-fA-F]{6}$/u.test(value);
 }
 
-function normalizeRawPaperSheetShapeForPublish(
-  value: unknown,
-): { readonly value: unknown; readonly changed: boolean } {
+function normalizeRawPaperSheetShapeForPublish(value: unknown): {
+  readonly value: unknown;
+  readonly changed: boolean;
+} {
   const root = asJsonObject(value);
   if (!root) {
     return { value, changed: false };
@@ -1094,9 +1106,13 @@ async function normalizeRawGraderQuestionReviewsForPublish(options: {
   }
 
   const sheetRaw = JSON.stringify(options.sheetJson, null, 2).concat("\n");
-  await writeFile(resolveWorkspacePath(options.rootDir, options.sheetPath), sheetRaw, {
-    encoding: "utf8",
-  });
+  await writeFile(
+    resolveWorkspacePath(options.rootDir, options.sheetPath),
+    sheetRaw,
+    {
+      encoding: "utf8",
+    },
+  );
   options.onWorkspaceFileChanged?.(options.sheetPath);
 
   return {
@@ -2059,7 +2075,9 @@ function renderLargeGeneratedWorkspaceFileOutline(input: {
   if (outlineLines.length === 0) {
     const fallbackStride = Math.max(
       1,
-      Math.ceil(input.lines.length / READ_WORKSPACE_FILE_LARGE_OUTLINE_MAX_LINES),
+      Math.ceil(
+        input.lines.length / READ_WORKSPACE_FILE_LARGE_OUTLINE_MAX_LINES,
+      ),
     );
     for (
       let index = 0;
@@ -2144,7 +2162,9 @@ const GraderRunSummarySchema = z
     year: z.string().trim().min(1).optional(),
     paperName: z.string().trim().min(1).optional(),
     paperUrl: z.string().trim().min(1).optional(),
+    paperStoragePath: z.string().trim().min(1).optional(),
     markSchemeUrl: z.string().trim().min(1).optional(),
+    markSchemeStoragePath: z.string().trim().min(1).optional(),
     presentation: GraderRunPresentationSchema.optional(),
     totals: z
       .object({
@@ -2173,7 +2193,9 @@ type PublishedGraderSheetArtifacts = {
     year?: string;
     paperName?: string;
     paperUrl?: string;
+    paperStoragePath?: string;
     markSchemeUrl?: string;
+    markSchemeStoragePath?: string;
   };
   presentation: {
     title: string;
@@ -5480,10 +5502,20 @@ async function validateGraderWorkspaceForPublish(options: {
   if (paperUrl) {
     paper.paperUrl = paperUrl;
   }
+  const paperStoragePath =
+    summary.paperStoragePath ?? report.references?.paperStoragePath;
+  if (paperStoragePath) {
+    paper.paperStoragePath = paperStoragePath;
+  }
   const markSchemeUrl =
     summary.markSchemeUrl ?? report.references?.markSchemeUrl;
   if (markSchemeUrl) {
     paper.markSchemeUrl = markSchemeUrl;
+  }
+  const markSchemeStoragePath =
+    summary.markSchemeStoragePath ?? report.references?.markSchemeStoragePath;
+  if (markSchemeStoragePath) {
+    paper.markSchemeStoragePath = markSchemeStoragePath;
   }
 
   return {
@@ -8154,6 +8186,7 @@ export function buildSparkAgentSystemPrompt(options?: {
     "- Prefer fewer, larger patches over many tiny edits.",
     "- Use web_search when you need to look up facts or check details.",
     "- Use web_fetch to retrieve NON-PDF source pages/files from URLs discovered via web_search.",
+    "- For PDF URLs discovered online, search `knowledge-base/index.md` or call `kb_search_pdfs` first. If a matching shared PDF exists, call `kb_download_pdf` and use the local workspace PDF. If no match exists, classify the official PDF and call `kb_cache_pdf_from_url`; use the returned shared `storagePath` in worksheet references such as `paperStoragePath` or `markSchemeStoragePath`.",
     "- Use extract_text to transcribe workspace document files (images/PDFs) into markdown with LaTeX formulas.",
     "- Use real Markdown line breaks in worksheet-visible text; never leave literal escaped newline text like `\\n`. For arranged arithmetic, grids, or layout-critical text, prefer Markdown tables or clean crops over raw LaTeX array/tabular environments.",
     "- When writing JSON files directly, especially grader/output/sheet.json, JSON-escape every backslash in string values or avoid LaTeX backslash syntax. A string containing `\\(` in the visible Markdown must appear as `\\\\(` in the JSON file.",
@@ -8172,6 +8205,7 @@ export function buildSparkAgentSystemPrompt(options?: {
     "When the workspace contains grader/task.md or request.json describes a grader run, you are not finished after extracting text, inspecting images, or cropping figures.",
     "You MUST write grader/output/sheet.json and grader/output/run-summary.json, then call publish_sheet({}). Use validation errors as diagnostics, repair the artifacts coherently, and retry only while you are fixing a new class of issue rather than repeating the same failed branch.",
     "For grader/output/run-summary.json, include totals.awardedMarks, totals.maxMarks, presentation.title, presentation.subtitle, presentation.summaryMarkdown, presentation.footer, and sheet.filePath exactly equal to grader/output/sheet.json.",
+    "When official source PDFs are discovered online, the visible sheet should link to Spark's cached shared storage path, not the third-party URL. Include `references.paperStoragePath` / `references.markSchemeStoragePath` in grader/output/sheet.json and `paperStoragePath` / `markSchemeStoragePath` in grader/output/run-summary.json whenever `kb_cache_pdf_from_url` or `kb_download_pdf` provides them. Keep the original URLs only as provenance fields.",
     "Do not copy request.json, brief.md, upload manifests, planning JSON, answer lists, or process summaries into grader/output/sheet.json or grader/output/run-summary.json. Those files must contain only the worksheet report schema and publish summary schema.",
     "For source-paper-only/no-student grader runs, do not solve the paper, derive correct options, list an answer key, or include worked solutions. Build an unanswered worksheet with blank answers and review.mode='awaiting_answers'.",
     "Do not use generate_json for grader/output/sheet.json or grader/output/run-summary.json; generate_json is a lesson-output helper and request.json/grader/task.md are not JSON schemas. Write grader JSON outputs directly with write_workspace_file and use publish_sheet for validation.",
@@ -8653,6 +8687,21 @@ function buildAgentTools(options: {
       }
       throw error;
     }
+  };
+  let sharedPdfKnowledgeBaseEntries:
+    | readonly SharedPdfKnowledgeBaseEntry[]
+    | null = null;
+  const loadSharedPdfKnowledgeBaseEntries = async (): Promise<
+    readonly SharedPdfKnowledgeBaseEntry[]
+  > => {
+    if (sharedPdfKnowledgeBaseEntries !== null) {
+      return sharedPdfKnowledgeBaseEntries;
+    }
+    sharedPdfKnowledgeBaseEntries = await listSharedPdfKnowledgeBase({
+      serviceAccountJson,
+      limit: 100,
+    });
+    return sharedPdfKnowledgeBaseEntries;
   };
 
   const graderArtifactsExist = async (): Promise<boolean> => {
@@ -9384,7 +9433,12 @@ function buildAgentTools(options: {
   const fetchPdfBytesFromUrl = async (options: {
     toolName: "read_pdf" | "extract_pdf_diagrams";
     url: string;
-  }): Promise<{ pdfBytes: Buffer; finalUrl: string; contentType: string }> => {
+  }): Promise<{
+    pdfBytes: Buffer;
+    finalUrl: string;
+    contentType: string;
+    storagePath?: string;
+  }> => {
     const rawUrl = options.url.trim();
     const parsed = new URL(rawUrl);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
@@ -9393,40 +9447,74 @@ function buildAgentTools(options: {
       );
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => {
-      controller.abort();
-    }, WEB_FETCH_TIMEOUT_MS);
-
-    let response: Response;
-    try {
-      response = await fetch(parsed.toString(), {
-        method: "GET",
-        redirect: "follow",
-        signal: controller.signal,
+    const bucketName = `${parseGoogleServiceAccountJson(serviceAccountJson).projectId}.firebasestorage.app`;
+    const existing = await findSharedPdfKnowledgeBaseByUrl({
+      serviceAccountJson,
+      url: parsed.toString(),
+    });
+    if (existing) {
+      const downloaded = await downloadStorageObject({
+        serviceAccountJson,
+        bucketName,
+        objectName: existing.storagePath,
       });
-    } finally {
-      clearTimeout(timeout);
+      const hasPdfHeader =
+        Buffer.from(downloaded.bytes).subarray(0, 5).toString("utf8") ===
+        "%PDF-";
+      if (!hasPdfHeader) {
+        throw new Error(
+          `${options.toolName} expected PDF bytes from cached shared path "${existing.storagePath}".`,
+        );
+      }
+      return {
+        pdfBytes: Buffer.from(downloaded.bytes),
+        finalUrl: existing.finalUrl ?? parsed.toString(),
+        contentType: downloaded.contentType ?? existing.contentType,
+        storagePath: existing.storagePath,
+      };
     }
 
-    const pdfBytes = await readResponseBytesWithLimit(
-      response,
-      PDF_EXTRACTION_MAX_BYTES,
-    );
-    const contentTypeHeader = response.headers.get("content-type");
-    const contentType = contentTypeHeader
-      ? (contentTypeHeader.split(";")[0]?.trim().toLowerCase() ??
-        "application/octet-stream")
-      : "application/octet-stream";
-    const finalUrl = response.url || parsed.toString();
-    const hasPdfHeader =
-      Buffer.from(pdfBytes).subarray(0, 5).toString("utf8") === "%PDF-";
-    if (!hasPdfHeader) {
+    const cached = await cacheSharedPdfFromUrl({
+      serviceAccountJson,
+      bucketName,
+      url: parsed.toString(),
+      descriptionMarkdown: [
+        `uncategorized/pdf/${path.posix.basename(parsed.pathname) || "document.pdf"}`,
+        "",
+        `Cached automatically by ${options.toolName} from a PDF URL before extraction.`,
+        "A future agent should replace this entry with a more specific exam-board/session/source classification when available.",
+        "",
+        `Source URL: ${parsed.toString()}`,
+      ].join("\n"),
+    });
+    const refreshedKnowledgeBase = await writeKnowledgeBaseWorkspaceFiles({
+      serviceAccountJson,
+      rootDir,
+      limit: 100,
+    });
+    workspace.scheduleUpdate("knowledge-base/index.md");
+    for (const filePath of refreshedKnowledgeBase.files) {
+      workspace.scheduleUpdate(filePath);
+    }
+    const cachedDownload = await downloadStorageObject({
+      serviceAccountJson,
+      bucketName,
+      objectName: cached.entry.storagePath,
+    });
+    const cachedHasPdfHeader =
+      Buffer.from(cachedDownload.bytes).subarray(0, 5).toString("utf8") ===
+      "%PDF-";
+    if (!cachedHasPdfHeader) {
       throw new Error(
-        `${options.toolName} expected PDF bytes from "${finalUrl}" but received ${contentType}.`,
+        `${options.toolName} expected PDF bytes from cached shared path "${cached.entry.storagePath}".`,
       );
     }
-    return { pdfBytes: Buffer.from(pdfBytes), finalUrl, contentType };
+    return {
+      pdfBytes: Buffer.from(cachedDownload.bytes),
+      finalUrl: cached.entry.finalUrl ?? parsed.toString(),
+      contentType: cachedDownload.contentType ?? cached.entry.contentType,
+      storagePath: cached.entry.storagePath,
+    };
   };
 
   const resolveExtractTextPrimaryDocumentFromWorkspace = async (options: {
@@ -9880,7 +9968,9 @@ function buildAgentTools(options: {
           },
           ...extractionParts,
         ]),
-        ...(fallbackThinkingLevel ? { thinkingLevel: fallbackThinkingLevel } : {}),
+        ...(fallbackThinkingLevel
+          ? { thinkingLevel: fallbackThinkingLevel }
+          : {}),
       });
       recordLlmTextResult({
         progress,
@@ -9912,11 +10002,7 @@ function buildAgentTools(options: {
           result: llmResult,
         })
       : null;
-    recordToolLlmCost(
-      onToolLlmCost,
-      "extract_text",
-      extractTextTotalCostUsd,
-    );
+    recordToolLlmCost(onToolLlmCost, "extract_text", extractTextTotalCostUsd);
     const finalThinkingTokensRaw = submodelSummary?.usageTokens?.thinkingTokens;
     const finalThinkingTokens =
       typeof finalThinkingTokensRaw === "number" &&
@@ -10611,9 +10697,12 @@ function buildAgentTools(options: {
         const resolvedStartLine = startLine ?? pathHints.startLine;
         const resolvedLineCount = lineCount ?? pathHints.lineCount;
         const resolvedFilePath = pathHints.filePath;
-        const content = await readFile(resolveWorkspacePath(rootDir, resolvedFilePath), {
-          encoding: "utf8",
-        });
+        const content = await readFile(
+          resolveWorkspacePath(rootDir, resolvedFilePath),
+          {
+            encoding: "utf8",
+          },
+        );
         const normalizedFilePath = resolvedFilePath.replace(/\\/gu, "/");
         const hasExplicitBounds =
           resolvedStartLine !== undefined ||
@@ -11864,6 +11953,143 @@ function buildAgentTools(options: {
         });
       },
     }),
+    kb_search_pdfs: tool({
+      description: [
+        "Search Spark's shared PDF knowledge base before looking online for official papers, mark schemes, examiner reports, grade boundaries, or competition PDFs.",
+        "Entries include semi-structured classification/description text and a shared storagePath. If you find a match, call kb_download_pdf with that storagePath instead of fetching the third-party URL.",
+      ].join("\n"),
+      inputSchema: z
+        .object({
+          query: z.preprocess(
+            (value) => parseOptionalString(value),
+            z.string().trim().min(1).optional(),
+          ),
+          limit: z.number().int().min(1).max(50).optional(),
+        })
+        .strict(),
+      execute: async ({ query, limit }) => {
+        const entries = await loadSharedPdfKnowledgeBaseEntries();
+        const matches = searchSharedPdfKnowledgeBaseEntries({
+          entries,
+          query,
+          limit,
+        });
+        return {
+          status: "ok",
+          query: query ?? "",
+          count: matches.length,
+          entries: matches.map((entry) => ({
+            id: entry.id,
+            filename: entry.filename,
+            storagePath: entry.storagePath,
+            descriptionMarkdown: entry.descriptionMarkdown,
+            originalUrl: entry.originalUrl,
+            finalUrl: entry.finalUrl,
+            sizeBytes: entry.sizeBytes,
+            updatedAt: entry.updatedAt,
+          })),
+          indexPath: "knowledge-base/index.md",
+        };
+      },
+    }),
+    kb_download_pdf: tool({
+      description: [
+        "Download a shared knowledge-base PDF from Spark storage into this agent workspace.",
+        "Use this after kb_search_pdfs returns a matching storagePath. The outputPath must be workspace-relative, normally under knowledge-base/downloads/ or grader/references/.",
+      ].join("\n"),
+      inputSchema: z
+        .object({
+          storagePath: z.string().trim().min(1),
+          outputPath: z.string().trim().min(1),
+        })
+        .strict(),
+      execute: async ({ storagePath, outputPath }) => {
+        const bucketName = `${parseGoogleServiceAccountJson(serviceAccountJson).projectId}.firebasestorage.app`;
+        const downloaded = await downloadSharedPdfToWorkspace({
+          serviceAccountJson,
+          bucketName,
+          rootDir,
+          storagePath,
+          outputPath,
+        });
+        workspace.scheduleUpdate(outputPath);
+        return downloaded;
+      },
+    }),
+    kb_cache_pdf_from_url: tool({
+      description: [
+        "Cache a newly discovered official PDF in Spark's shared PDF knowledge base.",
+        "Call this only after checking kb_search_pdfs first. Classify the PDF in descriptionMarkdown as semi-structured text, for example: `gcse/aqa/biology/2024/AQA-84611H-QP-JUN24.PDF` plus what it is and how it was identified.",
+        "The tool stores the PDF at spark/shared/<uuid>.pdf, writes a Firestore knowledge-base entry, refreshes knowledge-base/ files, and can optionally download the cached PDF into the workspace.",
+      ].join("\n"),
+      inputSchema: z
+        .object({
+          url: z.string().trim().min(1),
+          descriptionMarkdown: z.string().trim().min(1),
+          filename: z.preprocess(
+            (value) => parseOptionalString(value),
+            z.string().trim().min(1).optional(),
+          ),
+          outputPath: z.preprocess(
+            (value) => parseOptionalString(value),
+            z.string().trim().min(1).optional(),
+          ),
+        })
+        .strict(),
+      execute: async ({ url, descriptionMarkdown, filename, outputPath }) => {
+        const bucketName = `${parseGoogleServiceAccountJson(serviceAccountJson).projectId}.firebasestorage.app`;
+        const cached = await cacheSharedPdfFromUrl({
+          serviceAccountJson,
+          bucketName,
+          url,
+          descriptionMarkdown,
+          filename,
+        });
+        sharedPdfKnowledgeBaseEntries = null;
+        const refreshedKnowledgeBase = await writeKnowledgeBaseWorkspaceFiles({
+          serviceAccountJson,
+          rootDir,
+          limit: 100,
+        });
+        workspace.scheduleUpdate("knowledge-base/index.md");
+        for (const filePath of refreshedKnowledgeBase.files) {
+          workspace.scheduleUpdate(filePath);
+        }
+        const entryFile = await writeSharedPdfKnowledgeBaseEntryFile({
+          rootDir,
+          entry: cached.entry,
+        });
+        workspace.scheduleUpdate(entryFile);
+        const downloaded =
+          typeof outputPath === "string" && outputPath.trim().length > 0
+            ? await downloadSharedPdfToWorkspace({
+                serviceAccountJson,
+                bucketName,
+                rootDir,
+                storagePath: cached.entry.storagePath,
+                outputPath: outputPath.trim(),
+              })
+            : undefined;
+        if (downloaded) {
+          workspace.scheduleUpdate(downloaded.outputPath);
+        }
+        return {
+          status: cached.status,
+          entry: {
+            id: cached.entry.id,
+            filename: cached.entry.filename,
+            storagePath: cached.entry.storagePath,
+            descriptionMarkdown: cached.entry.descriptionMarkdown,
+            originalUrl: cached.entry.originalUrl,
+            finalUrl: cached.entry.finalUrl,
+            sizeBytes: cached.entry.sizeBytes,
+            sha256: cached.entry.sha256,
+          },
+          ...(downloaded ? { downloaded } : {}),
+          indexPath: "knowledge-base/index.md",
+        };
+      },
+    }),
     read_pdf: tool({
       description: [
         "Read and transcribe a PDF using a multimodal model.",
@@ -11988,6 +12214,9 @@ function buildAgentTools(options: {
             url: rawUrl,
             finalUrl: fetched.finalUrl,
             contentType: fetched.contentType,
+            ...(fetched.storagePath
+              ? { storagePath: fetched.storagePath }
+              : {}),
           },
         });
       },
@@ -12094,6 +12323,9 @@ function buildAgentTools(options: {
             url: rawUrl,
             finalUrl: fetched.finalUrl,
             contentType: fetched.contentType,
+            ...(fetched.storagePath
+              ? { storagePath: fetched.storagePath }
+              : {}),
           },
         });
       },
@@ -14089,6 +14321,20 @@ export async function runSparkAgentTask(
       rootDir: workspaceRoot,
     });
     await workspaceSync.load();
+    try {
+      const sharedPdfKnowledgeBase = await writeKnowledgeBaseWorkspaceFiles({
+        serviceAccountJson,
+        rootDir: workspaceRoot,
+        limit: 100,
+      });
+      logSync.append(
+        `shared_pdf_knowledge_base: entries=${sharedPdfKnowledgeBase.entries.length.toString()} files=${sharedPdfKnowledgeBase.files.length.toString()}`,
+      );
+    } catch (error) {
+      logSync.append(
+        `shared_pdf_knowledge_base_error: ${errorAsString(error)}`,
+      );
+    }
     if (tutorSessionId) {
       const tutorSessionSnap = await getFirestoreDocument({
         serviceAccountJson,

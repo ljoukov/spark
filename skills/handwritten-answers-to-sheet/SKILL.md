@@ -12,6 +12,7 @@ Use this skill to capture student responses from handwritten work, completed wor
 - `brief.md`
 - `request.json`
 - upload manifest and source uploads
+- generated shared PDF knowledge-base files under `knowledge-base/`
 - existing draft sheet and answer state when grading a student-completed generated sheet:
   - `sheet/output/draft.json`
   - `sheet/state/answers.json`
@@ -92,8 +93,11 @@ If `request.json` sets `input.referenceSourcePolicy` to `allow-official-referenc
 - make a solid official-source lookup effort before self-solving,
 - search, when relevant, for the official question paper/source PDF, official mark scheme or official solutions, official examiner report / report on the examination, and official grade-boundary / prize-threshold / medal-cutoff source,
 - use only official organiser, exam-board, publisher, competition, or school sources for the grading baseline,
-- use `web_fetch` only for non-PDF pages; for official PDFs, feed the URL into extraction/transcription instead of treating HTML as the source,
+- before downloading official PDFs, check `knowledge-base/index.md` and call `kb_search_pdfs`; use `kb_download_pdf` for a matching shared entry,
+- when no shared entry exists, call `kb_cache_pdf_from_url` with a semi-structured classification such as `gcse/aqa/biology/2024/<original filename>` before using the PDF,
+- use `web_fetch` only for non-PDF pages; for official PDFs, use the local cached/downloaded workspace PDF path for extraction/transcription instead of treating HTML as the source,
 - record every official source actually used,
+- include shared `paperStoragePath` and `markSchemeStoragePath` values in `references` and `run-summary.json` when official paper or mark-scheme PDFs come from the knowledge base,
 - if no official grading baseline is found, say that explicitly and then self-solve carefully.
 - if the official question paper/source and official mark scheme/solutions are already uploaded, use those uploaded files as the baseline and do not search online just to rediscover the same PDFs. Make only a bounded lookup for missing official examiner-report or grade/prize/medal threshold data.
 
@@ -133,9 +137,9 @@ When grading handwritten answers against an uploaded source paper:
 - preserve the source question number, marks, and a short faithful cue such as the command word, measured quantity, table row, or answer line,
 - for multi-part source roots, create an explicit parent `group` entry for the root question and put mark-bearing subparts inside it; do not publish a section that contains only flat subparts such as `1.1`, `1.2`, `1.3` with no parent root,
 - keep full problem/source transcription and official solution text in `references.*Markdown` rather than duplicating the entire paper into every prompt,
-- for source-paper figures, maps, or photos, default to visible text such as `Use Figure 3 in the linked original PDF.` when the uploaded/source PDF is available,
-- crop/link a source figure only when the visual is needed to understand feedback, cannot be located from the linked original/source PDF instruction, or is part of the student's submitted answer evidence,
-- if many figure crops would be needed just to recreate exam layout, stop and switch to linked-source-PDF instructions before assembling the worksheet JSON.
+- embed source-paper figures, maps, photos, and text/numeric tables when they are needed to understand the task, the student's answer, or the feedback,
+- use visible text such as `Use Figure 3 in the linked original PDF.` only when the source pixels are unavailable or a clean crop is not feasible after a bounded attempt,
+- do not crop decorative or irrelevant exam layout, but do not replace answer-critical visuals with linked-PDF instructions merely to keep the report compact.
 
 ## Real-World Outcome Reporting
 

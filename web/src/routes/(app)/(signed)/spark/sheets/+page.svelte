@@ -434,7 +434,7 @@
 								<span class="status-pill" data-status={resolveStatusTone(sheet)}>
 									{resolveStatusLabel(sheet)}
 								</span>
-								<span>Updated {formatDate(sheet.updatedAt)}</span>
+								<span>Created {formatDate(sheet.createdAt)}</span>
 							</div>
 
 							{#if sheet.error}
@@ -638,9 +638,7 @@
 		padding: 1rem;
 		border-radius: 8px;
 		border: 1px solid var(--gap-type-border);
-		background:
-			linear-gradient(135deg, var(--gap-type-light) 0%, white 58%),
-			var(--gap-type-light);
+		background: linear-gradient(135deg, var(--gap-type-light) 0%, white 58%), var(--gap-type-light);
 		color: inherit;
 		text-decoration: none;
 		scroll-snap-align: start;

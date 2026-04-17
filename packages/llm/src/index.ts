@@ -16,6 +16,7 @@ export * from "./agent/graderAgentPrompt";
 export * from "./agent/gapsFinderAgent";
 export * from "./agent/sparkAgentSkills";
 export * from "./agent/sheetDraftAgentPrompt";
+export * from "./agent/sharedPdfKnowledgeBase";
 export * from "./agent/workspaceFileStore";
 export * from "./agent/benchmarks/agenticBenchmark";
 export * from "./agent/skills/pdfTranscription";

@@ -14,13 +14,14 @@ Use this skill to translate source material into the paper-sheet JSON contract. 
 - upload manifest, usually `grader/uploads/index.json`
 - caller task file, such as `sheet/task.md` or `grader/task.md`
 - source uploads under `grader/uploads/<filename>`
+- generated shared PDF knowledge-base files under `knowledge-base/`
 
 ## Decide The Mode
 
 1. Inventory all uploaded files.
 2. Decide whether the source is already a worksheet/exam/question paper or whether it is notes/teaching material.
 3. If it is already a worksheet/exam/question paper and there are no submitted student answers, use extraction mode and preserve source structure.
-4. If it is a handwritten/fill-in grading run with student answers plus a source paper, use compact grading-report mode: preserve source numbering, marks, and enough prompt text to make the scored feedback understandable, but do not rebuild every visual and layout feature from the source paper.
+4. If it is a handwritten/fill-in grading run with student answers plus a source paper, use compact grading-report mode: preserve source numbering, marks, answer-critical tables/figures, and enough prompt text to make the scored feedback understandable without rebuilding irrelevant exam layout chrome.
 5. If it is notes/teaching material, synthesize a concise worksheet grounded only in the uploaded material.
 
 ## Extraction Workflow
@@ -31,10 +32,12 @@ Use this skill to translate source material into the paper-sheet JSON contract. 
 - For long extracted source/reference markdown, avoid whole-file reads. Use `grep_workspace_files` to locate headings, question numbers, figure labels, and mark-scheme items; generated-reference matches include nearby context. Use `read_workspace_file` with `startLine`/`lineCount` only for ranges where grep context is insufficient.
 - Do not repeat unbounded `read_workspace_file` calls on the same large extracted reference. After the first outline, use grep or targeted line ranges.
 - For grader runs, identify the canonical paper/component/session early and carry official source URLs forward in the worksheet references when they are found.
+- Before downloading an official PDF found online, check `knowledge-base/index.md` and call `kb_search_pdfs`. If a matching entry exists, call `kb_download_pdf` and use that local cached PDF. If no match exists, call `kb_cache_pdf_from_url` with semi-structured classification text such as `gcse/aqa/biology/2024/<original filename>` plus source identity, session, component, and whether it is a question paper, mark scheme, examiner report, grade boundary, or threshold document.
+- When a source or reference PDF came from the shared knowledge base, include the returned shared `storagePath` in `references.paperStoragePath` or `references.markSchemeStoragePath` and in `run-summary.json` as `paperStoragePath` or `markSchemeStoragePath`. Keep `paperUrl` and `markSchemeUrl` only as provenance.
 - For source PDFs with figures, run `extract_pdf_images` once on the relevant page range when available. Use useful embedded raster outputs as candidates, but remember they may omit on-page labels/captions or coordinates; validate them like any other crop and fall back to rendered pages for vector/layout-sensitive visuals.
 - For printed worksheets, exam pages, figures, tables, and layout-sensitive pages, render only the relevant pages with `pdf_to_images` when page pixels are needed. In grader-publish runs the main agent does not inspect images directly with `view_image`; use `extract_text` for transcription and the fresh visual helper tools for localized crop planning/validation.
 - For long PDFs, always pass `pageNumbers` to `pdf_to_images`; choose those pages from deterministic text extraction, grep results, or the upload manifest. Do not render a whole exam paper just to look around.
-- In compact grading-report mode, use rendered pages and extracted images only to disambiguate student answers, important figures, or source structure that text extraction did not capture. Prefer visible `Use Figure N in the linked original PDF.` instructions for source-paper visuals instead of creating and validating many crops.
+- In compact grading-report mode, do not use `Use Figure N in the linked original PDF.` as the default for answer-critical visuals. Embed the source table as Markdown or crop the source figure when it is needed to understand the task, the student's answer, or the feedback. Use a linked-source-PDF instruction only after a bounded extraction/crop attempt shows the visual is unavailable, broken, or not feasible to crop cleanly.
 - If `pdf_to_images`, `extract_text`, or the fresh visual helper tools fail for a printed worksheet or exam page that truly needs visual handling, stop and fix or report that failure instead of publishing a partial text-only worksheet.
 - Before publishing, compare the sheet against extracted text and viewed pages. Fix paraphrase, omission, reordering, invented placeholder text, missing visuals, and guessed OCR.
 - Mark uncertainty explicitly instead of guessing missing source text, symbols, or labels.
@@ -101,7 +104,11 @@ For `answer_bank`, `segments.length` must equal `blanks.length + 1`. Each blank 
   "marks": 3,
   "prompt": "Complete the sentences.",
   "displayMode": "inline_labeled",
-  "segments": ["Nuclear fission is the splitting of ", ". It releases energy and ", "."],
+  "segments": [
+    "Nuclear fission is the splitting of ",
+    ". It releases energy and ",
+    "."
+  ],
   "blanks": [{ "placeholder": "particle" }, { "placeholder": "radiation" }],
   "options": [
     { "id": "nuclei", "label": "A", "text": "nuclei" },
@@ -132,13 +139,13 @@ Use `flow` for box-and-arrow calculation structures. Keep each row's `items` arr
 - Keep labels attached to artifacts: put `Figure N` caption text immediately adjacent to the crop and `Table N` caption text immediately adjacent to the Markdown table.
 - Do not repeat the same image in later subquestions. Render it once at the first source-faithful location, then refer to it later with an anchor link such as `[Figure N](#figure-n)` / `[Table N](#table-n)` or with `Figure N above` / `Table N above`.
 - Do not hide required visuals in references or transcription only.
-- Never leave a visible image placeholder, empty oval/frame, broad blank crop, or text like `see source transcription` where a student needs the visual. If the visible prompt mentions an answer-critical visual, the worksheet prompt/group prompt itself must include either the linked crop or an explicit instruction to use that exact figure in the linked original/source PDF.
-- Prefer crops for ordinary source visuals that are actually present in the uploaded/source PDF and feasible to crop. Use a linked original/source PDF reference as a fallback for visuals that are not available as pixels in the working source, are supplied only through a source link, or cannot be cropped without making a broken/fake visual.
-- In compact grading-report mode, the linked-source-PDF instruction is the default for source-paper figures unless the crop is needed to explain feedback or the learner cannot otherwise identify the visual. Do not spend the grading run validating a long list of source-paper crops.
-- Do not treat public-PDF figure omissions, source-insert omissions, or source notices as blockers. Spark is making a private student study UI that can link to the original/source PDF. When the visual should remain in that linked PDF instead of becoming a worksheet crop, preserve the question, keep the `Figure N` wording, and write a visible instruction such as `Use Figure N in the linked original PDF.`
+- Never leave a visible image placeholder, empty oval/frame, broad blank crop, or text like `see source transcription` where a student needs the visual. If the visible prompt mentions an answer-critical visual, the worksheet prompt/group prompt itself must include the linked crop or a Markdown table whenever the source pixels/text are available.
+- Prefer crops for ordinary source visuals that are actually present in the uploaded/source PDF and feasible to crop. Use a linked original/source PDF reference only as a fallback for visuals that are not available as pixels in the working source, are supplied only through a source link, or cannot be cropped without making a broken/fake visual.
+- In compact grading-report mode, embed answer-critical source-paper visuals and tables. Do not spend the grading run recreating irrelevant decoration, but do crop the figure/table/diagram block that the learner must see to understand or answer a worksheet item.
+- Do not treat public-PDF figure omissions, source-insert omissions, or source notices as blockers. Spark is making a private student study UI that can link to the original/source PDF. When a required visual truly cannot be embedded, preserve the question, keep the `Figure N` wording, and write a visible instruction such as `Use Figure N in the linked original PDF.`
 - Do not exclude a source question, remove its marks, or call it ungradable solely because a public PDF omits a figure/map/photo or because an insert is missing. Keep the source question in the sheet, preserve the student's response, and grade against the official mark scheme when the response and mark points make assessment possible.
 - Only report a blocking issue when the question cannot be understood or graded from the uploaded/official source material and no useful source-PDF reference is available.
-- Before publishing, grep the transcription for named references such as `Figure 9` or `Table 5`; every included `Figure N` must have a linked image or visible linked-source-PDF instruction near that label, and every extracted text/numeric `Table N` must have a Markdown table near that label.
+- Before publishing, grep the transcription for named references such as `Figure 9` or `Table 5`; every included answer-critical `Figure N` must have a linked image near that label unless the artifact plan records why embedding was impossible, and every extracted text/numeric `Table N` must have a Markdown table near that label.
 - If repeated visual extraction, crop validation, or publish repairs suggest the run is looping, call `review_run_progress_with_fresh_agent` and follow its continue/switch/stop recommendation instead of trying the same path again.
 
 ## Publishing Gate
@@ -152,7 +159,7 @@ Before calling `publish_sheet_draft` or `publish_sheet`:
 - source-fidelity checks have happened against extracted text and viewed page images,
 - required visual crops are linked in the visible worksheet, target real workspace files, and have passed crop validation when applicable; visual source-PDF references are visible next to the relevant source figure label when the visual is intentionally left in the linked original/source PDF,
 - prompts do not contain literal escaped newline text such as `\n`; use real Markdown line breaks, tables, or clean crops for layout-critical content,
-- optional URL fields such as `references.paperUrl` or `references.markSchemeUrl` are omitted unless a real non-empty URL is known,
+- optional URL fields such as `references.paperUrl` or `references.markSchemeUrl` are omitted unless a real non-empty URL is known; use `paperStoragePath` / `markSchemeStoragePath` for cached shared PDFs whenever available,
 - metadata is natural and non-redundant across `sheet.title`, `sheet.subtitle`, `sheet.level`, and presentation fields,
 - `presentation.footer` is source/provenance identity only, not a process label such as `transcription`, `OCR text`, or `artifact`; naming the OCR exam board is fine when it is the actual source identity, but do not repeat the visible title, subject, level, or subtitle,
 - the summary is concise, student-facing, and free of IDs, file paths, and process narration.

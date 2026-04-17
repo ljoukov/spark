@@ -51,7 +51,9 @@ export const load: PageServerLoad = async ({ params }) => {
 						year: run.paper.year ?? null,
 						paperName: run.paper.paperName ?? null,
 						paperUrl: run.paper.paperUrl ?? null,
-						markSchemeUrl: run.paper.markSchemeUrl ?? null
+						paperStoragePath: run.paper.paperStoragePath ?? null,
+						markSchemeUrl: run.paper.markSchemeUrl ?? null,
+						markSchemeStoragePath: run.paper.markSchemeStoragePath ?? null
 					}
 				: null,
 			presentation: run.presentation
