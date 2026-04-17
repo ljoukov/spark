@@ -7,6 +7,8 @@
 /web/cloud-run-env.yaml
 node_modules/
 eval/output/
+agent.log
+llm_calls/
 *.tsbuildinfo
 **/*.tsbuildinfo
 dist
