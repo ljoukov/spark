@@ -2933,6 +2933,8 @@ const STANDALONE_OPTION_LABEL_LINE_PATTERN =
 const SPAWN_AGENT_TOOL_PATTERN = /\btool=spawn_agent\b/u;
 const FRESH_CROP_REVIEW_TOOL_PATTERN =
   /\btool=validate_crop_with_fresh_agent\b/u;
+const SOURCE_FIDELITY_REVIEW_TOOL_PATTERN =
+  /\btool=validate_source_fidelity_with_fresh_agent\b/u;
 const CROP_VALIDATION_SUBAGENT_PATTERN = /\b(?:fresh-context\s+)?subagent\b/iu;
 const CROP_VALIDATION_PASS_PATTERN =
   /\b(?:pass(?:ed)?|validated|complete|all\s+(?:required\s+)?(?:content|information)|visible|not\s+clipped|included)\b/iu;
@@ -2954,6 +2956,16 @@ const CROP_VALIDATION_ASSET_SUBAGENT_CHECK_PATTERN =
   /\bfresh-context\s+subagent\s+checked\s*:\s*yes\b|\bsubagent\s+checked\s*:\s*yes\b|\bfresh-context\s+subagent\b.*\b(?:pass(?:ed)?|checked|validated|confirmed)\b/iu;
 const CROP_VALIDATION_VISIBLE_TEXT_PATTERN =
   /\b(?:reviewer[-\s]?visible\s+text|visible\s+text|text\s+(?:visible|transcribed)\s+(?:in|from)\s+(?:the\s+)?crop|crop\s+text|transcribed\s+text)\s*:\s*(?:none|n\/a|no\s+text|[^\n]{2,})/iu;
+const SOURCE_FIDELITY_SUBAGENT_CHECK_PATTERN =
+  /\bfresh-context\s+subagent\s+checked\s*:\s*yes\b|\bsource[-\s]?fidelity\s+audit\b.*\b(?:pass(?:ed)?|checked|validated|confirmed)\b/iu;
+const SOURCE_FIDELITY_PASS_PATTERN =
+  /\bpass\/fail\s*:\s*pass\b|\bsource[-\s]?fidelity\s+audit\b.*\bpass(?:ed)?\b/iu;
+const SOURCE_FIDELITY_BLOCKING_PATTERN =
+  /\bpass\/fail\s*:\s*(?:fail|failed)\b|\b(?:visible\s+source\s+items\s+represented|verbatim\s+wording\s+preserved|numbering\s+and\s+badges\s+correct|figures\/tables\/layouts\s+preserved|answer\s+evidence\s+aligned)\s*:\s*no\b/iu;
+const SOURCE_FIDELITY_BLOCKING_ISSUES_FIELD_PATTERN =
+  /(?:^|\n)\s*(?:[-*]\s*)?blocking\s+issues\s*:\s*([^\n]*)/iu;
+const SOURCE_FIDELITY_NO_BLOCKING_ISSUES_PATTERN =
+  /^(?:none|n\/a|not_applicable|no)\b/iu;
 const CROP_VALIDATION_HISTORY_FIELD_PATTERN =
   /^\s*(?:[-*]\s*)?crop\s+fixes\s+made\s*:/iu;
 const OPTION_CROP_ASSET_PATTERN = /\boptions?\b/iu;
@@ -3355,9 +3367,6 @@ function promptNeedsVisibleImage(promptText: string): boolean {
   if (ANCHORED_VISUAL_REFERENCE_PATTERN.test(promptText)) {
     return false;
   }
-  if (SOURCE_PDF_VISUAL_REFERENCE_PATTERN.test(promptText)) {
-    return false;
-  }
   return !MARKDOWN_IMAGE_PATTERN.test(promptText);
 }
 
@@ -3381,9 +3390,6 @@ function promptNeedsVisibleTable(promptText: string): boolean {
     return false;
   }
   if (ANCHORED_TABLE_REFERENCE_PATTERN.test(promptText)) {
-    return false;
-  }
-  if (SOURCE_PDF_VISUAL_REFERENCE_PATTERN.test(promptText)) {
     return false;
   }
   return !promptHasVisibleSourceTable(promptText);
@@ -3611,6 +3617,26 @@ function hasPositiveCropValidationReport(markdown: string): boolean {
     return false;
   }
   return CROP_VALIDATION_VISIBLE_TEXT_PATTERN.test(markdown);
+}
+
+function hasPositiveSourceFidelityAudit(markdown: string): boolean {
+  if (!SOURCE_FIDELITY_SUBAGENT_CHECK_PATTERN.test(markdown)) {
+    return false;
+  }
+  if (!SOURCE_FIDELITY_PASS_PATTERN.test(markdown)) {
+    return false;
+  }
+  if (SOURCE_FIDELITY_BLOCKING_PATTERN.test(markdown)) {
+    return false;
+  }
+  const blockingIssuesMatch =
+    SOURCE_FIDELITY_BLOCKING_ISSUES_FIELD_PATTERN.exec(markdown);
+  if (!blockingIssuesMatch) {
+    return false;
+  }
+  return SOURCE_FIDELITY_NO_BLOCKING_ISSUES_PATTERN.test(
+    blockingIssuesMatch[1]?.trim() ?? "",
+  );
 }
 
 function isBenignDuplicateOnlyFailedCropValidationRecord(
@@ -4743,6 +4769,7 @@ function collectGraderWorksheetPublishIssues(
   options?: {
     sourceTranscriptMarkdown?: string;
     cropValidationMarkdown?: string;
+    sourceFidelityAuditMarkdown?: string;
     agentLogMarkdown?: string;
     requestPayload?: SparkGraderRequestPayload | null;
     runSummary?: GraderRunSummary;
@@ -4764,8 +4791,6 @@ function collectGraderWorksheetPublishIssues(
   const sheetHasLinkedFigure = MARKDOWN_IMAGE_PATTERN.test(
     renderedSheetMarkdown,
   );
-  const sheetHasSourcePdfVisualReference =
-    SOURCE_PDF_VISUAL_REFERENCE_PATTERN.test(renderedSheetMarkdown);
   const sheetHasMarkdownTable = MARKDOWN_TABLE_PATTERN.test(
     renderedSheetMarkdown,
   );
@@ -4779,6 +4804,13 @@ function collectGraderWorksheetPublishIssues(
     requestRequiresProblemStatementTranscription(options?.requestPayload);
   const sourceTranscriptMarkdown =
     options?.sourceTranscriptMarkdown?.trim() ?? "";
+  const needsSourceFidelityAudit =
+    sourcePaperOnlyNoStudent ||
+    compactHandwrittenGrading ||
+    needsProblemStatementTranscription ||
+    PROBLEM_STATEMENT_TRANSCRIPTION_HEADING_PATTERN.test(
+      sourceTranscriptMarkdown,
+    );
   const sourceFigureOwnersByLabel = collectSpecificSourceReferenceOwners(
     sourceTranscriptMarkdown,
     NAMED_FIGURE_REFERENCE_PATTERN,
@@ -4846,7 +4878,7 @@ function collectGraderWorksheetPublishIssues(
   }
 
   if (
-    needsProblemStatementTranscription &&
+    needsSourceFidelityAudit &&
     !PROBLEM_STATEMENT_TRANSCRIPTION_HEADING_PATTERN.test(
       sourceTranscriptMarkdown,
     )
@@ -4854,6 +4886,29 @@ function collectGraderWorksheetPublishIssues(
     issues.push(
       "grader/output/transcription.md does not include a source problem-statement transcription section; include the printed root stems, interstitial context, subquestions, table labels, and figure labels so worksheet structure can be audited",
     );
+  }
+
+  if (needsSourceFidelityAudit) {
+    const sourceFidelityAuditMarkdown =
+      options?.sourceFidelityAuditMarkdown?.trim() ?? "";
+    if (sourceFidelityAuditMarkdown.length === 0) {
+      issues.push(
+        "grader/output/source-fidelity-audit.md is missing; run validate_source_fidelity_with_fresh_agent before publishing and record the pass/fail result",
+      );
+    } else if (!hasPositiveSourceFidelityAudit(sourceFidelityAuditMarkdown)) {
+      issues.push(
+        "grader/output/source-fidelity-audit.md does not record a passing fresh-context source-fidelity audit",
+      );
+    }
+    if (
+      !SOURCE_FIDELITY_REVIEW_TOOL_PATTERN.test(
+        options?.agentLogMarkdown ?? "",
+      )
+    ) {
+      issues.push(
+        "agent log has no validate_source_fidelity_with_fresh_agent call; use the dedicated fresh-context source-fidelity audit before publish",
+      );
+    }
   }
 
   const presentationFooter = runSummary?.presentation?.footer?.trim();
@@ -5544,11 +5599,10 @@ function collectGraderWorksheetPublishIssues(
     !compactHandwrittenGrading &&
     referenceMarkdown.length > 0 &&
     FIGURE_REFERENCE_PATTERN.test(referenceMarkdown) &&
-    !sheetHasLinkedFigure &&
-    !sheetHasSourcePdfVisualReference
+    !sheetHasLinkedFigure
   ) {
     issues.push(
-      "reference markdown mentions a figure/diagram/photo/graph/chart but the worksheet contains no linked image asset or visible source-PDF visual reference",
+      "reference markdown mentions a figure/diagram/photo/graph/chart but the worksheet contains no linked image asset",
     );
   }
   if (
@@ -5575,17 +5629,9 @@ function collectGraderWorksheetPublishIssues(
         continue;
       }
       if (!hasNearbyMarkdownImage(renderedSheetMarkdown, "Figure", label)) {
-        if (
-          !hasNearbySourcePdfVisualReference(
-            renderedSheetMarkdown,
-            "Figure",
-            label,
-          )
-        ) {
-          issues.push(
-            `source transcription mentions Figure ${label} but the worksheet does not link an image or visible source-PDF reference near that figure label`,
-          );
-        }
+        issues.push(
+          `source transcription mentions Figure ${label} but the worksheet does not link an image near that figure label`,
+        );
       }
     }
 
@@ -5909,6 +5955,13 @@ async function validateGraderWorkspaceForPublish(options: {
     resolveWorkspacePath(options.rootDir, "grader/output/crop-validation.md"),
     { encoding: "utf8" },
   ).catch(() => "");
+  const sourceFidelityAuditMarkdown = await readFile(
+    resolveWorkspacePath(
+      options.rootDir,
+      "grader/output/source-fidelity-audit.md",
+    ),
+    { encoding: "utf8" },
+  ).catch(() => "");
   const rawAgentLogMarkdown = await readFile(
     resolveWorkspacePath(options.rootDir, "logs/agent/agent.log"),
     { encoding: "utf8" },
@@ -5925,6 +5978,7 @@ async function validateGraderWorkspaceForPublish(options: {
   const publishIssues = collectGraderWorksheetPublishIssues(report, {
     sourceTranscriptMarkdown,
     cropValidationMarkdown,
+    sourceFidelityAuditMarkdown,
     agentLogMarkdown,
     requestPayload,
     runSummary: summary,
@@ -14078,6 +14132,165 @@ function buildAgentTools(options: {
           cropPath: resolvedCropPath,
           sourceLabel,
           usedViewImage,
+          modelId: DEFAULT_AGENT_MODEL_ID,
+          costUsd: result.totalCostUsd,
+          reviewMarkdown: result.text.trim(),
+        };
+      },
+    }),
+    validate_source_fidelity_with_fresh_agent: tool({
+      description: [
+        "Validate source-to-sheet transfer with a fresh-context agent before publish.",
+        "Use this after grader/output/transcription.md, grader/output/sheet-plan.md, and grader/output/sheet.json exist.",
+        "Split long papers by source page or root question. The fresh agent checks only transfer fidelity: visible source items, verbatim wording, numbering/badges, figures/tables/layouts, and answer-evidence alignment.",
+        "Write the returned reviewMarkdown into grader/output/source-fidelity-audit.md before publish. Do not use this tool for grading, solving, or rewriting the worksheet.",
+      ].join("\n"),
+      inputSchema: z
+        .object({
+          sourceScope: z.string().trim().min(1),
+          sourcePaths: z.array(z.string().trim().min(1)).default([]),
+          transcriptionPath: z
+            .string()
+            .trim()
+            .min(1)
+            .default("grader/output/transcription.md"),
+          sheetPlanPath: z
+            .string()
+            .trim()
+            .min(1)
+            .default("grader/output/sheet-plan.md"),
+          sheetPath: z
+            .string()
+            .trim()
+            .min(1)
+            .default("grader/output/sheet.json"),
+          notes: z.string().trim().optional(),
+        })
+        .strict(),
+      execute: async ({
+        sourceScope,
+        sourcePaths,
+        transcriptionPath,
+        sheetPlanPath,
+        sheetPath,
+        notes,
+      }) => {
+        const resolvedTranscriptionPath = transcriptionPath.trim();
+        const resolvedSheetPlanPath = sheetPlanPath.trim();
+        const resolvedSheetPath = sheetPath.trim();
+        await stat(resolveWorkspacePath(rootDir, resolvedTranscriptionPath));
+        await stat(resolveWorkspacePath(rootDir, resolvedSheetPath));
+        const sheetPlanExists =
+          (await stat(
+            resolveWorkspacePath(rootDir, resolvedSheetPlanPath),
+          ).catch(() => null)) !== null;
+        const resolvedSourcePaths = sourcePaths.map((sourcePath) =>
+          sourcePath.trim(),
+        );
+        for (const sourcePath of resolvedSourcePaths) {
+          await stat(resolveWorkspacePath(rootDir, sourcePath));
+        }
+
+        const filesystemToolConfig = buildSparkAgentFilesystemToolConfig({
+          workspace,
+          rootDir,
+        });
+        const filesystemTools = createCodexFilesystemToolSet(
+          filesystemToolConfig.options,
+        );
+        const auditTools: LlmToolSet = {};
+        for (const toolName of [
+          "read_file",
+          "grep_files",
+          "list_dir",
+          "view_image",
+        ] as const) {
+          const candidate = filesystemTools[toolName];
+          if (candidate !== undefined) {
+            auditTools[toolName] = candidate;
+          }
+        }
+
+        const imageSourcePaths = resolvedSourcePaths.filter((sourcePath) =>
+          /\.(?:png|jpe?g|webp|gif)$/iu.test(sourcePath),
+        );
+        const reviewPrompt = [
+          "You are a fresh-context source-fidelity validation agent.",
+          "Do not grade, solve, improve, or redesign the worksheet. Only compare source material against the assembled worksheet for transfer fidelity.",
+          "Read the worksheet JSON and transcription first. Read the sheet plan when present. Inspect source images with view_image when image paths are provided.",
+          "For long source material, this prompt covers only the listed source scope; do not try to audit unrelated pages.",
+          "",
+          `Source scope: ${sourceScope}`,
+          "",
+          "Required files:",
+          `- transcription: ${resolvedTranscriptionPath}`,
+          sheetPlanExists
+            ? `- sheet plan: ${resolvedSheetPlanPath}`
+            : `- sheet plan: ${resolvedSheetPlanPath} (missing; record this if it affects audit confidence)`,
+          `- worksheet: ${resolvedSheetPath}`,
+          resolvedSourcePaths.length > 0
+            ? ["Source paths:", ...resolvedSourcePaths.map((item) => `- ${item}`)].join(
+                "\n",
+              )
+            : "Source paths: none supplied; use transcription/source audit text only.",
+          imageSourcePaths.length > 0
+            ? [
+                "Image source paths to inspect with view_image:",
+                ...imageSourcePaths.map((item) => `- ${item}`),
+              ].join("\n")
+            : "",
+          notes ? ["Notes:", notes].join("\n") : "",
+          "",
+          "Audit rubric:",
+          "- Every visible answered, partially answered, selected, or blank answer-bearing source item in scope is represented in sheet.json.",
+          "- Source wording is verbatim apart from minimal OCR/layout cleanup; no paraphrased or invented prompt text.",
+          "- Source numbering, subquestion hierarchy, badge labels, option labels, and marks match the source.",
+          "- Named figures, tables, diagrams, graphs, grids, and column/stacked layouts are visible near the relevant prompt as Markdown tables, display math, or linked validated crops.",
+          "- Student answer evidence is attached to the right worksheet item and not collapsed into vague placeholders.",
+          "",
+          "Return concise Markdown with exactly these fields:",
+          "- source-fidelity audit: <short source scope>",
+          "- fresh-context subagent checked: yes",
+          "- pass/fail: pass|fail",
+          "- visible source items represented: yes|no",
+          "- verbatim wording preserved: yes|no",
+          "- numbering and badges correct: yes|no",
+          "- figures/tables/layouts preserved: yes|no|not_applicable",
+          "- answer evidence aligned: yes|no",
+          "- blocking issues: <none or concise bullets with question ids/source labels>",
+        ]
+          .filter((part) => part.trim().length > 0)
+          .join("\n");
+
+        progress?.log(`fresh source-fidelity audit: ${sourceScope}`);
+        const result = await runAgentLoop({
+          model: DEFAULT_AGENT_MODEL_ID,
+          input: reviewPrompt,
+          instructions:
+            "You validate source-to-sheet transfer only. Read the requested files before judging. Use view_image for supplied image source paths. Do not grade or rewrite artifacts.",
+          tools: auditTools,
+          maxSteps: 8,
+          thinkingLevel: resolveSparkAgentThinkingLevel(DEFAULT_AGENT_MODEL_ID),
+          subagents: false,
+        });
+        onToolLlmCost?.("generate_text", result.totalCostUsd);
+        const usedReadTool = result.steps.some((step) =>
+          step.toolCalls.some(
+            (call) =>
+              call.toolName === "read_file" ||
+              call.toolName === "grep_files" ||
+              call.toolName === "view_image",
+          ),
+        );
+        if (!usedReadTool) {
+          throw new Error(
+            "validate_source_fidelity_with_fresh_agent failed: the fresh audit agent returned without reading or viewing source/worksheet files.",
+          );
+        }
+        return {
+          status: "reviewed",
+          sourceScope,
+          usedReadTool,
           modelId: DEFAULT_AGENT_MODEL_ID,
           costUsd: result.totalCostUsd,
           reviewMarkdown: result.text.trim(),

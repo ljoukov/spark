@@ -34,8 +34,10 @@ describe('grader task template', () => {
 
 	it('keeps subagents bounded and crop validation dedicated', () => {
 		expect(graderTaskTemplate).not.toContain('spawn exactly one subagent per problem');
-		expect(graderTaskTemplate).toContain('Direct `view_image` is intentionally not available');
+		expect(graderTaskTemplate).toContain('Use `view_image` for source-page/photo fidelity checks');
 		expect(graderTaskTemplate).toContain('Generic subagents may be used only');
+		expect(graderTaskTemplate).toContain('pre-publish source-fidelity audits');
+		expect(graderTaskTemplate).toContain('split long material by source page or root question');
 		expect(graderTaskTemplate).toContain('validate_crop_with_fresh_agent');
 		expect(graderTaskTemplate).toContain('review_run_progress_with_fresh_agent');
 	});

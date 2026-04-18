@@ -43,6 +43,8 @@ describe("grader agent prompt", () => {
     );
     expect(prompt).toContain("validate_crop_with_fresh_agent");
     expect(prompt).toContain("review_run_progress_with_fresh_agent");
+    expect(prompt).toContain("pre-publish source-fidelity audits");
+    expect(prompt).toContain("Split long material by source page or root question");
     expect(task).toContain("validate_crop_with_fresh_agent");
     expect(task).toContain("review_run_progress_with_fresh_agent");
     expect(task).not.toContain("exactly 1 subagent per problem");
@@ -111,6 +113,9 @@ describe("grader agent prompt", () => {
     expect(skills).toContain("image-cutting-step N/8");
     expect(skills).toContain("extract_pdf_images");
     expect(skills).toContain("review_run_progress_with_fresh_agent");
+    expect(skills).toContain("## Fresh Source-Fidelity Audit");
+    expect(skills).toContain("Do not drop a visible prompt or partial response");
+    expect(skills).toContain("Do not treat a learner's broad focus wording");
     expect(skills).toContain("compact grading-report mode");
     expect(skills).toContain(
       "without rebuilding irrelevant exam layout chrome",

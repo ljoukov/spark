@@ -40,12 +40,14 @@ Use this skill to translate source material into the paper-sheet JSON contract. 
 - In compact grading-report mode, do not rewrite source questions into summaries such as `Figure 1 asks...` or `Table 1 gives...`. Copy the exact source question wording for every answered item, omitting only irrelevant administration chrome. Do not use `Use Figure N in the linked original PDF.` as the default for answer-critical visuals. Embed the source table as Markdown or crop the source figure when it is needed to understand the task, the student's answer, or the feedback. Preserve source column arithmetic, number grids, stacked calculations, flow/box layouts, and circled/lettered labels with visible Markdown, renderable LaTeX display layout, or a validated crop; never flatten them into a prose cue. Use a linked-source-PDF instruction only after a bounded extraction/crop attempt shows the visual is unavailable, broken, or not feasible to crop cleanly.
 - If `pdf_to_images`, `extract_text`, or the fresh visual helper tools fail for a printed worksheet or exam page that truly needs visual handling, stop and fix or report that failure instead of publishing a partial text-only worksheet.
 - Before publishing, compare the sheet against extracted text and viewed source pages. Fix paraphrase, omission, reordering, invented placeholder text, missing visuals, and guessed OCR. If the source is a printed photo or scan, inspect the source image/page directly instead of relying only on OCR text.
+- For printed source papers, source photos, or long multi-page extracts, call `validate_source_fidelity_with_fresh_agent` before publishing and write its `reviewMarkdown` to `grader/output/source-fidelity-audit.md`. Split the audit by source page or root question when there is more than one page/root, and give the reviewer a narrow rubric: source wording is verbatim apart from minimal OCR cleanup, every visible answer-bearing or partially answered item is represented, numbering/badges match the source hierarchy, and all named figures/tables/layout-critical structures are visible near the relevant prompt.
 - Mark uncertainty explicitly instead of guessing missing source text, symbols, or labels.
 
 ## Source-Fidelity Rules
 
 - Treat uploaded question sheets as canonical source material.
 - Preserve wording, numbering, formulas, notation, marks, labels, blanks, options, tables, and flow/box layouts. For official question papers, the visible worksheet prompt should be a verbatim transcription of the printed item, not a paraphrase.
+- Do not treat a learner's broad focus wording as permission to drop visible source items. Unless the user explicitly says to grade only specific question numbers, include every source item that is visibly answered, partially answered, selected, or left as an answer space in the submitted work; score blanks/partials normally or mark unresolved evidence explicitly instead of omitting the item.
 - Preserve printed subpart labels and option labels exactly. If the UI would otherwise auto-number leaf badges, set `badgeLabel` to the visible source subpart label, for example `a`, `b`, `c`, `i`, `ii`, or `A`.
 - Preserve exact root stems and interstitial wording from the source. Do not replace printed source text such as `A computer has a Central Processing Unit (CPU).` with a topic summary such as `Central Processing Unit.`
 - Apply only minimal OCR/layout cleanup that keeps meaning unchanged.
@@ -65,6 +67,7 @@ Before writing a large `sheet.json` or `draft.json`, make a compact artifact pla
 The plan should list:
 
 - every source root and answer-bearing leaf in order,
+- every visible student-submission item that will be included, including partial responses and blanks, plus an explicit reason for any visible source item intentionally excluded,
 - the intended worksheet id for each leaf,
 - the marks for each leaf and the expected review-score total when grading,
 - each visible `Figure N`, `Table N`, graph, map, photo, or option-diagram block and the nearest source-faithful placement,
@@ -73,6 +76,16 @@ The plan should list:
 - the answer-state shape for each objective or structured item.
 
 Use this plan to catch schema and placement errors before the first publish attempt. In particular, do not start a large JSON artifact until you have decided whether each fixed-option blank is an `answer_bank`, each MCQ is `full_options` or `labels_only`, and each reused figure/table is rendered once at the first source-faithful location.
+
+## Fresh Source-Fidelity Audit
+
+Use `validate_source_fidelity_with_fresh_agent` after `sheet-plan.md` and `sheet.json` exist and before the first publish attempt whenever the source is a printed worksheet, official exam paper, source photo, or any PDF page whose wording/figures/tables are copied into the sheet. Write the returned `reviewMarkdown` to `grader/output/source-fidelity-audit.md`; `publish_sheet` rejects source-paper sheets without a passing audit record.
+
+- Split long source material into page-sized or root-question-sized audits. Do not ask one reviewer to verify an entire long paper at once.
+- Give each reviewer the exact source page/root, the relevant source transcript lines, the planned worksheet ids, and the rendered prompt text or `sheet.json` fragment.
+- Ask only for transfer fidelity: omitted visible items, non-verbatim wording, changed formulas/labels/options, wrong badge hierarchy, missing figures/tables/grids/column layouts, broken or overly broad crops, and student-answer evidence assigned to the wrong question.
+- The reviewer must not grade, solve, redesign the worksheet, or rewrite the final artifact.
+- Treat any omitted visible question, missing named figure/table, or paraphrased printed prompt as blocking. Update the plan and artifact, then re-audit the affected page/root before publishing.
 
 ## Paper-Sheet Modeling
 

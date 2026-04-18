@@ -15,13 +15,13 @@ Uploaded files are available under `grader/uploads/<filename>`. Treat uploaded s
 
 ## Required Skills
 
-The detailed reusable workflow lives in skills. Read and follow the matching files instead of relying on this task file as the full prompt:
+The detailed reusable workflow lives in skills. Read and follow the matching files:
 
 - `skills/paper-to-sheet/SKILL.md`
 - `skills/handwritten-answers-to-sheet/SKILL.md`
 - `skills/source-image-cropping/SKILL.md`
 
-Use `paper-to-sheet` to choose the mode and model the sheet structure. Use `handwritten-answers-to-sheet` for answer capture, official-reference lookup, scoring, and real-world outcome reporting. Use `source-image-cropping` only when a visible crop is actually needed.
+Use `paper-to-sheet` to choose the mode and model the sheet structure. Use `handwritten-answers-to-sheet` for answer capture, official-reference lookup, scoring, and outcome reporting. Use `source-image-cropping` only when a visible crop is actually needed.
 
 ## Mode Decision
 
@@ -37,10 +37,11 @@ Classify the run before expensive work:
 2. For text-selectable source papers and mark schemes, run `extract_pdf_reference_text` once and use `grep_workspace_files` plus targeted `read_workspace_file` line ranges. Do not send those same PDFs through `extract_text` again unless a specific visual/non-text page truly needs OCR.
 3. Run one primary `extract_text` pass for remaining transcription targets, normally student submissions and non-text source/solution files. Write `grader/output/transcription.md`. In grading runs with an official/source paper reference, include a compact `## Source problem-statement transcription` section in that file even when the source text came from deterministic PDF extraction; list the assessed root stems, subquestion labels, figure/table labels, and mark-bearing prompts needed to audit the worksheet structure.
 4. If online references are allowed and the paper or competition is identifiable, make a bounded official-source lookup effort for mark schemes/solutions, examiner reports, and grade/prize/medal thresholds that are not already uploaded.
-5. Build a compact `grader/output/sheet-plan.md` before writing a large sheet. List source leaves, worksheet ids, marks, answer shapes, visual handling, and expected score totals.
+5. Build a compact `grader/output/sheet-plan.md` before writing a large sheet. List source leaves, worksheet ids, marks, answer shapes, visual handling, score totals, and any visible submitted-work item intentionally excluded. Unless the learner explicitly excludes specific question numbers, keep visible answered, partial, selected, and blank answer-bearing items.
 6. Once `transcription.md`, the needed official/source references, and `sheet-plan.md` exist, stop broad reference reading and move directly to report assembly. Do only targeted reads for a named missing mark point or publish error.
 7. Write `grader/output/sheet.json` and `grader/output/run-summary.json`.
-8. Call `publish_sheet({})`. Repair coherent validation errors, but do not repeat the same failed branch. Call `review_run_progress_with_fresh_agent` when repeated tool loops suggest the run is off-track.
+8. Before publishing source-paper/PDF/photo-derived sheets, call `validate_source_fidelity_with_fresh_agent`, write its `reviewMarkdown` to `grader/output/source-fidelity-audit.md`, and split long material by source page or root question. Check only transfer fidelity: verbatim text, visible items, numbering/badges, figures/tables/layouts near the prompt, and answer evidence alignment. Fix blocking failures and re-audit.
+9. Call `publish_sheet({})`. Repair coherent validation errors, but do not repeat the same failed branch. Call `review_run_progress_with_fresh_agent` when repeated tool loops suggest the run is off-track.
 
 ## Stable Sheet Palette
 
@@ -106,7 +107,7 @@ Optional paper metadata is allowed only when known. If you include `year`, write
 - Keep upload inventory, workspace reading, primary transcription, final grading synthesis, and JSON assembly on the main agent.
 - Use `view_image` for source-page/photo fidelity checks and rendered PDF pages when text or layout matters. Use `extract_text` for primary student/photo transcription and the fresh visual helper tools for localized crop inspection.
 - When writing grader JSON, escape LaTeX backslashes correctly instead of flattening displayed source formulas, sign rows, arrays, matrices, or grids into prose.
-- Generic subagents may be used only for bounded official-reference lookup/verification or visual localization proposals. Final crop validation must use `validate_crop_with_fresh_agent`.
+- Generic subagents may be used only for bounded official-reference lookup/verification or visual localization proposals. pre-publish source-fidelity audits must use `validate_source_fidelity_with_fresh_agent`; reviewers compare source pages/transcripts against `sheet-plan.md` and `sheet.json` and must not grade, solve, redesign, or assemble. Final crop validation must use `validate_crop_with_fresh_agent`.
 - Before downloading official PDFs found online, check `knowledge-base/index.md` and call `kb_search_pdfs`. If a matching cached PDF exists, call `kb_download_pdf` and use the local file. If no match exists, download/cache the official PDF with `kb_cache_pdf_from_url`, using semi-structured classification text such as `gcse/aqa/biology/2024/<original filename>`, and carry the returned `storagePath` into worksheet references (`paperStoragePath` or `markSchemeStoragePath`). Keep original URLs only as provenance.
 - For long PDFs, pass explicit `pageNumbers` to `pdf_to_images`.
 - In handwritten-grading mode, do not use `Use Figure N in the linked original PDF.` as the default for ordinary source-paper figures. Crop answer-critical figures/tables/diagrams into visible worksheet assets when the source pixels are available and feasible. Use a linked original/source PDF instruction only after bounded extraction/crop attempts show the visual is unavailable or not feasible to embed cleanly.

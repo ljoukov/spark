@@ -1,6 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import {
+  appendFile,
   mkdir,
   mkdtemp,
   readFile,
@@ -169,6 +170,7 @@ async function writeMockPublishArtifacts(options: {
   subtitle?: string;
   summaryMarkdown?: string;
   footer?: string;
+  sourceFidelityAudit?: boolean;
 }): Promise<void> {
   await mkdir(path.join(options.rootDir, "grader/output"), { recursive: true });
   await writeFile(
@@ -204,6 +206,9 @@ async function writeMockPublishArtifacts(options: {
     JSON.stringify(options.report, null, 2).concat("\n"),
     { encoding: "utf8" },
   );
+  if (options.sourceFidelityAudit !== false) {
+    await writeSourceFidelityAudit(options.rootDir);
+  }
 }
 
 function buildAwaitingAnswersReview(
@@ -317,12 +322,43 @@ async function writeValidatedCropAsset(options: {
     { encoding: "utf8" },
   );
   await mkdir(path.join(options.rootDir, "logs/agent"), { recursive: true });
-  await writeFile(
+  await appendFile(
     path.join(options.rootDir, "logs/agent/agent.log"),
     "tool=validate_crop_with_fresh_agent crop validation\n",
     { encoding: "utf8" },
   );
   await writeFreshCropReviewToolCall(options);
+}
+
+async function writeSourceFidelityAudit(
+  rootDir: string,
+  markdown = [
+    "# Source fidelity audit",
+    "",
+    "- source-fidelity audit: full worksheet",
+    "- fresh-context subagent checked: yes",
+    "- pass/fail: pass",
+    "- visible source items represented: yes",
+    "- verbatim wording preserved: yes",
+    "- numbering and badges correct: yes",
+    "- figures/tables/layouts preserved: not_applicable",
+    "- answer evidence aligned: yes",
+    "- blocking issues: none",
+    "",
+  ].join("\n"),
+): Promise<void> {
+  await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+  await writeFile(
+    path.join(rootDir, "grader/output/source-fidelity-audit.md"),
+    markdown,
+    { encoding: "utf8" },
+  );
+  await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
+  await appendFile(
+    path.join(rootDir, "logs/agent/agent.log"),
+    "tool=validate_source_fidelity_with_fresh_agent source fidelity\n",
+    { encoding: "utf8" },
+  );
 }
 
 async function writeFreshCropReviewToolCall(options: {
@@ -1287,7 +1323,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
     });
   });
 
-  it("allows explicit linked-source PDF visual references without worksheet crops", async () => {
+  it("rejects linked-source PDF visual references without worksheet crops", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =
         await import("../src/agent/sparkAgentRunner");
@@ -1376,15 +1412,209 @@ describe("Spark agent tool: publish_sheet guards", () => {
       const publishSheetTool = tools.publish_sheet;
       requireFunctionTool(publishSheetTool);
 
-      await expect(publishSheetTool.execute({})).resolves.toMatchObject({
-        status: "published",
-        awardedMarks: 0,
-        maxMarks: 2,
-      });
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /source transcription mentions Figure 3.*worksheet does not link an image/iu,
+      );
     });
   });
 
-  it("allows compact handwritten grading reports without full source-paper visual reconstruction", async () => {
+  it("rejects source-derived worksheets without a source-fidelity audit", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "Competition paper",
+        awardedMarks: 0,
+        maxMarks: 1,
+        sourceFidelityAudit: false,
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Maths",
+            level: "Junior",
+            title: "Competition paper",
+            subtitle: "Uploaded paper",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q1",
+                label: "Question 1",
+                questions: [
+                  {
+                    id: "q1",
+                    type: "lines",
+                    displayNumber: "1",
+                    marks: 1,
+                    prompt: "What is 2 + 2?",
+                    lines: 1,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q1: "",
+          },
+          review: buildAwaitingAnswersReview(1, ["q1"]),
+        },
+      });
+      await writeFile(
+        path.join(rootDir, "request.json"),
+        JSON.stringify(
+          {
+            createdAt: new Date(0).toISOString(),
+            sourceText:
+              "Render this question paper as a source-faithful worksheet. No student answers were provided; leave answers blank.",
+            input: {},
+            attachments: [],
+          },
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+      await writeSourceProblemStatementTranscription(
+        rootDir,
+        "## Source problem-statement transcription\n\n**Question 1** What is 2 + 2?\n",
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /source-fidelity-audit\.md is missing/iu,
+      );
+    });
+  });
+
+  it("rejects source-derived worksheets with failing source-fidelity audits", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "Competition paper",
+        awardedMarks: 0,
+        maxMarks: 1,
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Maths",
+            level: "Junior",
+            title: "Competition paper",
+            subtitle: "Uploaded paper",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q1",
+                label: "Question 1",
+                questions: [
+                  {
+                    id: "q1",
+                    type: "lines",
+                    displayNumber: "1",
+                    marks: 1,
+                    prompt: "What is 2 + 2?",
+                    lines: 1,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q1: "",
+          },
+          review: buildAwaitingAnswersReview(1, ["q1"]),
+        },
+      });
+      await writeFile(
+        path.join(rootDir, "request.json"),
+        JSON.stringify(
+          {
+            createdAt: new Date(0).toISOString(),
+            sourceText:
+              "Render this question paper as a source-faithful worksheet. No student answers were provided; leave answers blank.",
+            input: {},
+            attachments: [],
+          },
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+      await writeSourceProblemStatementTranscription(
+        rootDir,
+        "## Source problem-statement transcription\n\n**Question 1** What is 2 + 2?\n",
+      );
+      await writeSourceFidelityAudit(
+        rootDir,
+        [
+          "# Source fidelity audit",
+          "",
+          "- source-fidelity audit: full worksheet",
+          "- fresh-context subagent checked: yes",
+          "- pass/fail: fail",
+          "- visible source items represented: no",
+          "- verbatim wording preserved: yes",
+          "- numbering and badges correct: yes",
+          "- figures/tables/layouts preserved: not_applicable",
+          "- answer evidence aligned: yes",
+          "- blocking issues: Question 2 is missing",
+          "",
+        ].join("\n"),
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /source-fidelity-audit\.md does not record a passing/iu,
+      );
+    });
+  });
+
+  it("allows compact handwritten grading reports with audited source visuals", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =
         await import("../src/agent/sparkAgentRunner");
@@ -1417,7 +1647,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
                     type: "group",
                     displayNumber: "1",
                     prompt:
-                      "Use Figure 1 in the linked original PDF for the source context.",
+                      "Figure 1 gives the source context.\n\n[![Figure 1](grader/output/assets/figure-1.png)](grader/output/assets/figure-1.png)",
                     questions: [
                       {
                         id: "q1a",
@@ -1553,6 +1783,11 @@ describe("Spark agent tool: publish_sheet guards", () => {
           "",
         ].join("\n"),
       );
+      await writeValidatedCropAsset({
+        rootDir,
+        assetPath: "grader/output/assets/figure-1.png",
+        sourceLabel: "Figure 1",
+      });
 
       const tools = buildSparkAgentTools({
         workspace: {
@@ -4373,7 +4608,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
         { encoding: "utf8" },
       );
       await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
-      await writeFile(
+      await appendFile(
         path.join(rootDir, "logs/agent/agent.log"),
         "tool=validate_crop_with_fresh_agent crop validation\n",
         { encoding: "utf8" },
@@ -4596,7 +4831,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
         { encoding: "utf8" },
       );
       await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
-      await writeFile(
+      await appendFile(
         path.join(rootDir, "logs/agent/agent.log"),
         "tool=validate_crop_with_fresh_agent crop validation\n",
         { encoding: "utf8" },
@@ -4676,7 +4911,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
       );
       await writeSourceProblemStatementTranscription(rootDir);
       await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
-      await writeFile(
+      await appendFile(
         path.join(rootDir, "logs/agent/agent.log"),
         "tool=validate_crop_with_fresh_agent crop validation\n",
         { encoding: "utf8" },
@@ -4751,7 +4986,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
       );
       await writeSourceProblemStatementTranscription(rootDir);
       await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
-      await writeFile(
+      await appendFile(
         path.join(rootDir, "logs/agent/agent.log"),
         "tool=spawn_agent crop validation\n",
         { encoding: "utf8" },
@@ -4820,7 +5055,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
       );
       await writeSourceProblemStatementTranscription(rootDir);
       await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
-      await writeFile(
+      await appendFile(
         path.join(rootDir, "logs/agent/agent.log"),
         "tool=validate_crop_with_fresh_agent crop validation\n",
         { encoding: "utf8" },
@@ -4898,7 +5133,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
       );
       await writeSourceProblemStatementTranscription(rootDir);
       await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
-      await writeFile(
+      await appendFile(
         path.join(rootDir, "logs/agent/agent.log"),
         "tool=validate_crop_with_fresh_agent crop validation\n",
         { encoding: "utf8" },
@@ -4977,7 +5212,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
       );
       await writeSourceProblemStatementTranscription(rootDir);
       await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
-      await writeFile(
+      await appendFile(
         path.join(rootDir, "logs/agent/agent.log"),
         "tool=validate_crop_with_fresh_agent crop validation\n",
         { encoding: "utf8" },
@@ -5076,7 +5311,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
         { encoding: "utf8" },
       );
       await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
-      await writeFile(
+      await appendFile(
         path.join(rootDir, "logs/agent/agent.log"),
         "tool=spawn_agent crop validation\n",
         { encoding: "utf8" },
@@ -5150,7 +5385,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
       );
       await utimes(path.join(rootDir, assetPath), editTime, editTime);
       await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
-      await writeFile(
+      await appendFile(
         path.join(rootDir, "logs/agent/agent.log"),
         [
           "[spark-agent:test] 2026-04-13T09:59:00.000Z [agent:test] tool_call_started: turn=1 index=1 tool=spawn_agent callId=call_review",
@@ -5234,7 +5469,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
       );
       await utimes(path.join(rootDir, assetPath), editTime, editTime);
       await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
-      await writeFile(
+      await appendFile(
         path.join(rootDir, "logs/agent/agent.log"),
         [
           "[spark-agent:test] 2026-04-13T09:59:00.000Z [agent:test] tool_call_started: turn=1 index=1 tool=spawn_agent callId=call_review",
@@ -5326,7 +5561,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
       );
       await utimes(path.join(rootDir, paddedAssetPath), editTime, editTime);
       await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
-      await writeFile(
+      await appendFile(
         path.join(rootDir, "logs/agent/agent.log"),
         [
           "[spark-agent:test] 2026-04-13T09:59:00.000Z [agent:test] tool_call_started: turn=1 index=1 tool=spawn_agent callId=call_review",
@@ -5450,7 +5685,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
         { encoding: "utf8" },
       );
       await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
-      await writeFile(
+      await appendFile(
         path.join(rootDir, "logs/agent/agent.log"),
         "tool=spawn_agent crop validation\n",
         { encoding: "utf8" },
@@ -5559,7 +5794,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
         { encoding: "utf8" },
       );
       await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
-      await writeFile(
+      await appendFile(
         path.join(rootDir, "logs/agent/agent.log"),
         "tool=spawn_agent crop validation\n",
         { encoding: "utf8" },

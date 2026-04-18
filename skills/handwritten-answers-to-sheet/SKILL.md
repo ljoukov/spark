@@ -22,6 +22,7 @@ Use this skill to capture student responses from handwritten work, completed wor
 - Capture what the student visibly selected or wrote before solving anything.
 - Preserve the student's variable names, formulas, notation, terminology, method choice, line breaks, and uncertain symbols as closely as possible.
 - For layout-sensitive working such as column arithmetic, binary addition, long multiplication/division, or carry/borrow rows, transcribe the actual visible rows and carry/borrow marks in words if they cannot be rendered faithfully in the answer value. Never collapse this evidence to a placeholder such as "working shown"; grading must be able to distinguish real working from a student merely writing that phrase.
+- Do not drop a visible prompt or partial response because it looks incomplete or because the learner's wording emphasized a subset of the page. Unless the learner explicitly named a restricted set of question numbers, include every visible answered, partially answered, selected, or blank answer-bearing item from the submitted work and score or flag the evidence honestly.
 - Keep source-fidelity over mathematical correctness. Do not normalize an incorrect expression into an equivalent correct one.
 - Mark unresolved ambiguity explicitly instead of guessing.
 - Ignore unrelated doodles, page clutter, and scribbles unless they clearly form part of an answer.
@@ -37,12 +38,13 @@ Use this skill to capture student responses from handwritten work, completed wor
 6. Use `supportingPaths` only for disambiguation-only context that is not itself a transcription target.
 7. In extraction instructions, require separate sections for student submissions, problem statements, and official solutions only for files actually sent to `documentPaths`; for deterministic reference files, record their paths and roles instead of copying their full contents.
 8. Write the transcription to the caller's requested output, normally `grader/output/transcription.md`.
-9. Always include a compact source audit section under the exact heading `## Source problem-statement transcription` when grading against a source paper, even if the source text came from deterministic PDF extraction rather than `extract_text`; record printed root stems, interstitial context needed for grading, subquestion prompts, table labels, figure labels, and MCQ option labels/text in source order.
+9. Always include a compact source audit section under the exact heading `## Source problem-statement transcription` when grading against a source paper, even if the source text came from deterministic PDF extraction rather than `extract_text`; record printed root stems, interstitial context needed for grading, subquestion prompts, table labels, figure labels, and MCQ option labels/text in source order. Also record every visible submitted-work item that is included or intentionally excluded; an exclusion needs an explicit source-based reason, not just "outside scope."
 10. After extraction, read the transcription file and perform one cleanup pass. Do not repeat the identical extraction call.
 11. For long source-paper or mark-scheme reference files, do not read the whole file into the conversation. Use `grep_workspace_files` for question labels/page headings first; its generated-reference matches include nearby context. Use `read_workspace_file` with `startLine`/`lineCount` only when that context is insufficient.
 12. Do not copy full question papers or full mark schemes into `grader/output/transcription.md`; keep compact student-answer capture plus the source audit section there and leave bulky official/reference text in the extracted reference files.
 13. Do not repeat unbounded `read_workspace_file` calls on the same extracted reference. Once an outline has been returned, use grep or exact line ranges.
 14. When `grader/output/transcription.md`, the needed official references, and `grader/output/sheet-plan.md` exist, proceed directly to `sheet.json`, `run-summary.json`, and `publish_sheet`. Avoid further broad searching or rereading unless a named mark point, source item, or publish error is missing.
+15. For any printed source paper, source photo, or PDF-derived worksheet content, call `validate_source_fidelity_with_fresh_agent` after writing `sheet.json` and before `publish_sheet`. Write the returned `reviewMarkdown` to `grader/output/source-fidelity-audit.md`, fix blocking omissions/paraphrases/visual issues, and re-audit the affected page or root question before publishing.
 
 ## Mixed Prompt And Answer Pages
 
@@ -135,6 +137,7 @@ After answer capture:
 When grading handwritten answers against an uploaded source paper:
 
 - include every assessed source item in source order, including blanks,
+- include visible partial responses and visible later questions even when the learner's prompt highlights earlier paragraphs/items. If the item is too incomplete to score confidently, keep the source prompt and captured evidence in the sheet and use a zero/partial/teacher-review note rather than deleting it.
 - for short uploaded problem sheets, preserve the full source prompt wording and source display math/layouts in the visible worksheet questions rather than using compact paraphrases,
 - for long exam papers, keep visible prompts compact enough for review while still preserving answer-critical source text, numbering, marks, and visuals,
 - preserve the source question number, marks, and a short faithful cue such as the command word, measured quantity, table row, or answer line,
