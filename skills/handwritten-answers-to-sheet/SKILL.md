@@ -42,7 +42,7 @@ Use this skill to capture student responses from handwritten work, completed wor
 10. After extraction, read the transcription file and perform one cleanup pass. Do not repeat the identical extraction call.
 11. For long source-paper or mark-scheme reference files, do not read the whole file into the conversation. Use `grep_workspace_files` for question labels/page headings first; its generated-reference matches include nearby context. Use `read_workspace_file` with `startLine`/`lineCount` only when that context is insufficient.
 12. Do not copy full question papers or full mark schemes into `grader/output/transcription.md`; keep compact student-answer capture plus the source audit section there and leave bulky official/reference text in the extracted reference files.
-13. Do not repeat unbounded `read_workspace_file` calls on the same extracted reference. Once an outline has been returned, use grep or exact line ranges.
+13. Do not repeat unbounded `read_workspace_file` calls on the same extracted reference. Once an outline or `content omitted` response has been returned, use grep or exact line ranges.
 14. When `grader/output/transcription.md`, the needed official references, and `grader/output/sheet-plan.md` exist, proceed directly to `sheet.json`, `run-summary.json`, and `publish_sheet`. Avoid further broad searching or rereading unless a named mark point, source item, or publish error is missing.
 15. For any printed source paper, source photo, or PDF-derived worksheet content, call `validate_source_fidelity_with_fresh_agent` after writing `sheet.json` and before `publish_sheet`. Write the returned `reviewMarkdown` to `grader/output/source-fidelity-audit.md`, fix blocking omissions/paraphrases/visual issues, and re-audit the affected page or root question before publishing.
 
@@ -147,7 +147,8 @@ When grading handwritten answers against an uploaded source paper:
 - for standalone one-part source questions, do not create a parent `group` with one child just to separate the prompt from the answer area; use a single mark-bearing leaf question with the full source prompt,
 - keep full problem/source transcription and official solution text in `references.*Markdown` rather than duplicating the entire paper into every prompt,
 - embed source-paper figures, maps, photos, and text/numeric tables when they are needed to understand the task, the student's answer, or the feedback,
-- use visible text such as `Use Figure 3 in the linked original PDF.` only when the source pixels are unavailable or a clean crop is not feasible after a bounded attempt,
+- for source-paper figures/tables in long PDFs, choose exact source pages from the extracted reference and call `pdf_to_images` with 1-based `pageNumbers`; if the tool only failed because `pageNumbers` were omitted, retry with page numbers instead of switching to a linked-PDF fallback,
+- use visible text such as `Use Figure 3 in the linked original PDF.` only when the source pixels are unavailable or a clean crop is not feasible after a real recorded render/crop attempt,
 - do not crop decorative or irrelevant exam layout, but do not replace answer-critical visuals with linked-PDF instructions merely to keep the report compact.
 
 ## Real-World Outcome Reporting

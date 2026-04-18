@@ -13163,7 +13163,7 @@ function buildAgentTools(options: {
     pdf_to_images: tool({
       description: [
         "Render pages from a workspace PDF into PNG images in the workspace.",
-        "Use this for agentic diagram extraction loops before calling crop_image. For long PDFs, pass pageNumbers for the exact pages needed; rendering every page is blocked.",
+        "Use this for agentic diagram extraction loops before calling crop_image. For long PDFs, pass 1-based pageNumbers for the exact pages needed, matching the extracted reference headings such as ## Page 3; rendering every page is blocked.",
       ].join("\n"),
       inputSchema: z
         .object({
@@ -13215,7 +13215,7 @@ function buildAgentTools(options: {
           (pageNumbers === undefined || pageNumbers.length === 0)
         ) {
           throw new Error(
-            `pdf_to_images requires pageNumbers for PDFs longer than 12 pages (pageCount=${pageCount.toString()}). Use extract_pdf_reference_text/grep first to choose the exact pages needed.`,
+            `pdf_to_images requires 1-based pageNumbers for PDFs longer than 12 pages (pageCount=${pageCount.toString()}). Use extract_pdf_reference_text/grep first to choose exact pages, then retry with pageNumbers, for example {"pageNumbers":[2,3,11]}.`,
           );
         }
         const requestedPages =
