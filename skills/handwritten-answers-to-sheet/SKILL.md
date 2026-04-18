@@ -128,8 +128,9 @@ After answer capture:
 - never omit per-question scores in a real grading run merely because a question is blank or uncertain; score blank/incorrect work as `got: 0` with the correct `total`,
 - do not exclude a source question, remove its marks, or call it ungradable solely because a public PDF omits a figure/map/photo or because an insert is missing. Spark is a private student study UI that can link to the original/source PDF. Preserve the student's response and grade against the official mark scheme when the response and mark points make assessment possible,
 - keep `review.message` as a short learning summary, not a duplicate of the numeric score,
-- write per-question worksheet review notes for unresolved/incorrect work as first tutor messages: start with a cue, contrast, or next step instead of simply revealing the final answer,
-- do not compress the mark scheme into unresolved feedback by naming the missing final concept, mechanism, data comparison, or answer path,
+- write per-question worksheet review notes for unresolved/incorrect work as short cues for the Spark-owned sheet response modal: identify the specific gap to close, acknowledge any useful partial thinking, and give the next repair step without revealing the final answer, model answer, mark scheme, or complete method,
+- include `replyPlaceholder` for unresolved/incorrect work when a focused response would help; make it an action prompt such as "Write the missing method steps in order." or "Set up the equation before calculating.",
+- do not compress the mark scheme into unresolved feedback by naming the missing final concept, mechanism, data comparison, or answer path; the note should set up the learner's next written response, not replace it,
 - correct/resolved questions may use empty review notes because completed feedback cards are hidden in the student UI.
 
 ## Compact Grading Report Shape

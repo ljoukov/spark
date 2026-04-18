@@ -5,25 +5,30 @@ import { z } from 'zod';
 import {
 	PaperSheetFeedbackAttachmentSchema,
 	SparkTutorSessionSchema,
-	type PaperSheetQuestion,
+	type PaperSheetContentSection,
 	type PaperSheetFeedbackAttachment,
-	type SparkGraderWorksheetReport
+	type PaperSheetQuestion,
+	type PaperSheetQuestionEntry,
+	type SparkGraderWorksheetReport,
+	type SparkTutorReviewState,
+	type SparkTutorReviewThread
 } from '@spark/schemas';
-import { upsertWorkspaceStorageLinkFileDoc } from '@spark/llm';
+import {
+	SPARK_CHAT_MODEL_ID,
+	SPARK_CHAT_THINKING_LEVEL,
+	generateJson,
+	type LlmContent,
+	type LlmContentPart
+} from '@spark/llm';
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
-import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken';
-import { uploadStorageObject } from '$lib/server/gcp/storageRest';
 import {
 	findWorksheetQuestionEntry,
 	safeParseGraderWorksheetReport
 } from '$lib/server/grader/problemReport';
 import { getGraderRun, getWorkspaceTextFile } from '$lib/server/grader/repo';
+import { rewritePaperSheetDataAssetTargets } from '$lib/server/grader/sheetAssets';
 import { detectSparkAttachmentContentType } from '$lib/server/spark/attachmentContentType';
 import { SPARK_ATTACHMENT_UNSUPPORTED_MESSAGE } from '$lib/spark/attachments';
-import {
-	TUTOR_FALLBACK_REVIEW_REPLY_MARKDOWN,
-	recoverTutorSessionIfStale
-} from '$lib/server/tutorSessions/recovery';
 import {
 	appendTutorReviewMessage,
 	buildInitialTutorReviewState,
@@ -38,18 +43,6 @@ import {
 	findTutorSessionForSheet,
 	patchTutorSession
 } from '$lib/server/tutorSessions/repo';
-import {
-	createTutorTurnAgentRun,
-	ensureWorkspaceDoc,
-	requireTutorServiceAccountJson
-} from '$lib/server/tutorSessions/service';
-import {
-	buildTutorQuestionAttachmentPath,
-	buildTutorQuestionTurnPath,
-	readTutorWorkspaceState,
-	seedTutorWorkspace,
-	writeTutorWorkspaceTextFile
-} from '$lib/server/tutorSessions/workspace';
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 const MAX_TOTAL_SIZE_BYTES = 50 * 1024 * 1024;
@@ -65,13 +58,19 @@ const requestSchema = z.object({
 	text: z.string().trim()
 });
 
+const closeGapResponseSchema = z.object({
+	replyMarkdown: z.string().trim().min(1),
+	status: z.enum(['open', 'resolved'])
+});
+
 type ParsedTurnRequest = z.infer<typeof requestSchema> & {
 	files: File[];
 };
 
-function stringifyJson(value: unknown): string {
-	return `${JSON.stringify(value, null, 2)}\n`;
-}
+type PreparedReplyAttachment = {
+	metadata: PaperSheetFeedbackAttachment;
+	inlinePart: LlmContentPart;
+};
 
 function isFileLike(value: FormDataEntryValue | null): value is File {
 	if (!value) {
@@ -114,76 +113,81 @@ function formatAttachmentList(attachments: PaperSheetFeedbackAttachment[]): stri
 	return attachments
 		.map(
 			(attachment) =>
-				`- ${attachment.filename} (${attachment.contentType}, ${attachment.sizeBytes.toString()} bytes)${attachment.filePath ? ` -> ${attachment.filePath}` : ''}`
+				`- ${attachment.filename} (${attachment.contentType}, ${attachment.sizeBytes.toString()} bytes)`
 		)
 		.join('\n');
 }
 
-function formatThreadMessages(
-	markdownByRole: Array<{
-		author: 'assistant' | 'student';
-		markdown: string;
-		attachments?: PaperSheetFeedbackAttachment[] | undefined;
-	}>
+function formatSegmentsWithBlanks(
+	segments: readonly string[],
+	blankCount: number,
+	placeholder = '_____'
 ): string {
-	return markdownByRole
-		.map((entry) =>
-			[
-				`${entry.author === 'assistant' ? 'Assistant' : 'Student'}:`,
-				entry.markdown.trim().length > 0 ? entry.markdown : '(no text)',
-				entry.attachments && entry.attachments.length > 0
-					? ['Attachments:', formatAttachmentList(entry.attachments)].join('\n')
-					: null
-			]
-				.filter((value) => value !== null)
-				.join('\n')
-		)
-		.join('\n\n');
+	const parts: string[] = [];
+	for (let index = 0; index < blankCount; index += 1) {
+		parts.push(segments[index] ?? '');
+		parts.push(placeholder);
+	}
+	parts.push(segments[segments.length - 1] ?? '');
+	return parts.join('');
 }
 
 function formatQuestionShape(question: PaperSheetQuestion): string {
 	switch (question.type) {
-		case 'answer_bank':
+		case 'answer_bank': {
+			const options = question.options
+				.map((option) => `${option.label ? `(${option.label}) ` : ''}${option.text}`)
+				.join(' | ');
 			return [
-				'Question type: answer-bank blanks.',
-				`Segment count: ${question.segments.length.toString()}`,
-				`Blank count: ${question.blanks.length.toString()}`,
-				`Options: ${question.options.map((option) => `${option.label ? `(${option.label}) ` : ''}${option.text}`).join(' | ')}`,
+				'Question type: answer-bank blanks',
+				`Question text: ${formatSegmentsWithBlanks(question.segments, question.blanks.length)}`,
+				`Options shown to student: ${options}`,
 				`Option reuse allowed: ${question.allowReuse === true ? 'yes' : 'no'}`
 			].join('\n');
+		}
 		case 'fill':
 			return [
-				'Question type: fill-in-the-blank.',
-				`Prompt before blank(s): ${question.prompt}`,
-				`Blank count: ${question.blanks.length.toString()}`,
+				'Question type: fill-in-the-blank',
+				`Question text: ${[
+					question.prompt,
+					...question.blanks.map((blank) => blank.placeholder ?? '_____'),
+					question.after
+				]
+					.filter((part) => part.trim().length > 0)
+					.join(question.conjunction ? ` ${question.conjunction} ` : ' ')}`,
 				...(question.conjunction ? [`Text between blanks: ${question.conjunction}`] : []),
-				`Text after blank(s): ${question.after}`
+				`Blank count: ${question.blanks.length.toString()}`
 			].join('\n');
-		case 'cloze':
+		case 'cloze': {
+			const wordBank =
+				question.wordBank && question.wordBank.length > 0
+					? `Word bank shown to student: ${question.wordBank.join(' | ')}`
+					: null;
 			return [
-				'Question type: multi-blank cloze.',
-				`Segment count: ${question.segments.length.toString()}`,
+				'Question type: multi-blank cloze',
+				`Question text: ${formatSegmentsWithBlanks(question.segments, question.blanks.length)}`,
 				`Blank count: ${question.blanks.length.toString()}`,
-				...(question.wordBank && question.wordBank.length > 0
-					? [`Word bank: ${question.wordBank.join(' | ')}`]
-					: [])
-			].join('\n');
+				wordBank
+			]
+				.filter((part): part is string => part !== null)
+				.join('\n');
+		}
 		case 'mcq':
 			return [
-				'Question type: multiple choice.',
+				'Question type: multiple choice',
 				`Prompt: ${question.prompt}`,
 				`Display mode: ${question.displayMode}`,
 				`Options: ${question.options.map((option) => `${option.label ? `(${option.label}) ` : ''}${option.text}`).join(' | ')}`
 			].join('\n');
 		case 'lines':
 			return [
-				'Question type: open written response.',
+				'Question type: open written response',
 				`Prompt: ${question.prompt}`,
 				`Writing lines shown on the worksheet: ${question.lines.toString()}`
 			].join('\n');
 		case 'calc':
 			return [
-				'Question type: calculation / short numeric response.',
+				'Question type: calculation / short numeric response',
 				`Prompt: ${question.prompt}`,
 				...(question.hint ? [`Hint on worksheet: ${question.hint}`] : []),
 				`Input label: ${question.inputLabel}`,
@@ -191,29 +195,43 @@ function formatQuestionShape(question: PaperSheetQuestion): string {
 			].join('\n');
 		case 'match':
 			return [
-				'Question type: matching.',
+				'Question type: matching',
 				`Prompt: ${question.prompt}`,
-				`Pairs to match: ${question.pairs.map((pair) => `${pair.term} -> ${pair.match}`).join(' | ')}`
+				`Terms shown to student: ${question.pairs.map((pair) => pair.term).join(' | ')}`,
+				`Match options shown to student: ${question.pairs.map((pair) => pair.match).join(' | ')}`
 			].join('\n');
 		case 'spelling':
 			return [
-				'Question type: spelling correction.',
+				'Question type: spelling correction',
 				`Prompt: ${question.prompt}`,
 				`Words shown on worksheet: ${question.words.map((word) => word.wrong).join(' | ')}`
 			].join('\n');
-		case 'flow':
+		case 'flow': {
+			const boxesById = new Map(question.boxes.map((box) => [box.id, box]));
+			const rows = question.rows
+				.map((row) =>
+					row.items
+						.map((item) => {
+							if (item.type === 'operation') {
+								return item.label;
+							}
+							const box = boxesById.get(item.boxId);
+							if (!box) {
+								return '[blank]';
+							}
+							if (box.readonly === true && box.initialValue) {
+								return box.initialValue;
+							}
+							return `[blank${box.placeholder ? `: ${box.placeholder}` : ''}]`;
+						})
+						.join(' -> ')
+				)
+				.join('\n');
 			return [
-				'Question type: flow chart.',
+				'Question type: flow chart',
 				`Prompt: ${question.prompt}`,
-				`Rows: ${question.rows
-					.map((row) =>
-						row.items
-							.map((item) =>
-								item.type === 'box' ? `[box:${item.boxId}]` : `[op:${item.label}]`
-							)
-							.join(' ')
-					)
-					.join(' || ')}`,
+				'Rows shown to student:',
+				rows,
 				...(question.connectors && question.connectors.length > 0
 					? [
 							`Vertical connectors: ${question.connectors
@@ -225,7 +243,66 @@ function formatQuestionShape(question: PaperSheetQuestion): string {
 						]
 					: [])
 			].join('\n');
+		}
 	}
+}
+
+function combineQuestionPrompts(parts: Array<string | null | undefined>): string {
+	return parts
+		.map((part) => part?.trim() ?? '')
+		.filter((part) => part.length > 0)
+		.join('\n\n');
+}
+
+function findQuestionPromptInEntries(options: {
+	entries: readonly PaperSheetQuestionEntry[] | undefined;
+	questionId: string;
+	parentPrompt: string | null;
+}): string | null {
+	for (const entry of options.entries ?? []) {
+		if (entry.type === 'group') {
+			const result = findQuestionPromptInEntries({
+				entries: entry.questions,
+				questionId: options.questionId,
+				parentPrompt: combineQuestionPrompts([options.parentPrompt, entry.prompt]) || null
+			});
+			if (result) {
+				return result;
+			}
+			continue;
+		}
+		if (entry.id !== options.questionId) {
+			continue;
+		}
+		return combineQuestionPrompts([options.parentPrompt, formatQuestionShape(entry)]);
+	}
+	return null;
+}
+
+function isContentSection(
+	section: SparkGraderWorksheetReport['sheet']['sections'][number]
+): section is PaperSheetContentSection {
+	return 'id' in section;
+}
+
+function formatSelectedQuestionPrompt(
+	report: SparkGraderWorksheetReport,
+	questionId: string
+): string {
+	for (const section of report.sheet.sections) {
+		if (!isContentSection(section)) {
+			continue;
+		}
+		const prompt = findQuestionPromptInEntries({
+			entries: section.questions,
+			questionId,
+			parentPrompt: null
+		});
+		if (prompt) {
+			return prompt;
+		}
+	}
+	return '(missing question text)';
 }
 
 function formatRecordedAnswer(report: SparkGraderWorksheetReport, questionId: string): string {
@@ -241,18 +318,90 @@ function formatRecordedAnswer(report: SparkGraderWorksheetReport, questionId: st
 		.join('\n');
 }
 
-async function persistReplyAttachments(options: {
-	serviceAccountJson: string;
-	userId: string;
-	workspaceId: string;
-	questionId: string;
-	files: File[];
-	now: Date;
-}): Promise<PaperSheetFeedbackAttachment[]> {
-	if (options.files.length === 0) {
+function truncateText(value: string, maxChars: number): string {
+	if (value.length <= maxChars) {
+		return value;
+	}
+	return `${value.slice(0, maxChars).trimEnd()}\n...`;
+}
+
+function buildReferenceLabels(entry: ReturnType<typeof findWorksheetQuestionEntry>): string[] {
+	if (!entry) {
 		return [];
 	}
-	if (options.files.length > MAX_FILES_PER_REPLY) {
+	const labels = [
+		entry.question.id,
+		entry.number.toString(),
+		`Question ${entry.number.toString()}`
+	];
+	if ('displayNumber' in entry.question && entry.question.displayNumber) {
+		labels.push(entry.question.displayNumber);
+		labels.push(`Question ${entry.question.displayNumber}`);
+	}
+	return [...new Set(labels.map((label) => label.trim()).filter((label) => label.length > 0))];
+}
+
+function extractReferenceSnippet(options: {
+	text: string | undefined;
+	labels: readonly string[];
+	maxChars: number;
+}): string | null {
+	const text = options.text?.trim();
+	if (!text) {
+		return null;
+	}
+	const labels = options.labels.map((label) => label.toLowerCase());
+	const lines = text.split(/\r?\n/u);
+	const matchIndex = lines.findIndex((line) => {
+		const lower = line.toLowerCase();
+		return labels.some((label) => lower.includes(label));
+	});
+	if (matchIndex === -1) {
+		return null;
+	}
+	const start = Math.max(0, matchIndex - 6);
+	const end = Math.min(lines.length, matchIndex + 24);
+	return truncateText(lines.slice(start, end).join('\n').trim(), options.maxChars);
+}
+
+function buildPrivateReferenceContext(options: {
+	report: SparkGraderWorksheetReport;
+	entry: ReturnType<typeof findWorksheetQuestionEntry>;
+}): string {
+	const labels = buildReferenceLabels(options.entry);
+	const questionReview = options.entry
+		? options.report.review.questions[options.entry.question.id]
+		: null;
+	const parts: string[] = [];
+	if (questionReview?.followUp?.trim()) {
+		parts.push(`Question-specific grader note:\n${questionReview.followUp.trim()}`);
+	}
+	const officialSolution = extractReferenceSnippet({
+		text: options.report.references?.officialSolutionMarkdown,
+		labels,
+		maxChars: 2200
+	});
+	if (officialSolution) {
+		parts.push(`Private official-solution excerpt:\n${officialSolution}`);
+	}
+	const grading = extractReferenceSnippet({
+		text: options.report.references?.gradingMarkdown,
+		labels,
+		maxChars: 2200
+	});
+	if (grading) {
+		parts.push(`Private grading excerpt:\n${grading}`);
+	}
+	return parts.length > 0
+		? parts.join('\n\n')
+		: 'No focused private answer reference was supplied. Solve only from the visible problem, the submitted answer, and the review note.';
+}
+
+async function prepareReplyAttachments(files: File[]): Promise<PreparedReplyAttachment[]> {
+	if (files.length === 0) {
+		return [];
+	}
+	if (files.length > MAX_FILES_PER_REPLY) {
 		throw new z.ZodError([
 			{
 				code: 'custom',
@@ -263,10 +412,9 @@ async function persistReplyAttachments(options: {
 	}
 
 	let totalSizeBytes = 0;
-	const bucketName = `${parseGoogleServiceAccountJson(options.serviceAccountJson).projectId}.firebasestorage.app`;
-	const attachments: PaperSheetFeedbackAttachment[] = [];
+	const attachments: PreparedReplyAttachment[] = [];
 
-	for (const [index, file] of options.files.entries()) {
+	for (const [index, file] of files.entries()) {
 		if (typeof file.size === 'number' && file.size > MAX_FILE_SIZE_BYTES) {
 			throw new z.ZodError([
 				{
@@ -324,60 +472,27 @@ async function persistReplyAttachments(options: {
 		}
 
 		const fileId = createHash('md5').update(buffer).digest('hex');
-		const storagePath = `spark/uploads/${options.userId}/${fileId}`;
-		const filePath = buildTutorQuestionAttachmentPath({
-			questionId: options.questionId,
-			fileId,
-			filename: file.name || 'upload',
-			now: options.now,
-			index
-		});
-
-		await uploadStorageObject({
-			serviceAccountJson: options.serviceAccountJson,
-			bucketName,
-			objectName: storagePath,
-			contentType,
-			data: buffer,
-			onlyIfMissing: true
-		});
-		await upsertWorkspaceStorageLinkFileDoc({
-			serviceAccountJson: options.serviceAccountJson,
-			userId: options.userId,
-			workspaceId: options.workspaceId,
-			filePath,
-			storagePath,
-			contentType,
-			sizeBytes: buffer.byteLength,
-			createdAt: options.now,
-			updatedAt: options.now
-		});
-
-		attachments.push(
-			PaperSheetFeedbackAttachmentSchema.parse({
+		attachments.push({
+			metadata: PaperSheetFeedbackAttachmentSchema.parse({
 				id: fileId,
 				filename: file.name || 'upload',
 				contentType,
-				sizeBytes: buffer.byteLength,
-				filePath
-			})
-		);
+				sizeBytes: buffer.byteLength
+			}),
+			inlinePart: {
+				type: 'inlineData',
+				data: Buffer.from(buffer).toString('base64'),
+				mimeType: contentType
+			}
+		});
 	}
 
 	return attachments;
 }
 
-function buildSheetReplyPrompt(options: {
+function buildCloseGapSystemPrompt(options: {
 	report: SparkGraderWorksheetReport;
 	questionId: string;
-	threadMessages: Array<{
-		author: 'assistant' | 'student';
-		markdown: string;
-		attachments?: PaperSheetFeedbackAttachment[] | undefined;
-	}>;
-	studentReplyMarkdown: string;
-	studentAttachments: PaperSheetFeedbackAttachment[];
-	studentTurnFilePath: string;
 }): string {
 	const entry = findWorksheetQuestionEntry(options.report.sheet, options.questionId);
 	if (!entry) {
@@ -385,70 +500,166 @@ function buildSheetReplyPrompt(options: {
 	}
 
 	const questionReview = options.report.review.questions[options.questionId];
-	const references = options.report.references ?? {};
+	const selectedQuestionPrompt = formatSelectedQuestionPrompt(options.report, options.questionId);
+	const score = questionReview?.score
+		? `${questionReview.score.got.toString()}/${questionReview.score.total.toString()} marks`
+		: questionReview?.label ?? '(not scored)';
 
 	return [
-		'You are replying inside Spark\'s sheet feedback workflow.',
-		'Focus only on the selected worksheet question.',
-		'The student is looking at the worksheet question, their recorded answer, the grading note, and the interactive feedback thread on the same card.',
-		'The student has already written their new reply into the workspace file listed below.',
-		'If the latest student turn includes uploaded images or documents, inspect those workspace files before you answer.',
-		'That workspace history is append-only. Do not ask to delete or rewrite prior files.',
-		'Use `wait_for_student_input` if the question still needs another revision.',
-		'Use `complete_tutor_session` only if this question is now satisfied.',
-		'Keep the reply concise, specific, and student-facing.',
+		'You are Spark\'s focused close-the-gap tutor for one worksheet problem.',
+		'This is a normal chat turn, not a multi-question worksheet review workflow.',
+		'Help the student repair the gap by writing the missing reasoning themselves.',
+		'Use one concise cue or guiding question at a time. Do not call it a stepping stone.',
+		'Do not reveal the model answer, mark scheme, official solution, or final corrected answer by default.',
+		'If the student directly asks for the answer, first try a targeted cue unless they have already made a reasonable attempt or the answer is needed to unblock them.',
+		'If you reveal a final/model answer later, make it brief and explain why it follows from the student\'s own work.',
 		'Start by acknowledging the most sensible part of the latest attempt before naming the exact remaining gap.',
-		'Prefer a rule of thumb, contrast, cue, or small next step before giving away the full answer.',
-		'',
-		'Workspace structure:',
-		'- `context/report.json`: full worksheet artifact, including sheet structure, recorded answers, review notes, and references.',
-		'- `state/review.json`: current per-question thread state for the whole sheet.',
-		`- \`feedback/questions/${options.questionId}/question.json\`: metadata for the selected worksheet question.`,
-		`- \`feedback/questions/${options.questionId}/turns/*.json\`: append-only student/assistant turn history for this question.`,
-		`- \`feedback/questions/${options.questionId}/uploads/*\`: uploaded student files for this question thread.`,
-		`- \`${options.studentTurnFilePath}\`: the latest student reply for this turn.`,
+		'Keep the reply student-facing, specific, and short.',
+		'Set status to "resolved" only when the latest student response closes the gap for this selected question. Otherwise set status to "open".',
 		'',
 		`Worksheet: ${options.report.sheet.title}`,
 		`Section: ${entry.section.label}`,
 		`Question number: ${entry.number.toString()}`,
-		`Marks: ${entry.question.marks.toString()}`,
-		formatQuestionShape(entry.question),
+		`Marks available: ${entry.question.marks.toString()}`,
+		`Current score: ${score}`,
 		'',
-		'Recorded worksheet answer:',
+		'Problem shown to the student:',
+		selectedQuestionPrompt,
+		'',
+		'Student\'s submitted worksheet answer:',
 		formatRecordedAnswer(options.report, options.questionId),
 		'',
-		'Initial feedback note on this question:',
+		'Inline review note shown before this chat:',
 		questionReview?.note ?? '(missing)',
 		'',
-		'Interactive thread so far:',
-		formatThreadMessages(options.threadMessages),
-		'',
-		`Latest student response file: ${options.studentTurnFilePath}`,
-		'Latest student response content:',
-		options.studentReplyMarkdown.trim().length > 0 ? options.studentReplyMarkdown : '(no text)',
-		'',
-		'Latest student attachments:',
-		options.studentAttachments.length > 0
-			? formatAttachmentList(options.studentAttachments)
-			: '(none)',
-		'',
-		'Whole-sheet marking notes:',
-		references.gradingMarkdown ?? '(missing)',
-		'',
-		'Overall sheet feedback:',
-		references.overallFeedbackMarkdown ?? '(missing)',
-		'',
-		'Reference problem text:',
-		references.officialProblemMarkdown ?? references.problemMarkdown ?? '(missing)',
-		'',
-		'Reference solution:',
-		references.officialSolutionMarkdown ?? '(missing)',
-		'',
-		'Tool reminder:',
-		'- `wait_for_student_input`: append your reply and leave the question open.',
-		'- `complete_tutor_session`: append your reply and resolve the question.',
-		'- Then immediately call `done` with a short summary.'
+		'Private answer/checking context. Use this only to keep your guidance correct; do not paste it into the first reply or reveal it by default:',
+		buildPrivateReferenceContext({
+			report: options.report,
+			entry
+		})
 	].join('\n');
+}
+
+function buildCloseGapContents(options: {
+	systemPrompt: string;
+	thread: SparkTutorReviewThread;
+	latestAttachmentParts: LlmContentPart[];
+}): LlmContent[] {
+	const contents: LlmContent[] = [
+		{
+			role: 'system',
+			parts: [{ type: 'text', text: options.systemPrompt }]
+		}
+	];
+	const latestStudentIndex = options.thread.messages.findLastIndex(
+		(message) => message.author === 'student'
+	);
+
+	for (const [index, message] of options.thread.messages.entries()) {
+		const attachmentNote =
+			message.attachments && message.attachments.length > 0
+				? `\n\nAttachments:\n${formatAttachmentList(message.attachments)}`
+				: '';
+		const text =
+			message.markdown.trim().length > 0
+				? `${message.markdown.trim()}${attachmentNote}`
+				: `(no text)${attachmentNote}`;
+		const parts: LlmContentPart[] = [{ type: 'text', text }];
+		if (index === latestStudentIndex) {
+			parts.push(...options.latestAttachmentParts);
+		}
+		contents.push({
+			role: message.author === 'assistant' ? 'model' : 'user',
+			parts
+		});
+	}
+
+	return contents;
+}
+
+function buildSessionSource(options: {
+	report: SparkGraderWorksheetReport;
+	runId: string;
+}): z.infer<typeof SparkTutorSessionSchema>['source'] {
+	return {
+		kind: 'sheet',
+		runId: options.runId,
+		sheetTitle: options.report.sheet.title,
+		...(typeof options.report.review.score.got === 'number'
+			? { awardedMarks: options.report.review.score.got }
+			: {}),
+		...(typeof options.report.review.score.total === 'number'
+			? { maxMarks: options.report.review.score.total }
+			: {})
+	};
+}
+
+async function persistReviewState(options: {
+	userId: string;
+	sessionId: string;
+	sessionExists: boolean;
+	runId: string;
+	report: SparkGraderWorksheetReport;
+	reviewState: SparkTutorReviewState;
+	status: z.infer<typeof SparkTutorSessionSchema>['status'];
+	now: Date;
+	activeTurnQuestionId?: string;
+	error?: string;
+}): Promise<void> {
+	const summary = summarizeTutorReviewState(options.reviewState);
+	const focusLabel = buildTutorReviewFocusLabel(options.reviewState);
+	const updates: Record<string, unknown> = {
+		status: options.status,
+		updatedAt: options.now,
+		preview: buildTutorReviewPreview(options.reviewState),
+		reviewState: options.reviewState
+	};
+	if (focusLabel) {
+		updates.focusLabel = focusLabel;
+	}
+	if (options.activeTurnQuestionId) {
+		updates.activeTurnQuestionId = options.activeTurnQuestionId;
+	}
+	if (options.error) {
+		updates.error = options.error;
+	}
+	if (options.status === 'completed' || summary.allResolved) {
+		updates.completedAt = options.now;
+	}
+
+	if (!options.sessionExists) {
+		await createTutorSession(
+			options.userId,
+			SparkTutorSessionSchema.parse({
+				id: options.sessionId,
+				workspaceId: `close-gap-${options.sessionId}`,
+				status: options.status,
+				source: buildSessionSource({
+					report: options.report,
+					runId: options.runId
+				}),
+				title: `${options.report.sheet.title} feedback`,
+				...updates,
+				createdAt: options.now
+			})
+		);
+		return;
+	}
+
+	const deletes = ['activeTurnAgentId'];
+	if (!options.activeTurnQuestionId) {
+		deletes.push('activeTurnQuestionId');
+	}
+	if (!focusLabel) {
+		deletes.push('focusLabel');
+	}
+	if (!options.error) {
+		deletes.push('error');
+	}
+	if (options.status !== 'completed' && !summary.allResolved) {
+		deletes.push('completedAt');
+	}
+	await patchTutorSession(options.userId, options.sessionId, updates, deletes);
 }
 
 export const POST: RequestHandler = async ({ request, params }) => {
@@ -500,120 +711,54 @@ export const POST: RequestHandler = async ({ request, params }) => {
 		return json({ error: 'sheet_invalid' }, { status: 500 });
 	}
 
-	const serviceAccountJson = requireTutorServiceAccountJson();
-	let session = await findTutorSessionForSheet({
-		userId,
-		runId: run.id
-	});
-
-	const now = new Date();
-	if (!session) {
-		const sessionId = randomUUID();
-		const workspaceId = randomUUID();
-		const reviewState = buildInitialTutorReviewState({
-			report,
-			now
-		});
-		const reviewSummary = summarizeTutorReviewState(reviewState);
-		session = SparkTutorSessionSchema.parse({
-			id: sessionId,
-			workspaceId,
-			status: reviewSummary.allResolved ? 'completed' : 'awaiting_student',
-			source: {
-				kind: 'sheet',
-				runId: run.id,
-				sheetTitle: report.sheet.title,
-				...(typeof run.totals?.awardedMarks === 'number'
-					? { awardedMarks: run.totals.awardedMarks }
-					: {}),
-				...(typeof run.totals?.maxMarks === 'number' ? { maxMarks: run.totals.maxMarks } : {})
-			},
-			title: `${report.sheet.title} feedback`,
-			preview: buildTutorReviewPreview(reviewState),
-			...(buildTutorReviewFocusLabel(reviewState)
-				? { focusLabel: buildTutorReviewFocusLabel(reviewState) }
-				: {}),
-			createdAt: now,
-			updatedAt: now,
-			...(reviewSummary.allResolved ? { completedAt: now } : {})
-		});
-
-		await ensureWorkspaceDoc({
-			userId,
-			workspaceId,
-			sessionId,
-			now
-		});
-		await createTutorSession(userId, session);
-		await seedTutorWorkspace({
-			serviceAccountJson,
-			userId,
-			workspaceId,
-			session,
-			report,
-			now
-		});
-	}
-
-	let workspace = await readTutorWorkspaceState({
-		serviceAccountJson,
-		userId,
-		workspaceId: session.workspaceId,
-		session
-	});
-	const recovered = await recoverTutorSessionIfStale({
-		serviceAccountJson,
-		userId,
-		session,
-		reviewState: workspace.reviewState
-	});
-	if (recovered) {
-		session = recovered.session;
-		workspace = {
-			...workspace,
-			screenState: recovered.screenState,
-			composerState: recovered.composerState,
-			reviewState: recovered.reviewState
-		};
-	}
-
-	if (session.status === 'responding') {
-		return json({ error: 'sheet_busy' }, { status: 409 });
-	}
-
-	const currentThread = findTutorReviewThread(workspace.reviewState, parsedBody.questionId);
-	if (!currentThread) {
-		return json({ error: 'question_not_found' }, { status: 404 });
-	}
-
-	const createdAt = now.toISOString();
-	const studentTurnFilePath = buildTutorQuestionTurnPath({
-		questionId: parsedBody.questionId,
-		author: 'student',
-		now
-	});
-	let studentAttachments: PaperSheetFeedbackAttachment[];
+	let preparedAttachments: PreparedReplyAttachment[];
 	try {
-		studentAttachments = await persistReplyAttachments({
-			serviceAccountJson,
-			userId,
-			workspaceId: session.workspaceId,
-			questionId: parsedBody.questionId,
-			files: parsedBody.files,
-			now
-		});
+		preparedAttachments = await prepareReplyAttachments(parsedBody.files);
 	} catch (error) {
 		if (error instanceof z.ZodError) {
 			return json({ error: 'invalid_request', issues: error.issues }, { status: 400 });
 		}
-		console.error('Failed to persist sheet reply attachments', {
+		console.error('Failed to prepare sheet reply attachments', {
 			error,
 			userId,
 			sheetId: parsedParams.sheetId,
 			questionId: parsedBody.questionId
 		});
-		return json({ error: 'attachment_upload_failed' }, { status: 500 });
+		return json({ error: 'attachment_prepare_failed' }, { status: 500 });
 	}
+
+	const session = await findTutorSessionForSheet({
+		userId,
+		runId: run.id
+	});
+	if (session?.status === 'responding') {
+		return json({ error: 'sheet_busy' }, { status: 409 });
+	}
+
+	const now = new Date();
+	const sessionId = session?.id ?? randomUUID();
+	const baseReviewState =
+		session?.reviewState ??
+		(() => {
+			const initialState = buildInitialTutorReviewState({
+				report,
+				now
+			});
+			return {
+				...initialState,
+				sheet: rewritePaperSheetDataAssetTargets({
+					sheetId: run.id,
+					sheet: initialState.sheet
+				})
+			};
+		})();
+	const currentThread = findTutorReviewThread(baseReviewState, parsedBody.questionId);
+	if (!currentThread) {
+		return json({ error: 'question_not_found' }, { status: 404 });
+	}
+
+	const createdAt = now.toISOString();
+	const studentAttachments = preparedAttachments.map((attachment) => attachment.metadata);
 	const respondingThread = appendTutorReviewMessage({
 		thread: currentThread,
 		author: 'student',
@@ -623,131 +768,100 @@ export const POST: RequestHandler = async ({ request, params }) => {
 		status: 'responding'
 	});
 	const respondingReviewState = updateTutorReviewThread({
-		reviewState: workspace.reviewState,
+		reviewState: baseReviewState,
 		thread: respondingThread,
 		now
 	});
-	const respondingPreview = buildTutorReviewPreview(respondingReviewState);
-	const respondingFocus = buildTutorReviewFocusLabel(respondingReviewState);
 
-	await Promise.all([
-		writeTutorWorkspaceTextFile({
-			serviceAccountJson,
-			userId,
-			workspaceId: session.workspaceId,
-			filePath: studentTurnFilePath,
-			content: stringifyJson({
-				author: 'student',
-				markdown: parsedBody.text,
-				attachments: studentAttachments,
-				createdAt
-			}),
-			now
-		}),
-		writeTutorWorkspaceTextFile({
-			serviceAccountJson,
-			userId,
-			workspaceId: session.workspaceId,
-			filePath: 'state/review.json',
-			content: stringifyJson(respondingReviewState),
-			now
-		}),
-		patchTutorSession(userId, session.id, {
-			status: 'responding',
-			updatedAt: now,
-			preview: respondingPreview,
-			focusLabel: respondingFocus ?? null,
-			error: null
-		})
-	]);
-
-	const prompt = buildSheetReplyPrompt({
+	await persistReviewState({
+		userId,
+		sessionId,
+		sessionExists: session !== null,
+		runId: run.id,
 		report,
-		questionId: parsedBody.questionId,
-		threadMessages: respondingThread.messages.map((message) => ({
-			author: message.author,
-			markdown: message.markdown,
-			attachments: message.attachments
-		})),
-		studentReplyMarkdown: parsedBody.text,
-		studentAttachments,
-		studentTurnFilePath
+		reviewState: respondingReviewState,
+		status: 'responding',
+		now,
+		activeTurnQuestionId: parsedBody.questionId
 	});
-	const agentId = randomUUID();
+
+	const systemPrompt = buildCloseGapSystemPrompt({
+		report,
+		questionId: parsedBody.questionId
+	});
 
 	try {
-		await createTutorTurnAgentRun({
-			userId,
-			agentId,
-			workspaceId: session.workspaceId,
-			sessionId: session.id,
-			prompt,
-			title: `${report.sheet.title} feedback`,
-			action: 'reply',
-			now,
-			questionId: parsedBody.questionId,
-			turnFilePath: studentTurnFilePath,
-			studentText: parsedBody.text
+		const response = await generateJson({
+			modelId: SPARK_CHAT_MODEL_ID,
+			thinkingLevel: SPARK_CHAT_THINKING_LEVEL,
+			openAiSchemaName: 'spark_close_gap_response',
+			schema: closeGapResponseSchema,
+			contents: buildCloseGapContents({
+				systemPrompt,
+				thread: respondingThread,
+				latestAttachmentParts: preparedAttachments.map((attachment) => attachment.inlinePart)
+			})
 		});
-		await patchTutorSession(
-			userId,
-			session.id,
-			{
-				activeTurnAgentId: agentId,
-				activeTurnQuestionId: parsedBody.questionId,
-				updatedAt: new Date()
-			},
-			['error']
-		).catch((error) => {
-			console.warn('Unable to persist active tutor turn metadata', {
-				error,
-				userId,
-				sessionId: session.id,
-				agentId
-			});
-		});
-	} catch (error) {
-		const recoveredThread = appendTutorReviewMessage({
+
+		const completedAt = new Date();
+		const assistantThread = appendTutorReviewMessage({
 			thread: respondingThread,
 			author: 'assistant',
-			markdown: TUTOR_FALLBACK_REVIEW_REPLY_MARKDOWN,
-			createdAt: new Date().toISOString(),
-			status: 'open'
+			markdown: response.replyMarkdown,
+			createdAt: completedAt.toISOString(),
+			status: response.status === 'resolved' ? 'resolved' : 'open',
+			...(response.status === 'resolved' ? { resolvedAt: completedAt.toISOString() } : {})
 		});
-		const recoveredReviewState = updateTutorReviewThread({
-			reviewState: workspace.reviewState,
-			thread: recoveredThread,
-			now: new Date()
+		const finalReviewState = updateTutorReviewThread({
+			reviewState: respondingReviewState,
+			thread: assistantThread,
+			now: completedAt
 		});
-		await Promise.all([
-			writeTutorWorkspaceTextFile({
-				serviceAccountJson,
-				userId,
-				workspaceId: session.workspaceId,
-				filePath: 'state/review.json',
-				content: stringifyJson(recoveredReviewState),
-				now: new Date()
-			}),
-			patchTutorSession(userId, session.id, {
-				status: 'awaiting_student',
-				updatedAt: new Date(),
-				preview: buildTutorReviewPreview(recoveredReviewState),
-				focusLabel: buildTutorReviewFocusLabel(recoveredReviewState) ?? null,
-				error:
-					error instanceof Error && error.message.trim().length > 0
-						? error.message.trim()
-						: 'Unable to start worksheet feedback.'
-			}, ['activeTurnAgentId', 'activeTurnQuestionId'])
-		]);
-		return json({ error: 'reply_launch_failed' }, { status: 500 });
-	}
+		const summary = summarizeTutorReviewState(finalReviewState);
+		await persistReviewState({
+			userId,
+			sessionId,
+			sessionExists: true,
+			runId: run.id,
+			report,
+			reviewState: finalReviewState,
+			status: summary.allResolved ? 'completed' : 'awaiting_student',
+			now: completedAt
+		});
 
-	return json(
-		{
+		return json({
 			ok: true,
-			sessionId: session.id,
-			workspaceId: session.workspaceId
-		},
-		{ status: 202 }
-	);
+			sessionId,
+			reviewState: finalReviewState
+		});
+	} catch (error) {
+		console.error('Failed to generate close-gap sheet reply', {
+			error,
+			userId,
+			sheetId: parsedParams.sheetId,
+			questionId: parsedBody.questionId
+		});
+		const failedAt = new Date();
+		const failedThread = {
+			...respondingThread,
+			status: 'open' as const
+		};
+		const failedReviewState = updateTutorReviewThread({
+			reviewState: respondingReviewState,
+			thread: failedThread,
+			now: failedAt
+		});
+		await persistReviewState({
+			userId,
+			sessionId,
+			sessionExists: true,
+			runId: run.id,
+			report,
+			reviewState: failedReviewState,
+			status: 'awaiting_student',
+			now: failedAt,
+			error: 'Unable to generate worksheet feedback right now.'
+		});
+		return json({ error: 'reply_generation_failed' }, { status: 500 });
+	}
 };

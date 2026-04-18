@@ -11,7 +11,7 @@
 		PaperSheetAnswers,
 		PaperSheetFeedbackAttachment,
 		PaperSheetFeedbackThread,
-		SparkAgentRunStream,
+		PaperSheetQuestion,
 		SparkGraderWorksheetReport,
 		SparkSheetPageState,
 		SparkSolveSheetDraft,
@@ -20,7 +20,6 @@
 	} from '@spark/schemas';
 	import {
 		applyPaperSheetSubjectTheme,
-		SparkAgentRunStreamSchema,
 		SparkGraderRunSchema,
 		SparkSheetPageStateSchema,
 		SparkAgentWorkspaceFileSchema,
@@ -34,6 +33,7 @@
 	import { getAuth, onIdTokenChanged } from 'firebase/auth';
 	import { getContext, onMount, untrack } from 'svelte';
 	import { fromStore, type Readable } from 'svelte/store';
+	import CloseGapResponseModal from '$lib/components/spark/sheets/CloseGapResponseModal.svelte';
 
 	import type { PageData } from './$types';
 
@@ -59,6 +59,22 @@
 		text: string;
 		tone: QuestionScoreTone | null;
 	};
+	type CloseGapMessage = {
+		id: string;
+		author: 'assistant' | 'student';
+		markdown: string;
+		attachments?: PaperSheetFeedbackAttachment[];
+	};
+	type CloseGapQuestionContext = {
+		questionId: string;
+		questionLabel: string;
+		questionPrompt: string;
+		studentAnswer: string;
+		reviewNote: string;
+		replyPlaceholder: string;
+		messages: CloseGapMessage[];
+		resolved: boolean;
+	};
 
 	const userStore = getContext<Readable<ClientUser> | undefined>('spark:user');
 	const userSnapshot = userStore ? fromStore(userStore) : null;
@@ -72,8 +88,6 @@
 		() => data.interaction?.reviewState ?? data.initialReviewState ?? null
 	);
 	const initialInteractionSessionId = untrack(() => data.interaction?.id ?? null);
-	const initialInteractionWorkspaceId = untrack(() => data.interaction?.workspaceId ?? null);
-	const initialActiveTurnAgentId = untrack(() => data.interaction?.activeTurnAgentId ?? null);
 	const initialActiveTurnQuestionId = untrack(() => data.interaction?.activeTurnQuestionId ?? null);
 
 	let authReady = $state(false);
@@ -84,16 +98,16 @@
 	let report = $state<SparkGraderWorksheetReport | null>(initialReport);
 	let reviewState = $state<SparkTutorReviewState | null>(initialReviewState);
 	let interactionSessionId = $state<string | null>(initialInteractionSessionId);
-	let interactionWorkspaceId = $state<string | null>(initialInteractionWorkspaceId);
-	let activeTurnAgentId = $state<string | null>(initialActiveTurnAgentId);
 	let activeTurnQuestionId = $state<string | null>(initialActiveTurnQuestionId);
-	let activeAgentStream = $state<SparkAgentRunStream | null>(null);
 	let requestError = $state<string | null>(null);
 	let draftSaveError = $state<string | null>(null);
 	let savingDraft = $state(false);
 	let gradingDraft = $state(false);
 	let submittingQuestionIds = $state<Record<string, boolean>>({});
 	let pendingReplies = $state<Record<string, PendingReply>>({});
+	let responseDrafts = $state<Record<string, string>>({});
+	let activeResponseQuestionId = $state<string | null>(null);
+	let activeResponseDraft = $state('');
 	let draftSaveTimer = $state<ReturnType<typeof setTimeout> | null>(null);
 	let lastSavedDraftSignature = $state(JSON.stringify(initialDraftAnswers));
 	let artifactRefreshInFlight = $state(false);
@@ -639,10 +653,194 @@
 		return labels;
 	}
 
-	function annotateQuestionMarkBadges(
-		root: HTMLElement,
-		labels: readonly QuestionMarkLabel[]
-	): void {
+	function joinQuestionLabel(parentLabel: string | null, childLabel: string): string {
+		if (!parentLabel) {
+			return childLabel;
+		}
+		if (childLabel.startsWith(parentLabel)) {
+			return childLabel;
+		}
+		return `${parentLabel}.${childLabel}`;
+	}
+
+	function formatCloseGapQuestionPrompt(
+		question: PaperSheetQuestion,
+		parentPrompt: string | null
+	): string {
+		const prompt = (() => {
+			switch (question.type) {
+				case 'answer_bank': {
+					const parts: string[] = [];
+					for (let index = 0; index < question.blanks.length; index += 1) {
+						parts.push(question.segments[index] ?? '');
+						parts.push('_____');
+					}
+					parts.push(question.segments[question.segments.length - 1] ?? '');
+					const options = question.options
+						.map((option) => `${option.label ? `(${option.label}) ` : ''}${option.text}`)
+						.join(' | ');
+					return [parts.join(''), options ? `Options: ${options}` : null]
+						.filter((value): value is string => Boolean(value))
+						.join('\n\n');
+				}
+				case 'fill':
+					return [question.prompt, ...question.blanks.map(() => '_____'), question.after]
+						.filter((part) => part.trim().length > 0)
+						.join(question.conjunction ? ` ${question.conjunction} ` : ' ');
+				case 'cloze': {
+					const parts: string[] = [];
+					for (let index = 0; index < question.blanks.length; index += 1) {
+						parts.push(question.segments[index] ?? '');
+						parts.push('_____');
+					}
+					parts.push(question.segments[question.segments.length - 1] ?? '');
+					return parts.join('');
+				}
+				case 'mcq':
+					return [
+						question.prompt,
+						...question.options.map((option) =>
+							`${option.label ? `(${option.label}) ` : ''}${option.text}`
+						)
+					]
+						.filter((part) => part.trim().length > 0)
+						.join('\n\n');
+				case 'lines':
+					return question.prompt;
+				case 'calc':
+					return [question.prompt, question.inputLabel ? `Answer: ${question.inputLabel}` : null]
+						.filter((part): part is string => Boolean(part && part.trim().length > 0))
+						.join('\n\n');
+				case 'match':
+					return [
+						question.prompt,
+						question.pairs.map((pair) => `${pair.term} -> ${pair.match}`).join('\n')
+					]
+						.filter((part) => part.trim().length > 0)
+						.join('\n\n');
+				case 'spelling':
+					return [question.prompt, question.words.map((word) => word.wrong).join(' | ')]
+						.filter((part) => part.trim().length > 0)
+						.join('\n\n');
+				case 'flow':
+					return question.prompt;
+			}
+		})();
+		return [parentPrompt, prompt]
+			.filter((part): part is string => Boolean(part && part.trim().length > 0))
+			.join('\n\n');
+	}
+
+	function formatCloseGapStudentAnswer(questionId: string): string {
+		const value = reviewState?.answers[questionId];
+		if (typeof value === 'string') {
+			return value.trim().length > 0 ? value : '(blank)';
+		}
+		if (!value) {
+			return '(blank)';
+		}
+		const entries = Object.entries(value).map(([key, answer]) => {
+			const trimmed = answer.trim();
+			return `${key}: ${trimmed.length > 0 ? trimmed : '(blank)'}`;
+		});
+		return entries.length > 0 ? entries.join('\n') : '(blank)';
+	}
+
+	function findCloseGapQuestionInEntries(options: {
+		entries: readonly PaperSheetQuestionEntry[] | undefined;
+		questionId: string;
+		parentPrompt: string | null;
+		parentLabel: string | null;
+		counter: { value: number };
+	}): { question: PaperSheetQuestion; questionLabel: string; parentPrompt: string | null } | null {
+		for (const entry of options.entries ?? []) {
+			if (entry.type === 'group') {
+				const nextParentPrompt = [options.parentPrompt, entry.prompt]
+					.filter((part): part is string => Boolean(part && part.trim().length > 0))
+					.join('\n\n');
+				const result = findCloseGapQuestionInEntries({
+					entries: entry.questions,
+					questionId: options.questionId,
+					parentPrompt: nextParentPrompt.length > 0 ? nextParentPrompt : null,
+					parentLabel: entry.displayNumber ?? options.parentLabel,
+					counter: options.counter
+				});
+				if (result) {
+					return result;
+				}
+				continue;
+			}
+
+			const rawLabel = entry.displayNumber ?? options.counter.value.toString();
+			const questionLabel = joinQuestionLabel(options.parentLabel, rawLabel);
+			options.counter.value += 1;
+			if (entry.id !== options.questionId) {
+				continue;
+			}
+			return {
+				question: entry,
+				questionLabel: `Question ${questionLabel}`,
+				parentPrompt: options.parentPrompt
+			};
+		}
+		return null;
+	}
+
+	function findCloseGapQuestionContext(questionId: string): CloseGapQuestionContext | null {
+		if (!reviewState || !reviewSheetDocument) {
+			return null;
+		}
+		const counter = { value: 1 };
+		for (const section of reviewSheetDocument.sections) {
+			if (!isContentSection(section)) {
+				continue;
+			}
+			const result = findCloseGapQuestionInEntries({
+				entries: section.questions,
+				questionId,
+				parentPrompt: null,
+				parentLabel: null,
+				counter
+			});
+			if (!result) {
+				continue;
+			}
+			const review = reviewState.review.questions[questionId];
+			const thread = reviewState.threads[questionId] ?? null;
+			if (!review || !thread) {
+				return null;
+			}
+			const pendingReply = pendingReplies[questionId];
+			const messages: CloseGapMessage[] = thread.messages.map((message) => ({
+				id: message.id,
+				author: message.author,
+				markdown: message.markdown,
+				...(message.attachments ? { attachments: message.attachments } : {})
+			}));
+			if (pendingReply) {
+				messages.push({
+					id: `pending-${questionId}`,
+					author: 'student',
+					markdown: pendingReply.text,
+					attachments: pendingReply.attachments
+				});
+			}
+			return {
+				questionId,
+				questionLabel: result.questionLabel,
+				questionPrompt: formatCloseGapQuestionPrompt(result.question, result.parentPrompt),
+				studentAnswer: formatCloseGapStudentAnswer(questionId),
+				reviewNote: review.note,
+				replyPlaceholder:
+					review.replyPlaceholder ?? 'Write what you would change, and why that fixes the gap.',
+				messages,
+				resolved: thread.status === 'resolved'
+			};
+		}
+		return null;
+	}
+
+	function annotateQuestionMarkBadges(root: HTMLElement, labels: readonly QuestionMarkLabel[]): void {
 		const badges = root.querySelectorAll<HTMLElement>('.paper-sheet__question-marks');
 		for (let index = 0; index < badges.length; index += 1) {
 			const badge = badges[index];
@@ -729,11 +927,7 @@
 		if (next.interaction?.id) {
 			interactionSessionId = next.interaction.id;
 		}
-		if (next.interaction?.workspaceId) {
-			interactionWorkspaceId = next.interaction.workspaceId;
-		}
 		if (next.interaction) {
-			activeTurnAgentId = next.interaction.activeTurnAgentId;
 			activeTurnQuestionId = next.interaction.activeTurnQuestionId;
 		}
 		if (next.run.status !== 'executing') {
@@ -949,7 +1143,6 @@
 			[questionId]: pendingReply
 		};
 		activeTurnQuestionId = questionId;
-		activeAgentStream = null;
 		requestError = null;
 
 		try {
@@ -965,12 +1158,14 @@
 				body: formData
 			});
 
-			const payload = (await response.json().catch(() => null)) as {
-				error?: string;
-				issues?: Array<{ message?: string }>;
-				sessionId?: string;
-				workspaceId?: string;
-			} | null;
+			const payload = (await response.json().catch(() => null)) as
+				| {
+						error?: string;
+						issues?: Array<{ message?: string }>;
+						sessionId?: string;
+						reviewState?: unknown;
+				  }
+				| null;
 			if (!response.ok) {
 				requestError =
 					payload?.issues?.[0]?.message ?? payload?.error ?? 'Unable to send your worksheet reply.';
@@ -981,8 +1176,12 @@
 				if (payload?.sessionId) {
 					interactionSessionId = payload.sessionId;
 				}
-				if (payload?.workspaceId) {
-					interactionWorkspaceId = payload.workspaceId;
+				if (payload?.reviewState) {
+					const parsedReviewState = SparkTutorReviewStateSchema.safeParse(payload.reviewState);
+					if (parsedReviewState.success) {
+						reviewState = parsedReviewState.data;
+						activeTurnQuestionId = null;
+					}
 				}
 				return true;
 			}
@@ -994,6 +1193,46 @@
 		} finally {
 			submittingQuestionIds = removeQuestionKey(submittingQuestionIds, questionId);
 		}
+	}
+
+	function openCloseGapResponse(questionId: string): void {
+		if (activeResponseQuestionId && activeResponseQuestionId !== questionId) {
+			responseDrafts = {
+				...responseDrafts,
+				[activeResponseQuestionId]: activeResponseDraft
+			};
+		}
+		activeResponseQuestionId = questionId;
+		activeResponseDraft = responseDrafts[questionId] ?? '';
+	}
+
+	function closeCloseGapResponse(): void {
+		if (activeResponseQuestionId) {
+			const trimmedDraft = activeResponseDraft.trim();
+			responseDrafts =
+				trimmedDraft.length > 0
+					? {
+							...responseDrafts,
+							[activeResponseQuestionId]: activeResponseDraft
+						}
+					: removeQuestionKey(responseDrafts, activeResponseQuestionId);
+		}
+		activeResponseQuestionId = null;
+		activeResponseDraft = '';
+	}
+
+	async function submitActiveResponse(value: string, files: File[]): Promise<boolean> {
+		const questionId = activeResponseQuestionId;
+		if (!questionId) {
+			return false;
+		}
+		const sent = await submitQuestionReply(questionId, value, files);
+		if (!sent) {
+			return false;
+		}
+		activeResponseDraft = '';
+		responseDrafts = removeQuestionKey(responseDrafts, questionId);
+		return true;
 	}
 
 	onMount(() => {
@@ -1062,12 +1301,6 @@
 	$effect(() => {
 		if (!interactionSessionId && data.interaction?.id) {
 			interactionSessionId = data.interaction.id;
-		}
-		if (!interactionWorkspaceId && data.interaction?.workspaceId) {
-			interactionWorkspaceId = data.interaction.workspaceId;
-		}
-		if (!activeTurnAgentId && data.interaction?.activeTurnAgentId) {
-			activeTurnAgentId = data.interaction.activeTurnAgentId;
 		}
 		if (!activeTurnQuestionId && data.interaction?.activeTurnQuestionId) {
 			activeTurnQuestionId = data.interaction.activeTurnQuestionId;
@@ -1276,66 +1509,6 @@
 	});
 
 	$effect(() => {
-		if (!browser || !authReady || !userId || !interactionWorkspaceId) {
-			return;
-		}
-		const db = getFirestore(getFirebaseApp());
-		const uid = userId;
-		const workspaceId = interactionWorkspaceId;
-		const stops: Unsubscribe[] = [];
-		const subscribeWorkspaceFile = (
-			filePath: string,
-			apply: (raw: Record<string, unknown> | undefined) => void
-		) => {
-			const fileRef = doc(
-				db,
-				'users',
-				uid,
-				'workspace',
-				workspaceId,
-				'files',
-				encodeWorkspaceFileId(filePath)
-			);
-			stops.push(
-				onSnapshot(
-					fileRef,
-					(snapshot) => {
-						apply(snapshot.exists() ? (snapshot.data() as Record<string, unknown>) : undefined);
-					},
-					(error) => {
-						console.warn(`Sheet workspace file subscription failed (${filePath})`, error);
-					}
-				)
-			);
-		};
-		subscribeWorkspaceFile('state/review.json', (raw) => {
-			applyWorkspaceJson(
-				'state/review.json',
-				raw,
-				(value) => SparkTutorReviewStateSchema.parse(value),
-				(value) => {
-					reviewState = value;
-				}
-			);
-		});
-		subscribeWorkspaceFile('context/report.json', (raw) => {
-			applyWorkspaceJson(
-				'context/report.json',
-				raw,
-				(value) => SparkGraderWorksheetReportSchema.parse(value),
-				(_value) => {
-					void refreshSheetArtifacts();
-				}
-			);
-		});
-		return () => {
-			for (const stop of stops) {
-				stop();
-			}
-		};
-	});
-
-	$effect(() => {
 		if (!browser || !authReady || !userId || !interactionSessionId) {
 			return;
 		}
@@ -1356,38 +1529,13 @@
 				if (!parsed.success) {
 					return;
 				}
-				activeTurnAgentId = parsed.data.activeTurnAgentId ?? null;
 				activeTurnQuestionId = parsed.data.activeTurnQuestionId ?? null;
+				if (parsed.data.reviewState) {
+					reviewState = parsed.data.reviewState;
+				}
 			},
 			(error) => {
 				console.warn('Sheet tutor session subscription failed', error);
-			}
-		);
-	});
-
-	$effect(() => {
-		if (!browser || !authReady || !userId || !activeTurnAgentId) {
-			activeAgentStream = null;
-			return;
-		}
-		const db = getFirestore(getFirebaseApp());
-		const uid = userId;
-		const agentId = activeTurnAgentId;
-		const logRef = doc(db, 'users', uid, 'agents', agentId, 'logs', 'log');
-		return onSnapshot(
-			logRef,
-			(snapshot) => {
-				if (!snapshot.exists()) {
-					activeAgentStream = null;
-					return;
-				}
-				const parsed = SparkAgentRunStreamSchema.safeParse(
-					(snapshot.data() as Record<string, unknown>).stream
-				);
-				activeAgentStream = parsed.success ? parsed.data : null;
-			},
-			(error) => {
-				console.warn('Sheet active agent stream subscription failed', error);
 			}
 		);
 	});
@@ -1493,15 +1641,10 @@
 		}
 
 		const questionId = activeRuntimeQuestionId;
-		const runtimeStatus: FeedbackRuntimeStatus | null = activeAgentStream?.assistant?.trim()
-			? 'responding'
-			: activeAgentStream?.thoughts?.trim()
+		const runtimeStatus: FeedbackRuntimeStatus | null =
+			reviewState?.threads[questionId]?.status === 'responding' || submittingQuestionIds[questionId]
 				? 'thinking'
-				: activeTurnAgentId ||
-					  reviewState?.threads[questionId]?.status === 'responding' ||
-					  submittingQuestionIds[questionId]
-					? 'connecting'
-					: null;
+				: null;
 
 		if (!runtimeStatus) {
 			return {};
@@ -1512,17 +1655,9 @@
 		};
 	});
 
-	const feedbackThinking = $derived.by(() =>
-		activeRuntimeQuestionId && activeAgentStream?.thoughts?.trim()
-			? { [activeRuntimeQuestionId]: activeAgentStream.thoughts }
-			: {}
-	);
+	const feedbackThinking = $derived.by((): Record<string, string> => ({}));
 
-	const feedbackAssistantDrafts = $derived.by(() =>
-		activeRuntimeQuestionId && activeAgentStream?.assistant?.trim()
-			? { [activeRuntimeQuestionId]: activeAgentStream.assistant }
-			: {}
-	);
+	const feedbackAssistantDrafts = $derived.by((): Record<string, string> => ({}));
 
 	const feedbackState = $derived.by((): SheetFeedbackStateMap => {
 		const next: SheetFeedbackStateMap = {};
@@ -1569,6 +1704,9 @@
 				)
 			: null
 	);
+	const activeResponseContext = $derived.by(() =>
+		activeResponseQuestionId ? findCloseGapQuestionContext(activeResponseQuestionId) : null
+	);
 	const draftSheetDocument = $derived.by(() =>
 		draft ? buildRenderableSheetDocument(draft.sheet) : null
 	);
@@ -1607,6 +1745,7 @@
 				onReply={(questionId, payload) => {
 					return submitQuestionReply(questionId, payload.text, payload.attachments);
 				}}
+				onOpenResponse={openCloseGapResponse}
 			/>
 		</div>
 	{:else if draft && draftSheetDocument}
@@ -1656,6 +1795,25 @@
 							: 'The graded worksheet artifact has not been published yet. This page will refresh once grading finishes.')}
 			</p>
 		</section>
+	{/if}
+
+	{#if activeResponseContext}
+		<CloseGapResponseModal
+			questionLabel={activeResponseContext.questionLabel}
+			questionPrompt={activeResponseContext.questionPrompt}
+			studentAnswer={activeResponseContext.studentAnswer}
+			reviewNote={activeResponseContext.reviewNote}
+			messages={activeResponseContext.messages}
+			bind:draft={activeResponseDraft}
+			placeholder={activeResponseContext.replyPlaceholder}
+			runtimeStatus={feedbackRuntimeStatuses[activeResponseContext.questionId] ?? null}
+			thinkingText={feedbackThinking[activeResponseContext.questionId] ?? null}
+			assistantDraftText={feedbackAssistantDrafts[activeResponseContext.questionId] ?? null}
+			sending={submittingQuestionIds[activeResponseContext.questionId] ?? false}
+			resolved={activeResponseContext.resolved}
+			onClose={closeCloseGapResponse}
+			onSubmit={submitActiveResponse}
+		/>
 	{/if}
 
 	{#if sourceLinks.length > 0}
@@ -1972,7 +2130,7 @@
 		margin: 0;
 		border-radius: 0.9rem;
 		border-color: color-mix(in srgb, var(--sheet-border, currentColor) 70%, transparent);
-		background: color-mix(in srgb, var(--sheet-light, transparent) 62%, white);
+		background: color-mix(in srgb, var(--sheet-light, transparent) 54%, var(--card));
 	}
 
 	.sheet-shell :global(.markdown-content .markdown-figure__image) {
@@ -2002,14 +2160,29 @@
 		border-collapse: separate;
 		border-spacing: 0;
 		border-radius: 0.9rem;
-		background: color-mix(in srgb, var(--background) 92%, var(--sheet-light, transparent));
+		background: color-mix(in srgb, var(--card) 90%, var(--sheet-light, transparent));
 		box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--sheet-color, #111827) 52%, transparent);
 	}
 
 	.sheet-shell :global(.markdown-content th) {
-		background: color-mix(in srgb, var(--sheet-light, transparent) 72%, white);
+		background: color-mix(in srgb, var(--muted) 72%, var(--card));
 		color: color-mix(in srgb, var(--sheet-color, currentColor) 72%, var(--foreground));
 		font-weight: 760;
+	}
+
+	:global(:root:not([data-theme='light']) .sheet-shell .markdown-content table),
+	:global([data-theme='dark'] .sheet-shell .markdown-content table),
+	:global(.dark .sheet-shell .markdown-content table) {
+		border-color: color-mix(in srgb, var(--foreground) 24%, transparent);
+		background: color-mix(in srgb, var(--card) 84%, var(--background));
+		box-shadow: none;
+	}
+
+	:global(:root:not([data-theme='light']) .sheet-shell .markdown-content th),
+	:global([data-theme='dark'] .sheet-shell .markdown-content th),
+	:global(.dark .sheet-shell .markdown-content th) {
+		background: color-mix(in srgb, var(--foreground) 10%, var(--card));
+		color: color-mix(in srgb, var(--foreground) 88%, var(--sheet-color, currentColor));
 	}
 
 	.sheet-shell :global(.markdown-content th),

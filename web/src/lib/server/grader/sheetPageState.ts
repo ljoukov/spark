@@ -19,10 +19,7 @@ import {
 	getWorkspaceTextFile
 } from '$lib/server/grader/repo';
 import { buildInitialTutorReviewState } from '$lib/server/tutorSessions/reviewState';
-import { getTutorSession, findTutorSessionForSheet } from '$lib/server/tutorSessions/repo';
-import { recoverTutorSessionIfStale } from '$lib/server/tutorSessions/recovery';
-import { requireTutorServiceAccountJson } from '$lib/server/tutorSessions/service';
-import { readTutorWorkspaceState } from '$lib/server/tutorSessions/workspace';
+import { findTutorSessionForSheet } from '$lib/server/tutorSessions/repo';
 
 const uploadManifestSchema = z.object({
 	attachments: z.array(
@@ -299,22 +296,12 @@ export async function loadSparkSheetPageState(options: {
 
 	let interaction = null as SparkSheetPageState['interaction'];
 	if (session && report) {
-		const serviceAccountJson = requireTutorServiceAccountJson();
-		const loadedWorkspace = await readTutorWorkspaceState({
-			serviceAccountJson,
-			userId: options.userId,
-			workspaceId: session.workspaceId,
-			session
-		});
-		const recovered = await recoverTutorSessionIfStale({
-			serviceAccountJson,
-			userId: options.userId,
-			session,
-			reviewState: loadedWorkspace.reviewState
-		});
-		const currentSession =
-			recovered?.session ?? (await getTutorSession(options.userId, session.id)) ?? session;
-		const currentReviewState = recovered?.reviewState ?? loadedWorkspace.reviewState;
+		const currentReviewState =
+			session.reviewState ??
+			buildInitialTutorReviewState({
+				report,
+				now: session.updatedAt
+			});
 		const renderableReviewState = currentReviewState
 			? {
 					...currentReviewState,
@@ -325,13 +312,13 @@ export async function loadSparkSheetPageState(options: {
 				}
 			: currentReviewState;
 		interaction = {
-			id: currentSession.id,
-			workspaceId: currentSession.workspaceId,
-			status: currentSession.status,
+			id: session.id,
+			workspaceId: session.workspaceId,
+			status: session.status,
 			reviewState: renderableReviewState,
-			activeTurnAgentId: currentSession.activeTurnAgentId ?? null,
-			activeTurnQuestionId: currentSession.activeTurnQuestionId ?? null,
-			error: currentSession.error ?? null
+			activeTurnAgentId: session.activeTurnAgentId ?? null,
+			activeTurnQuestionId: session.activeTurnQuestionId ?? null,
+			error: session.error ?? null
 		};
 	}
 

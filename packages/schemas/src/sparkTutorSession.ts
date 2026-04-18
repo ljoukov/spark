@@ -48,24 +48,6 @@ export type SparkTutorSessionSource = z.infer<
   typeof SparkTutorSessionSourceSchema
 >;
 
-export const SparkTutorSessionSchema = z.object({
-  id: trimmedString,
-  workspaceId: trimmedString,
-  status: SparkTutorSessionStatusSchema,
-  source: SparkTutorSessionSourceSchema,
-  title: trimmedString,
-  preview: trimmedString.optional(),
-  focusLabel: trimmedString.optional(),
-  activeTurnAgentId: trimmedString.optional(),
-  activeTurnQuestionId: trimmedString.optional(),
-  createdAt: FirestoreTimestampSchema,
-  updatedAt: FirestoreTimestampSchema,
-  completedAt: FirestoreTimestampSchema.optional(),
-  error: z.string().trim().optional(),
-});
-
-export type SparkTutorSession = z.infer<typeof SparkTutorSessionSchema>;
-
 export const SparkTutorHintButtonSchema = z.object({
   id: trimmedString,
   label: trimmedString,
@@ -168,3 +150,22 @@ export const SparkTutorReviewStateSchema = z.object({
 export type SparkTutorReviewState = z.infer<
   typeof SparkTutorReviewStateSchema
 >;
+
+export const SparkTutorSessionSchema = z.object({
+  id: trimmedString,
+  workspaceId: trimmedString,
+  status: SparkTutorSessionStatusSchema,
+  source: SparkTutorSessionSourceSchema,
+  title: trimmedString,
+  preview: trimmedString.optional(),
+  focusLabel: trimmedString.optional(),
+  activeTurnAgentId: trimmedString.optional(),
+  activeTurnQuestionId: trimmedString.optional(),
+  reviewState: SparkTutorReviewStateSchema.optional(),
+  createdAt: FirestoreTimestampSchema,
+  updatedAt: FirestoreTimestampSchema,
+  completedAt: FirestoreTimestampSchema.optional(),
+  error: z.string().trim().optional(),
+});
+
+export type SparkTutorSession = z.infer<typeof SparkTutorSessionSchema>;

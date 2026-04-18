@@ -101,6 +101,9 @@ Optional paper metadata is allowed only when known. If you include `year`, write
 - keep `review.score` and `run-summary.totals` equal to the sum of per-question scores,
 - format `review.label` as `N/total` and include `review.note`, which may be `""`.
 - `presentation.summaryMarkdown` is the Sheets thumbnail body only: write one compact sentence or two short fragments, concrete and non-redundant. Do not repeat title, subject, level, marks, percentage, created date, or footer. Prefer a known official grade/prize/medal/percentile outcome when suitable; otherwise mention the most useful score driver, common examiner mistake made/avoided, or a concrete next learning target. Do not use generic lead-ins such as "This sheet", "The worksheet", "Graded", "Checked", or broad praise.
+- for unresolved, partial, blank, or incorrect questions, write `review.questions[questionId].note` as a short gap-closing cue for the response modal: acknowledge useful partial thinking, name the missing move, and ask for the next repair step without revealing the model answer, mark scheme, final corrected sentence, or full method.
+- for those same unresolved entries, include `replyPlaceholder` when possible so the modal composer asks for the specific repair, such as `"Write the method in four ordered lab steps."` or `"Set up the bond-energy equation before calculating."`
+- do not compress the mark scheme into unresolved review notes by naming the missing final concept, mechanism, data comparison, or answer path; set up the student's next written response instead.
 
 ## Guardrails
 
