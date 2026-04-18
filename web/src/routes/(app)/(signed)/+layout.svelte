@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { page } from '$app/stores';
+	import { navigating, page } from '$app/state';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import CopyIcon from '@lucide/svelte/icons/copy';
 	import XIcon from '@lucide/svelte/icons/x';
@@ -31,6 +31,36 @@
 
 	function isGuideImmersiveRoute(routeId: string | null | undefined): boolean {
 		return Boolean(routeId?.includes('/spark/guides/[id]'));
+	}
+
+	function isSparkLoadingTarget(pathname: string | null | undefined): boolean {
+		if (pathname === '/spark') {
+			return true;
+		}
+		if (pathname === '/spark/sheets') {
+			return true;
+		}
+		return /^\/spark\/sheets\/[^/]+$/u.test(pathname ?? '');
+	}
+
+	function resolveSparkLoadingTitle(pathname: string | null | undefined): string {
+		if (pathname === '/spark') {
+			return 'Opening chat';
+		}
+		if (pathname === '/spark/sheets') {
+			return 'Loading sheets';
+		}
+		return 'Opening sheet';
+	}
+
+	function resolveSparkLoadingDetail(pathname: string | null | undefined): string {
+		if (pathname === '/spark') {
+			return 'Restoring your conversation.';
+		}
+		if (pathname === '/spark/sheets') {
+			return 'Checking worksheet runs, marks, and feedback.';
+		}
+		return 'Preparing the worksheet surface.';
 	}
 
 	function resolveExperience(routeId: string | null | undefined): ExperienceKey {
@@ -74,14 +104,18 @@
 	$effect(() => {
 		userStore.set(data.user ?? null);
 	});
-	const sessionId = $derived($page.params.sessionId ?? null);
-	const showSheetDetailLayout = $derived(isSheetStyleStandaloneRoute($page.route.id));
-	const showGuideImmersiveLayout = $derived(isGuideImmersiveRoute($page.route.id));
-	const experience = $derived(resolveExperience($page.route.id));
+	const sessionId = $derived(page.params.sessionId ?? null);
+	const showSheetDetailLayout = $derived(isSheetStyleStandaloneRoute(page.route.id));
+	const showGuideImmersiveLayout = $derived(isGuideImmersiveRoute(page.route.id));
+	const experience = $derived(resolveExperience(page.route.id));
 	const sessionHomeHref = $derived(resolveSessionHomeHref(experience, sessionId));
 	const brandCopy = $derived(resolveBrandCopy(experience));
 	const canAccessAdmin = $derived(Boolean(data.isAdmin));
 	const logoutLabel = $derived(user?.isAnonymous ? 'Delete guest account' : 'Log out');
+	const navigatingToPathname = $derived(navigating.to?.url.pathname ?? null);
+	const showSparkRouteLoading = $derived(isSparkLoadingTarget(navigatingToPathname));
+	const sparkLoadingTitle = $derived(resolveSparkLoadingTitle(navigatingToPathname));
+	const sparkLoadingDetail = $derived(resolveSparkLoadingDetail(navigatingToPathname));
 	let theme = $state<ThemePreference>('auto');
 	let copiedIdentity = $state(false);
 
@@ -355,6 +389,18 @@
 
 <div class="app-page">
 	<div class={`app-shell ${showSheetDetailLayout ? 'app-shell--sheet-detail' : ''}`}>
+		{#if showSparkRouteLoading}
+			<div class="route-loading" role="status" aria-live="polite">
+				<div class="route-loading__bar" aria-hidden="true"></div>
+				<div class="route-loading__card">
+					<span class="route-loading__spinner" aria-hidden="true"></span>
+					<div>
+						<p class="route-loading__title">{sparkLoadingTitle}</p>
+						<p class="route-loading__detail">{sparkLoadingDetail}</p>
+					</div>
+				</div>
+			</div>
+		{/if}
 		{#if showSheetDetailLayout}
 			<a
 				class="sheet-close-button"
@@ -600,6 +646,88 @@
 
 	.app-shell--sheet-detail {
 		overflow: visible;
+	}
+
+	.route-loading {
+		position: fixed;
+		inset: 0 0 auto 0;
+		z-index: 80;
+		display: flex;
+		justify-content: center;
+		padding: calc(env(safe-area-inset-top, 0px) + 0.75rem) 1rem 0;
+		pointer-events: none;
+	}
+
+	.route-loading__bar {
+		position: fixed;
+		top: 0;
+		left: 0;
+		height: 3px;
+		width: 45%;
+		background: linear-gradient(90deg, #007aff, #34c759, #ff2d55);
+		animation: route-loading-bar 1s ease-in-out infinite;
+	}
+
+	.route-loading__card {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		width: min(22rem, calc(100vw - 2rem));
+		padding: 0.75rem 0.85rem;
+		border-radius: 8px;
+		border: 1px solid color-mix(in srgb, var(--app-content-border) 80%, transparent);
+		background: color-mix(in srgb, var(--app-content-bg) 86%, transparent);
+		box-shadow: 0 18px 48px -30px rgba(15, 23, 42, 0.42);
+		backdrop-filter: blur(18px);
+	}
+
+	.route-loading__spinner {
+		width: 1.35rem;
+		height: 1.35rem;
+		border-radius: 9999px;
+		border: 2px solid color-mix(in srgb, var(--foreground) 14%, transparent);
+		border-top-color: #007aff;
+		animation: route-loading-spin 0.8s linear infinite;
+	}
+
+	.route-loading__title {
+		margin: 0;
+		color: var(--foreground);
+		font-size: 0.88rem;
+		font-weight: 760;
+	}
+
+	.route-loading__detail {
+		margin: 0.1rem 0 0;
+		color: var(--app-subtitle-color);
+		font-size: 0.8rem;
+	}
+
+	:global([data-theme='dark'] .route-loading__card),
+	:global(:root:not([data-theme='light']) .route-loading__card) {
+		border-color: rgba(148, 163, 184, 0.26);
+		background: color-mix(in srgb, rgba(6, 11, 25, 0.9) 84%, transparent);
+		box-shadow: 0 20px 56px -30px rgba(2, 6, 23, 0.84);
+	}
+
+	@keyframes route-loading-spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	@keyframes route-loading-bar {
+		0% {
+			transform: translateX(-120%);
+		}
+
+		55% {
+			transform: translateX(105vw);
+		}
+
+		100% {
+			transform: translateX(105vw);
+		}
 	}
 
 	.app-header {

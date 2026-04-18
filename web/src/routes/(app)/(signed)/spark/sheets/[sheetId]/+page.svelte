@@ -2,7 +2,11 @@
 	import { browser } from '$app/environment';
 	import { invalidateAll } from '$app/navigation';
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
-	import { Sheet as PaperSheet, type SheetDocument, type SheetFeedbackStateMap } from '@ljoukov/sheet';
+	import {
+		Sheet as PaperSheet,
+		type SheetDocument,
+		type SheetFeedbackStateMap
+	} from '@ljoukov/sheet';
 	import type {
 		PaperSheetAnswers,
 		PaperSheetFeedbackAttachment,
@@ -15,6 +19,7 @@
 		SparkTutorReviewState
 	} from '@spark/schemas';
 	import {
+		applyPaperSheetSubjectTheme,
 		SparkAgentRunStreamSchema,
 		SparkGraderRunSchema,
 		SparkSheetPageStateSchema,
@@ -236,7 +241,9 @@
 		return `${kind}-${normalizedLabel}`;
 	}
 
-	function resolveArtifactReference(value: string): { kind: 'figure' | 'table'; label: string } | null {
+	function resolveArtifactReference(
+		value: string
+	): { kind: 'figure' | 'table'; label: string } | null {
 		const figureMatch = FIGURE_REFERENCE_LABEL_PATTERN.exec(value);
 		if (figureMatch?.[1]) {
 			return {
@@ -361,7 +368,10 @@
 		}
 	}
 
-	function relinkExistingArtifactReferenceAnchors(root: HTMLElement, anchors: Map<string, string>): void {
+	function relinkExistingArtifactReferenceAnchors(
+		root: HTMLElement,
+		anchors: Map<string, string>
+	): void {
 		for (const link of root.querySelectorAll<HTMLAnchorElement>('.markdown-content a')) {
 			if (
 				link.classList.contains('markdown-figure-link') ||
@@ -493,7 +503,9 @@
 			.map((part) => part.trim())
 			.filter((part) => part.length > 0)
 			.filter((part) => !isRedundantMetadataPart(part, title))
-			.filter((part) => !subtitleParts.some((subtitlePart) => isRedundantMetadataPart(part, subtitlePart)));
+			.filter(
+				(part) => !subtitleParts.some((subtitlePart) => isRedundantMetadataPart(part, subtitlePart))
+			);
 		return [...usefulMetadataParts, ...subtitleParts].join(' · ');
 	}
 
@@ -627,7 +639,10 @@
 		return labels;
 	}
 
-	function annotateQuestionMarkBadges(root: HTMLElement, labels: readonly QuestionMarkLabel[]): void {
+	function annotateQuestionMarkBadges(
+		root: HTMLElement,
+		labels: readonly QuestionMarkLabel[]
+	): void {
 		const badges = root.querySelectorAll<HTMLElement>('.paper-sheet__question-marks');
 		for (let index = 0; index < badges.length; index += 1) {
 			const badge = badges[index];
@@ -681,7 +696,7 @@
 		const title = stripQuestionPaperSuffix(sheet.title) || sheet.title;
 		const subtitle = buildSubtitleWithUsefulMetadata(sheet, title);
 		return {
-			...sheet,
+			...applyPaperSheetSubjectTheme(sheet),
 			title,
 			subtitle,
 			sections: sheet.sections.map((section) => {
@@ -789,10 +804,7 @@
 		);
 	}
 
-	function sameRunState(
-		left: PageData['run'],
-		right: PageData['run']
-	): boolean {
+	function sameRunState(left: PageData['run'], right: PageData['run']): boolean {
 		return (
 			left.id === right.id &&
 			left.workspaceId === right.workspaceId &&
@@ -825,9 +837,10 @@
 				},
 				body: JSON.stringify({ answers })
 			});
-			const payload = (await response.json().catch(() => null)) as
-				| { error?: string; issues?: Array<{ message?: string }> }
-				| null;
+			const payload = (await response.json().catch(() => null)) as {
+				error?: string;
+				issues?: Array<{ message?: string }>;
+			} | null;
 			if (!response.ok) {
 				draftSaveError =
 					payload?.issues?.[0]?.message ??
@@ -879,9 +892,10 @@
 				},
 				body: JSON.stringify({ answers })
 			});
-			const payload = (await response.json().catch(() => null)) as
-				| { error?: string; issues?: Array<{ message?: string }> }
-				| null;
+			const payload = (await response.json().catch(() => null)) as {
+				error?: string;
+				issues?: Array<{ message?: string }>;
+			} | null;
 			if (!response.ok) {
 				requestError =
 					payload?.issues?.[0]?.message ??
@@ -905,7 +919,11 @@
 		}
 	}
 
-	async function submitQuestionReply(questionId: string, draft: string, attachments: File[]): Promise<boolean> {
+	async function submitQuestionReply(
+		questionId: string,
+		draft: string,
+		attachments: File[]
+	): Promise<boolean> {
 		if (submittingQuestionIds[questionId] || run.status !== 'done') {
 			return false;
 		}
@@ -947,19 +965,15 @@
 				body: formData
 			});
 
-			const payload = (await response.json().catch(() => null)) as
-				| {
-						error?: string;
-						issues?: Array<{ message?: string }>;
-						sessionId?: string;
-						workspaceId?: string;
-				  }
-				| null;
+			const payload = (await response.json().catch(() => null)) as {
+				error?: string;
+				issues?: Array<{ message?: string }>;
+				sessionId?: string;
+				workspaceId?: string;
+			} | null;
 			if (!response.ok) {
 				requestError =
-					payload?.issues?.[0]?.message ??
-					payload?.error ??
-					'Unable to send your worksheet reply.';
+					payload?.issues?.[0]?.message ?? payload?.error ?? 'Unable to send your worksheet reply.';
 				cleanupPendingReply(pendingReply);
 				pendingReplies = removeQuestionKey(pendingReplies, questionId);
 				return false;
@@ -1153,7 +1167,10 @@
 				if (!parsed.success) {
 					return;
 				}
-				const nextSheetPhase = resolveSnapshotSheetPhase(parsed.data.status, parsed.data.sheetPhase);
+				const nextSheetPhase = resolveSnapshotSheetPhase(
+					parsed.data.status,
+					parsed.data.sheetPhase
+				);
 				run = {
 					...run,
 					status: parsed.data.status,
@@ -1167,9 +1184,7 @@
 				const shouldReloadCompletedBuild =
 					draft === null && report === null && parsed.data.status === 'done';
 				const shouldReloadForReport =
-					report === null &&
-					parsed.data.status === 'done' &&
-					nextSheetPhase === 'graded';
+					report === null && parsed.data.status === 'done' && nextSheetPhase === 'graded';
 				if (shouldReloadCompletedBuild || shouldReloadForReport) {
 					void refreshSheetArtifacts();
 				}
@@ -1387,7 +1402,9 @@
 			const thread = reviewState.threads[questionId];
 			const lastStudentMessage =
 				thread?.messages.findLast((message) => message.author === 'student') ?? null;
-			const lastMessageSignatures = (lastStudentMessage?.attachments ?? []).map(buildAttachmentSignature);
+			const lastMessageSignatures = (lastStudentMessage?.attachments ?? []).map(
+				buildAttachmentSignature
+			);
 			const pendingSignatures = pendingReply.attachments.map(buildAttachmentSignature);
 			if (
 				lastStudentMessage?.markdown === pendingReply.text &&
@@ -1448,20 +1465,20 @@
 				(lastStudentTurn?.text !== pendingReply.text ||
 					lastTurnSignatures.length !== pendingSignatures.length ||
 					lastTurnSignatures.some((signature, index) => signature !== pendingSignatures[index]));
-			const status: PaperSheetFeedbackThread['status'] =
-				shouldAppendPendingTurn ? 'responding' : thread.status;
-			const nextTurns: PaperSheetFeedbackThread['turns'] =
-				shouldAppendPendingTurn
-					? [
-							...turns,
-							{
-								id: `pending-${questionId}`,
-								speaker: 'student',
-								text: pendingReply.text,
-								attachments: pendingReply.attachments
-							}
-						]
-					: turns;
+			const status: PaperSheetFeedbackThread['status'] = shouldAppendPendingTurn
+				? 'responding'
+				: thread.status;
+			const nextTurns: PaperSheetFeedbackThread['turns'] = shouldAppendPendingTurn
+				? [
+						...turns,
+						{
+							id: `pending-${questionId}`,
+							speaker: 'student',
+							text: pendingReply.text,
+							attachments: pendingReply.attachments
+						}
+					]
+				: turns;
 			threads[questionId] = {
 				status,
 				turns: nextTurns
@@ -1558,7 +1575,6 @@
 	const sheetFooterLabel = $derived(run.display.footer?.trim() || null);
 	const sourceLinks = $derived(data.sourceLinks ?? []);
 	const hasSourceChatLink = $derived(sourceLinks.some((sourceLink) => sourceLink.kind === 'chat'));
-
 </script>
 
 <svelte:head>
@@ -1655,7 +1671,12 @@
 			</div>
 			<nav class="sheet-source-links" aria-label="Source documents">
 				{#each sourceLinks as sourceLink (sourceLink.href)}
-					<a class={`sheet-source-link sheet-source-link--${sourceLink.kind}`} href={sourceLink.href} target="_blank" rel="noreferrer">
+					<a
+						class={`sheet-source-link sheet-source-link--${sourceLink.kind}`}
+						href={sourceLink.href}
+						target="_blank"
+						rel="noreferrer"
+					>
 						<span>{sourceLink.label}</span>
 					</a>
 				{/each}

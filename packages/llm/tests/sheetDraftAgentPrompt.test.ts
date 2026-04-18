@@ -26,6 +26,9 @@ describe("sheet draft prompt", () => {
     expect(prompt).toContain(
       "presentation: { title, subtitle, summaryMarkdown, footer }",
     );
+    expect(prompt).toContain("stable Apple-style sheet palette");
+    expect(prompt).toContain("Do not invent custom sheet colors");
+    expect(prompt).toContain("one compact sentence or two short fragments");
     expect(prompt).toContain("publish_sheet_draft({})");
     expect(prompt).not.toContain("## Extraction workflow");
   });

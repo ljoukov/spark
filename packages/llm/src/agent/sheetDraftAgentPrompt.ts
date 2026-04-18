@@ -33,6 +33,8 @@ export function buildSparkSheetDraftAgentPrompt(options?: {
     "- If the latest user request asks for verbatim structure, treat that as a hard requirement.",
     "- The JSON contract is defined explicitly in sheet/task.md. Follow that contract directly and do not infer alternate keys from logs or unrelated files.",
     "- The run summary JSON must use nested `presentation: { title, subtitle, summaryMarkdown, footer }`; do not write legacy flat keys such as `bodySummaryMarkdown` or `footerProvenance`.",
+    "- Map the worksheet subject to Spark's stable Apple-style sheet palette and use that palette for `sheet.color`, `sheet.accent`, `sheet.light`, and `sheet.border`: Biology green; Mathematics blue; Chemistry purple; Physics indigo; Geography teal; Science mint; English pink; History or Religious Studies orange; Economics or Business yellow; Computer Science or General gray. Do not invent custom sheet colors.",
+    "- Keep `presentation.summaryMarkdown` as one compact sentence or two short fragments for the Sheets thumbnail; do not repeat the title, subject, level, marks, percentage, created date, or footer, and avoid generic lead-ins such as \"This sheet\" or \"The worksheet\".",
     "",
     "Deliverables:",
     `1) Write one worksheet draft JSON file at ${sheetPath}`,

@@ -22,6 +22,7 @@ vi.mock("../src/utils/gcp/firestoreRest", () => {
     setFirestoreDocument: vi.fn(() => Promise.resolve({})),
     patchFirestoreDocument: vi.fn(() => Promise.resolve({})),
     listFirestoreDocuments: vi.fn(() => Promise.resolve([])),
+    queryFirestoreDocuments: vi.fn(() => Promise.resolve([])),
     deleteFirestoreDocument: vi.fn(() => Promise.resolve({})),
     commitFirestoreWrites: vi.fn(() => Promise.resolve({})),
   };
@@ -687,8 +688,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
         await readFile(summaryPath, { encoding: "utf8" }),
       );
       expect(normalizedSheet.review.questions.q1.status).toBe("correct");
-      expect(normalizedSheet.sheet.color).toBe("#2F6F3E");
-      expect(normalizedSheet.sheet.accent).toBe("#327A45");
+      expect(normalizedSheet.sheet.color).toBe("#C71945");
+      expect(normalizedSheet.sheet.accent).toBe("#FF2D55");
       expect(normalizedSheet.sheet.sections[0].id).toBe("section-1");
       expect(normalizedSheet.sheet.sections[0].label).toBe("Section A");
       expect(normalizedSheet.sheet.sections[0].type).toBeUndefined();
@@ -786,9 +787,9 @@ describe("Spark agent tool: publish_sheet guards", () => {
         }),
       );
       expect(normalizedSheet.schemaVersion).toBe(1);
-      expect(normalizedSheet.sheet.sections[0].questions[0].questions[0].lines).toBe(
-        4,
-      );
+      expect(
+        normalizedSheet.sheet.sections[0].questions[0].questions[0].lines,
+      ).toBe(4);
       expect(normalizedSheet.answers.q01_1).toBe("It pushes blood.");
       expect(normalizedSheet.review.label).toBe("1/2");
       expect(normalizedSheet.review.note).toBe("");

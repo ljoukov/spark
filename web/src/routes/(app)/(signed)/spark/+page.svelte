@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import { replaceState } from '$app/navigation';
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { getContext, onMount } from 'svelte';
 	import { cubicInOut } from 'svelte/easing';
 	import { fade, fly } from 'svelte/transition';
@@ -88,7 +88,6 @@
 
 	const userStore = getContext<Readable<ClientUser> | undefined>('spark:user');
 	const userSnapshot = userStore ? fromStore(userStore) : null;
-	const pageSnapshot = fromStore(page);
 	const user = $derived(userSnapshot?.current ?? data.user ?? null);
 	const userId = $derived(user?.uid ?? null);
 
@@ -102,6 +101,7 @@
 	let chatStreamPhase = $state<ChatStreamPhase>('idle');
 	let chatStreamAssistantMessageId = $state<string | null>(null);
 	let authReady = $state(false);
+	let conversationLoadState = $state<'idle' | 'loading' | 'ready' | 'error'>('idle');
 	let composerExpanded = $state(false);
 	let composerRef = $state<HTMLDivElement | null>(null);
 	let streamAbort = $state<AbortController | null>(null);
@@ -661,6 +661,9 @@
 	}
 
 	const messages = $derived(conversation?.messages ?? []);
+	const isOpeningConversation = $derived(
+		conversationLoadState === 'loading' && Boolean(conversationId) && messages.length === 0
+	);
 	const assistantMessageCount = $derived.by(() => {
 		let count = 0;
 		for (const message of messages) {
@@ -677,19 +680,16 @@
 		if (!browser) {
 			return;
 		}
-		const currentPage = pageSnapshot.current;
-		if (currentPage) {
-			const currentValue = currentPage.url.searchParams.get('conversationId')?.trim() ?? '';
-			const normalizedCurrentValue = currentValue.length > 0 ? currentValue : null;
-			if (normalizedCurrentValue !== nextId) {
-				const url = new URL(currentPage.url);
-				if (nextId) {
-					url.searchParams.set('conversationId', nextId);
-				} else {
-					url.searchParams.delete('conversationId');
-				}
-				replaceState(url, currentPage.state);
+		const currentValue = page.url.searchParams.get('conversationId')?.trim() ?? '';
+		const normalizedCurrentValue = currentValue.length > 0 ? currentValue : null;
+		if (normalizedCurrentValue !== nextId) {
+			const url = new URL(page.url);
+			if (nextId) {
+				url.searchParams.set('conversationId', nextId);
+			} else {
+				url.searchParams.delete('conversationId');
 			}
+			replaceState(url, page.state);
 		}
 		if (!userId) {
 			return;
@@ -706,6 +706,7 @@
 		const previousConversationId = conversationId;
 		setConversationId(null);
 		conversation = null;
+		conversationLoadState = 'idle';
 		streamingByMessageId = {};
 		streamingThoughtsByMessageId = {};
 		chatStreamPhase = 'idle';
@@ -886,7 +887,9 @@
 			resolveSparkAttachmentMimeType({
 				filename: file.name,
 				claimedContentType: file.type
-			}) ?? normalizeSparkAttachmentMimeType(file.type) ?? ''
+			}) ??
+			normalizeSparkAttachmentMimeType(file.type) ??
+			''
 		);
 	}
 
@@ -1656,8 +1659,7 @@
 		if (!browser || !userId) {
 			return;
 		}
-		const requestedConversationId =
-			pageSnapshot.current?.url.searchParams.get('conversationId')?.trim() ?? '';
+		const requestedConversationId = page.url.searchParams.get('conversationId')?.trim() ?? '';
 		if (requestedConversationId.length > 0) {
 			if (requestedConversationId === rejectedConversationId) {
 				return;
@@ -1687,6 +1689,7 @@
 		const activeConversationId = conversationId;
 		if (!activeUserId || !activeConversationId || !authReady) {
 			conversation = null;
+			conversationLoadState = activeConversationId ? 'loading' : 'idle';
 			return;
 		}
 		const normalizedUserId: string = activeUserId;
@@ -1694,11 +1697,13 @@
 		const db = getFirestore(getFirebaseApp());
 		const ref = doc(db, normalizedUserId, 'client', 'conversations', normalizedConversationId);
 		let stop: Unsubscribe | null = null;
+		conversationLoadState = 'loading';
 		stop = onSnapshot(
 			ref,
 			(snap) => {
 				if (!snap.exists()) {
 					conversation = null;
+					conversationLoadState = 'ready';
 					return;
 				}
 				const rawConversation = snap.data() ?? {};
@@ -1735,12 +1740,14 @@
 				}
 				error = null;
 				conversation = normalized.conversation;
+				conversationLoadState = 'ready';
 				reconcileStreaming(normalized.conversation);
 				reconcileStreamingThoughts(normalized.conversation);
 			},
 			(snapError) => {
 				console.warn('Firestore subscription failed', snapError);
 				error = 'Spark AI Agent could not load this conversation right now.';
+				conversationLoadState = 'error';
 			}
 		);
 		return () => {
@@ -1885,7 +1892,15 @@
 				</div>
 			{/if}
 
-			{#if messages.length === 0}
+			{#if isOpeningConversation}
+				<div class="chat-opening" role="status" aria-live="polite">
+					<span class="chat-opening__spinner" aria-hidden="true"></span>
+					<div>
+						<h2>Opening chat</h2>
+						<p>Restoring your conversation and attachments.</p>
+					</div>
+				</div>
+			{:else if messages.length === 0}
 				<div class="agent-empty">
 					<h2>Start a new conversation</h2>
 					<p>
@@ -1966,9 +1981,7 @@
 										{#if isErrorState}
 											<div class="message-error-banner">
 												<span class="message-error-banner__label">Spark AI error</span>
-												<span class="message-error-banner__hint">
-													This response failed.
-												</span>
+												<span class="message-error-banner__hint"> This response failed. </span>
 											</div>
 										{/if}
 										{#if messageRunCards.length > 0}
@@ -2392,6 +2405,43 @@
 		background: rgba(239, 68, 68, 0.08);
 		color: rgba(185, 28, 28, 0.9);
 		font-size: 0.9rem;
+	}
+
+	.chat-opening {
+		display: flex;
+		align-items: center;
+		gap: 0.85rem;
+		padding: 1rem;
+		border-radius: 8px;
+		border: 1px solid var(--chat-border);
+		background: var(--chat-surface);
+		box-shadow: 0 16px 42px -32px rgba(15, 23, 42, 0.36);
+	}
+
+	.chat-opening__spinner {
+		width: 1.45rem;
+		height: 1.45rem;
+		border-radius: 999px;
+		border: 2px solid color-mix(in srgb, var(--foreground) 14%, transparent);
+		border-top-color: #007aff;
+		animation: chat-opening-spin 0.8s linear infinite;
+	}
+
+	.chat-opening h2 {
+		margin: 0;
+		font-size: 1rem;
+	}
+
+	.chat-opening p {
+		margin: 0.2rem 0 0;
+		color: var(--text-secondary, rgba(30, 41, 59, 0.7));
+		font-size: 0.9rem;
+	}
+
+	@keyframes chat-opening-spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	.agent-empty {

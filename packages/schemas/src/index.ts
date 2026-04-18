@@ -7,6 +7,7 @@ export * from "./quiz";
 export * from "./codeProblem";
 export * from "./sessionMedia";
 export * from "./paperSheet";
+export * from "./paperSheetSubjects";
 export * from "./spark";
 export * from "./sparkAgent";
 export * from "./sparkAgentTask";

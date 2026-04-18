@@ -325,10 +325,12 @@ Use these exact field names. Do not invent alternate keys such as `promptMarkdow
     - `presentation.subtitle` should be a short factual header line about the uploaded worksheet or current state.
     - `presentation.summaryMarkdown` is the body copy for the list card and should not repeat marks or percentages.
     - `presentation.footer` should be a terse provenance/source line rather than a repeated title.
-13. Do not try to infer the schema from logs or unrelated files. The contract above is the one to follow.
-14. After both files exist, call `publish_sheet_draft({})`.
-15. Do not call `done` before `publish_sheet_draft` succeeds.
-16. Recommended workflow:
+    - `presentation.summaryMarkdown` should be one compact sentence or two short fragments for the Sheets thumbnail; do not repeat the title, subject, level, marks, percentage, created date, or footer, and avoid generic lead-ins such as "This sheet" or "The worksheet".
+13. Map the worksheet subject to Spark's stable Apple-style palette and use the matching values for `sheet.color`, `sheet.accent`, `sheet.light`, and `sheet.border`: Biology green; Mathematics blue; Chemistry purple; Physics indigo; Geography teal; Science mint; English pink; History or Religious Studies orange; Economics or Business yellow; Computer Science or General gray. Do not invent custom sheet colors.
+14. Do not try to infer the schema from logs or unrelated files. The contract above is the one to follow.
+15. After both files exist, call `publish_sheet_draft({})`.
+16. Do not call `done` before `publish_sheet_draft` succeeds.
+17. Recommended workflow:
    - first run one `extract_text` call that covers every uploaded document;
    - if the upload is already a worksheet / exam page, always run `pdf_to_images` and inspect every relevant page image (or crop) with `view_image` before drafting;
    - if the upload is not already a worksheet but layout still matters, inspect the relevant page images with `view_image`;

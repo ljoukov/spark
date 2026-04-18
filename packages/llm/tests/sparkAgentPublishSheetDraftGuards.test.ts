@@ -16,7 +16,9 @@ vi.mock("../src/utils/gcp/firestoreRest", () => {
     setFirestoreDocument: vi.fn(() => Promise.resolve({})),
     patchFirestoreDocument: vi.fn(() => Promise.resolve({})),
     listFirestoreDocuments: vi.fn(() => Promise.resolve([])),
+    queryFirestoreDocuments: vi.fn(() => Promise.resolve([])),
     deleteFirestoreDocument: vi.fn(() => Promise.resolve({})),
+    commitFirestoreWrites: vi.fn(() => Promise.resolve({})),
   };
 });
 
@@ -34,9 +36,8 @@ async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
 describe("Spark agent tool: publish_sheet_draft guards", () => {
   it("normalizes legacy worksheet draft fields before publishing", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await mkdir(path.join(rootDir, "sheet/output"), { recursive: true });
       await writeFile(
@@ -45,7 +46,8 @@ describe("Spark agent tool: publish_sheet_draft guards", () => {
           {
             presentation: {
               title: "Division of fractions (2)",
-              subtitle: "Worksheet draft reconstructed from the uploaded fractions exercise.",
+              subtitle:
+                "Worksheet draft reconstructed from the uploaded fractions exercise.",
               summaryMarkdown:
                 "Worksheet draft prepared from the uploaded fractions exercise.",
               footer: "Fractions exercise · uploaded worksheet",
@@ -196,9 +198,8 @@ describe("Spark agent tool: publish_sheet_draft guards", () => {
 
   it("rejects worksheet drafts with empty content sections", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await mkdir(path.join(rootDir, "sheet/output"), { recursive: true });
       await writeFile(
@@ -207,7 +208,8 @@ describe("Spark agent tool: publish_sheet_draft guards", () => {
           {
             presentation: {
               title: "Interest worksheet",
-              subtitle: "Worksheet draft prepared from the uploaded interest page.",
+              subtitle:
+                "Worksheet draft prepared from the uploaded interest page.",
               summaryMarkdown: "Student worksheet prepared from the upload.",
               footer: "Interest worksheet · uploaded page",
             },
@@ -295,9 +297,8 @@ describe("Spark agent tool: publish_sheet_draft guards", () => {
 
   it("accepts grouped multipart questions and counts child questions", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await mkdir(path.join(rootDir, "sheet/output"), { recursive: true });
       await writeFile(
@@ -306,7 +307,8 @@ describe("Spark agent tool: publish_sheet_draft guards", () => {
           {
             presentation: {
               title: "Interest worksheet",
-              subtitle: "Worksheet draft prepared from the uploaded interest page.",
+              subtitle:
+                "Worksheet draft prepared from the uploaded interest page.",
               summaryMarkdown: "Student worksheet prepared from the upload.",
               footer: "Interest worksheet · uploaded page",
             },
@@ -434,9 +436,8 @@ describe("Spark agent tool: publish_sheet_draft guards", () => {
 
   it("rejects answer-bank segments that keep decorative blank parentheses", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentTools } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
 
       await mkdir(path.join(rootDir, "sheet/output"), { recursive: true });
       await writeFile(
@@ -445,7 +446,8 @@ describe("Spark agent tool: publish_sheet_draft guards", () => {
           {
             presentation: {
               title: "Interest worksheet",
-              subtitle: "Worksheet draft prepared from the uploaded interest page.",
+              subtitle:
+                "Worksheet draft prepared from the uploaded interest page.",
               summaryMarkdown: "Student worksheet prepared from the upload.",
               footer: "Interest worksheet · uploaded page",
             },

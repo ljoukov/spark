@@ -15,6 +15,7 @@ vi.mock("../src/utils/gcp/firestoreRest", () => {
     setFirestoreDocument: vi.fn(() => Promise.resolve({})),
     patchFirestoreDocument: vi.fn(() => Promise.resolve({})),
     listFirestoreDocuments: vi.fn(() => Promise.resolve([])),
+    queryFirestoreDocuments: vi.fn(() => Promise.resolve([])),
     deleteFirestoreDocument: vi.fn(() => Promise.resolve({})),
     commitFirestoreWrites: vi.fn(() => Promise.resolve({})),
   };

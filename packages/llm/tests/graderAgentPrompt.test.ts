@@ -38,7 +38,9 @@ describe("grader agent prompt", () => {
     const subagents = resolveSparkAgentSubagentSelection();
 
     expect(prompt).toContain("Use bounded subagents only");
-    expect(prompt).toContain("direct `view_image` is intentionally not available");
+    expect(prompt).toContain(
+      "direct `view_image` is intentionally not available",
+    );
     expect(prompt).toContain("validate_crop_with_fresh_agent");
     expect(prompt).toContain("review_run_progress_with_fresh_agent");
     expect(task).toContain("validate_crop_with_fresh_agent");
@@ -71,6 +73,11 @@ describe("grader agent prompt", () => {
     expect(prompt).toContain("`schemaVersion`, `sheet`, `answers`, `review`");
     expect(prompt).toContain("Do not use `generate_json`");
     expect(prompt).toContain("publish_sheet({})");
+    expect(prompt).toContain("stable Apple-style sheet palette");
+    expect(prompt).toContain("presentation.summaryMarkdown");
+    expect(prompt).toContain("one compact sentence or two short fragments");
+    expect(prompt).toContain("official grade/prize/medal/percentile outcome");
+    expect(prompt).toContain('generic lead-ins such as "This sheet"');
   });
 
   it("preserves high-risk grading workflow rules in skills", () => {
@@ -83,14 +90,16 @@ describe("grader agent prompt", () => {
     );
     expect(skills).toContain("placeholder ovals");
     expect(skills).toContain("review.score.total");
-    expect(skills).toContain("top-level keys must be `schemaVersion`, `sheet`, `answers`, `review`");
-    expect(skills).toContain("Do not put student answers inside question objects");
+    expect(skills).toContain(
+      "top-level keys must be `schemaVersion`, `sheet`, `answers`, `review`",
+    );
+    expect(skills).toContain(
+      "Do not put student answers inside question objects",
+    );
     expect(skills).toContain("[got/total mark(s)]");
     expect(skills).toContain('score: { "got": number, "total": number }');
     expect(skills).toContain("score blank/incorrect work as `got: 0`");
-    expect(skills).toContain(
-      "`totals.awardedMarks` equals `review.score.got`",
-    );
+    expect(skills).toContain("`totals.awardedMarks` equals `review.score.got`");
     expect(skills).toContain("## Official Reference Lookup");
     expect(skills).toContain("grade-boundary / prize-threshold / medal-cutoff");
     expect(skills).toContain("## Real-World Outcome Reporting");
@@ -104,7 +113,7 @@ describe("grader agent prompt", () => {
     expect(skills).toContain("review_run_progress_with_fresh_agent");
     expect(skills).toContain("compact grading-report mode");
     expect(skills).toContain(
-      "do not rebuild every visual and layout feature from the source paper",
+      "without rebuilding irrelevant exam layout chrome",
     );
     expect(skills).toContain(
       "do not search online just to rediscover the same PDFs",

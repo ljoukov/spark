@@ -8,8 +8,9 @@
 	import { sumPaperSheetMarks, type PaperSheetData } from '@spark/schemas';
 	import type { PageData } from './$types';
 
-	type Sheet = PageData['sheets'][number];
-	type Gap = PageData['gaps'][number];
+	type Dashboard = Awaited<PageData['dashboard']>;
+	type Sheet = Dashboard['sheets'][number];
+	type Gap = Dashboard['gaps'][number];
 	type GapTypeFilter = 'all' | Gap['type'];
 	type SubjectFilter = {
 		key: string;
@@ -120,16 +121,28 @@
 		primarySubjectKey: string | null
 	): string {
 		const subjectTheme =
-			primarySubjectKey === null ? null : resolveSheetSubjectTheme({ key: primarySubjectKey });
+			primarySubjectKey === null
+				? sheet?.subject
+					? resolveSheetSubjectTheme({ label: sheet.subject })
+					: null
+				: resolveSheetSubjectTheme({ key: primarySubjectKey });
 		const color = subjectTheme?.color ?? sheet?.color ?? '#36587a';
 		const accent = subjectTheme?.accent ?? sheet?.accent ?? '#4d7aa5';
 		const light = subjectTheme?.light ?? sheet?.light ?? '#e8f2fb';
 		const border = subjectTheme?.border ?? sheet?.border ?? '#bfd0e0';
+		const darkColor = subjectTheme?.darkColor ?? color;
+		const darkAccent = subjectTheme?.darkAccent ?? accent;
+		const darkLight = subjectTheme?.darkLight ?? light;
+		const darkBorder = subjectTheme?.darkBorder ?? border;
 		return [
 			`--sheet-color:${color}`,
 			`--sheet-accent:${accent}`,
 			`--sheet-light:${light}`,
 			`--sheet-border:${border}`,
+			`--sheet-dark-color:${darkColor}`,
+			`--sheet-dark-accent:${darkAccent}`,
+			`--sheet-dark-light:${darkLight}`,
+			`--sheet-dark-border:${darkBorder}`,
 			`--sheet-color-08:${rgbaFromHex(color, 0.08)}`,
 			`--sheet-accent-18:${rgbaFromHex(accent, 0.18)}`
 		].join('; ');
@@ -142,6 +155,10 @@
 			`--subject-accent:${theme.accent}`,
 			`--subject-light:${theme.light}`,
 			`--subject-border:${theme.border}`,
+			`--subject-dark-color:${theme.darkColor}`,
+			`--subject-dark-accent:${theme.darkAccent}`,
+			`--subject-dark-light:${theme.darkLight}`,
+			`--subject-dark-border:${theme.darkBorder}`,
 			`--subject-light-82:${rgbaFromHex(theme.light, 0.82)}`,
 			`--subject-accent-12:${rgbaFromHex(theme.accent, 0.12)}`
 		].join('; ');
@@ -235,19 +252,155 @@
 		return 'graded';
 	}
 
-	function resolveFooterText(sheet: PageData['sheets'][number]): string {
-		if (sheet.display.footer) {
-			return sheet.display.footer;
+	function isWeakFooterText(value: string, sheet: Sheet): boolean {
+		const plain = normalizePlainText(value);
+		if (!plain || /^\d{4}$/u.test(plain)) {
+			return true;
 		}
-		return [
-			sheet.previewSheet?.level ?? 'Worksheet',
-			sheet.previewSheet?.subject ?? 'Submission'
-		].join(' · ');
+		const repeatedValues = [
+			sheet.display.title,
+			sheet.display.subtitle,
+			sheet.previewSheet?.title,
+			sheet.previewSheet?.subtitle,
+			sheet.previewSheet?.subject,
+			sheet.previewSheet?.level
+		];
+		for (const repeatedValue of repeatedValues) {
+			const repeated = normalizePlainText(repeatedValue);
+			if (repeated.length < 8) {
+				continue;
+			}
+			if (plain === repeated || plain.includes(repeated) || repeated.includes(plain)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
-	const subjectFilters = $derived.by(() => {
+	function resolveFooterText(sheet: Sheet): string | null {
+		const footer = sheet.display.footer?.trim();
+		if (!footer || isWeakFooterText(footer, sheet)) {
+			return null;
+		}
+		return footer;
+	}
+
+	function normalizePlainText(value: string | null | undefined): string {
+		if (!value) {
+			return '';
+		}
+		return value
+			.replace(/`([^`]+)`/g, '$1')
+			.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+			.replace(/[*_#>|~]/g, ' ')
+			.replace(/<[^>]+>/g, ' ')
+			.replace(/\s+/g, ' ')
+			.trim()
+			.toLowerCase();
+	}
+
+	function isPendingSheet(sheet: Sheet): boolean {
+		if (sheet.status === 'created' || sheet.status === 'executing') {
+			return true;
+		}
+		return sheet.sheetPhase !== 'graded' && sheet.status !== 'failed' && sheet.status !== 'stopped';
+	}
+
+	function isGenericPreviewSummary(value: string): boolean {
+		const plain = normalizePlainText(value);
+		return /^(this sheet|the worksheet|worksheet draft|student worksheet|checked the visible worksheet|uploaded material|submitted answers|waiting for|spark has queued)\b/.test(
+			plain
+		);
+	}
+
+	function repeatsVisibleMetadata(value: string, sheet: Sheet): boolean {
+		const plain = normalizePlainText(value);
+		if (!plain) {
+			return true;
+		}
+		const visibleValues = [
+			sheet.display.title,
+			sheet.display.subtitle,
+			sheet.display.footer,
+			sheet.previewSheet?.title,
+			sheet.previewSheet?.subtitle,
+			sheet.previewSheet?.subject,
+			sheet.previewSheet?.level,
+			resolveFooterText(sheet)
+		];
+		for (const visibleValue of visibleValues) {
+			const visible = normalizePlainText(visibleValue);
+			if (visible.length < 8) {
+				continue;
+			}
+			if (plain === visible || plain.includes(visible) || visible.includes(plain)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	function resolvePreviewSummaryMarkdown(sheet: Sheet): string | null {
+		const candidates = [
+			sheet.display.summaryMarkdown,
+			sheet.analysis?.summary,
+			sheet.analysis?.generalFeedback,
+			sheet.analysis?.specifics[0] ?? null
+		];
+		for (const candidate of candidates) {
+			const trimmed = candidate?.trim();
+			if (!trimmed) {
+				continue;
+			}
+			if (repeatsVisibleMetadata(trimmed, sheet)) {
+				continue;
+			}
+			if (!isPendingSheet(sheet) && isGenericPreviewSummary(trimmed)) {
+				continue;
+			}
+			return trimmed;
+		}
+		return null;
+	}
+
+	function pushSignal(target: string[], value: string): void {
+		const compact = value
+			.replace(/\s+/g, ' ')
+			.trim()
+			.replace(/[.!?]+$/g, '');
+		if (compact.length === 0) {
+			return;
+		}
+		const short = compact.length > 64 ? `${compact.slice(0, 63).trimEnd()}…` : compact;
+		const normalized = short.toLowerCase();
+		if (!target.some((existing) => existing.toLowerCase() === normalized)) {
+			target.push(short);
+		}
+	}
+
+	function resolveDevelopmentSignals(sheet: Sheet): string[] {
+		const signals: string[] = [];
+		if (!sheet.analysis) {
+			return signals;
+		}
+		for (const spot of sheet.analysis.weakSpots) {
+			pushSignal(signals, spot);
+			if (signals.length >= 3) {
+				return signals;
+			}
+		}
+		for (const step of sheet.analysis.nextSteps) {
+			pushSignal(signals, step);
+			if (signals.length >= 3) {
+				return signals;
+			}
+		}
+		return signals;
+	}
+
+	function resolveSubjectFilters(sheets: Sheet[]): SubjectFilter[] {
 		const counts = new Map<string, SubjectFilter>();
-		for (const sheet of data.sheets) {
+		for (const sheet of sheets) {
 			for (const subject of sheet.subjectTags) {
 				const existing = counts.get(subject.key);
 				if (existing) {
@@ -262,29 +415,31 @@
 			}
 		}
 		return [
-			{ key: 'all', label: 'All subjects', count: data.sheets.length },
+			{ key: 'all', label: 'All subjects', count: sheets.length },
 			...[...counts.values()].sort((left, right) => left.label.localeCompare(right.label))
 		];
-	});
+	}
 
-	const filteredSheets = $derived.by(() => {
+	function filterSheets(sheets: Sheet[]): Sheet[] {
 		if (selectedSubjectKey === 'all') {
-			return data.sheets;
+			return sheets;
 		}
-		return data.sheets.filter((sheet) =>
+		return sheets.filter((sheet) =>
 			sheet.subjectTags.some((subject) => subject.key === selectedSubjectKey)
 		);
-	});
+	}
 
-	const selectedSubjectLabel = $derived(
-		subjectFilters.find((subject) => subject.key === selectedSubjectKey)?.label ?? 'this subject'
-	);
+	function resolveSelectedSubjectLabel(subjectFilters: SubjectFilter[]): string {
+		return (
+			subjectFilters.find((subject) => subject.key === selectedSubjectKey)?.label ?? 'this subject'
+		);
+	}
 
-	const filteredGaps = $derived.by(() => {
+	function filterGaps(gaps: Gap[]): Gap[] {
 		if (selectedSubjectKey === 'all') {
 			return [];
 		}
-		return data.gaps.filter((gap) => {
+		return gaps.filter((gap) => {
 			if (normalizeSheetSubjectKey(gap.subjectKey) !== selectedSubjectKey) {
 				return false;
 			}
@@ -293,7 +448,7 @@
 			}
 			return gap.type === selectedGapType;
 		});
-	});
+	}
 </script>
 
 <svelte:head>
@@ -312,159 +467,202 @@
 		<a class="back-button" href="/spark">Back to chat</a>
 	</header>
 
-	{#if data.sheets.length === 0}
-		<section class="empty-card">
-			<h2>No sheets yet</h2>
-			<p>Start from chat by uploading material and asking Spark to make or grade a sheet.</p>
-		</section>
-	{:else}
-		<section class="filters-row">
-			<div class="subject-filter-list">
-				{#each subjectFilters as subject (subject.key)}
-					<button
-						type="button"
-						class:subject-filter--active={selectedSubjectKey === subject.key}
-						class="subject-filter"
-						style={subject.key === 'all' ? undefined : buildSubjectStyle(subject)}
-						onclick={() => {
-							selectedSubjectKey = subject.key;
-						}}
-					>
-						<span>{subject.label}</span>
-						<span class="subject-filter__count">{subject.count.toString()}</span>
-					</button>
+	{#await data.dashboard}
+		<section class="sheets-loading" role="status" aria-live="polite" aria-label="Loading sheets">
+			<div class="sheets-loading__header">
+				<span class="sheets-loading__spinner" aria-hidden="true"></span>
+				<div>
+					<h2>Loading sheets</h2>
+					<p>Checking worksheet runs, marks, and feedback.</p>
+				</div>
+			</div>
+			<div class="sheets-loading__filters" aria-hidden="true">
+				<span></span>
+				<span></span>
+				<span></span>
+			</div>
+			<div class="sheet-grid sheet-grid--loading" aria-hidden="true">
+				{#each Array.from({ length: 6 }) as _, index (index)}
+					<div class="sheet-preview sheet-preview--skeleton">
+						<div class="sheet-preview__header">
+							<div class="skeleton-line skeleton-line--short"></div>
+							<div class="skeleton-line skeleton-line--title"></div>
+							<div class="skeleton-line"></div>
+						</div>
+						<div class="sheet-preview__body">
+							<div class="skeleton-line skeleton-line--meta"></div>
+							<div class="skeleton-line"></div>
+							<div class="skeleton-line skeleton-line--half"></div>
+						</div>
+					</div>
 				{/each}
 			</div>
-			<p class="filters-row__count">
-				Showing {filteredSheets.length.toString()} of {data.sheets.length.toString()} sheets
-			</p>
 		</section>
-
-		{#if selectedSubjectKey !== 'all'}
-			<section class="gaps-panel" aria-label={`${selectedSubjectLabel} gaps`}>
-				<div class="gap-type-filter-list" aria-label="Gap type filters">
-					{#each GAP_TYPE_FILTERS as filter (filter.key)}
+	{:then dashboard}
+		{@const subjectFilters = resolveSubjectFilters(dashboard.sheets)}
+		{@const filteredSheets = filterSheets(dashboard.sheets)}
+		{@const selectedSubjectLabel = resolveSelectedSubjectLabel(subjectFilters)}
+		{@const filteredGaps = filterGaps(dashboard.gaps)}
+		{#if dashboard.sheets.length === 0}
+			<section class="empty-card">
+				<h2>No sheets yet</h2>
+				<p>Start from chat by uploading material and asking Spark to make or grade a sheet.</p>
+			</section>
+		{:else}
+			<section class="filters-row">
+				<div class="subject-filter-list">
+					{#each subjectFilters as subject (subject.key)}
 						<button
 							type="button"
-							class:gap-type-filter--active={selectedGapType === filter.key}
-							class="gap-type-filter"
+							class:subject-filter--active={selectedSubjectKey === subject.key}
+							class="subject-filter"
+							style={subject.key === 'all' ? undefined : buildSubjectStyle(subject)}
 							onclick={() => {
-								selectedGapType = filter.key;
+								selectedSubjectKey = subject.key;
 							}}
 						>
-							{filter.label}
+							<span>{subject.label}</span>
+							<span class="subject-filter__count">{subject.count.toString()}</span>
 						</button>
 					{/each}
 				</div>
+				<p class="filters-row__count">
+					Showing {filteredSheets.length.toString()} of {dashboard.sheets.length.toString()} sheets
+				</p>
+			</section>
 
-				{#if filteredGaps.length > 0}
-					<div class="gap-row" aria-label="Practice gaps">
-						{#each filteredGaps as gap (gap.id)}
-							<a class="gap-card" style={buildGapStyle(gap)} href={`/spark/gaps/${gap.id}`}>
-								<div class="gap-card__header">
-									<span class="gap-card__type">{gapTypeLabel(gap.type)}</span>
-									<span class="gap-card__marks">
-										{gap.source.awardedMarks ?? 0}/{gap.source.maxMarks ?? 0}
-									</span>
-								</div>
-								<h2>{gap.title}</h2>
-								<p>{gap.cardQuestion}</p>
-								<footer>
-									<span>{gap.subjectLabel}</span>
-									<span>{gap.source.questionLabel ?? gap.source.questionId}</span>
-								</footer>
-							</a>
+			{#if selectedSubjectKey !== 'all'}
+				<section class="gaps-panel" aria-label={`${selectedSubjectLabel} gaps`}>
+					<div class="gap-type-filter-list" aria-label="Gap type filters">
+						{#each GAP_TYPE_FILTERS as filter (filter.key)}
+							<button
+								type="button"
+								class:gap-type-filter--active={selectedGapType === filter.key}
+								class="gap-type-filter"
+								onclick={() => {
+									selectedGapType = filter.key;
+								}}
+							>
+								{filter.label}
+							</button>
 						{/each}
 					</div>
-				{:else}
-					<p class="gap-empty">No practice gaps for {selectedSubjectLabel} yet.</p>
-				{/if}
-			</section>
-		{/if}
 
-		<div class="sheet-grid">
-			{#each filteredSheets as sheet (sheet.id)}
-				{@const marksSummary = resolveMarksSummary(sheet)}
-				{@const summaryHtml = renderMarkdownOptional(sheet.display.summaryMarkdown)}
-				<a class="sheet-card" href={`/spark/sheets/${sheet.id}`} data-status={sheet.status}>
-					<div
-						class="sheet-preview"
-						style={buildPreviewStyle(sheet.previewSheet, sheet.primarySubjectKey)}
-					>
-						<header class="sheet-preview__header">
-							<div class="sheet-preview__header-row">
-								<div class="sheet-preview__marks-box">
-									<p class="sheet-preview__marks-label">Marks</p>
-									<p class="sheet-preview__marks-value">{marksSummary.value}</p>
-									{#if marksSummary.detail}
-										<p class="sheet-preview__marks-detail">{marksSummary.detail}</p>
-									{/if}
+					{#if filteredGaps.length > 0}
+						<div class="gap-row" aria-label="Practice gaps">
+							{#each filteredGaps as gap (gap.id)}
+								<a class="gap-card" style={buildGapStyle(gap)} href={`/spark/gaps/${gap.id}`}>
+									<div class="gap-card__header">
+										<span class="gap-card__type">{gapTypeLabel(gap.type)}</span>
+										<span class="gap-card__marks">
+											{gap.source.awardedMarks ?? 0}/{gap.source.maxMarks ?? 0}
+										</span>
+									</div>
+									<h2>{gap.title}</h2>
+									<p>{gap.cardQuestion}</p>
+									<footer>
+										<span>{gap.subjectLabel}</span>
+										<span>{gap.source.questionLabel ?? gap.source.questionId}</span>
+									</footer>
+								</a>
+							{/each}
+						</div>
+					{:else}
+						<p class="gap-empty">No practice gaps for {selectedSubjectLabel} yet.</p>
+					{/if}
+				</section>
+			{/if}
+
+			<div class="sheet-grid">
+				{#each filteredSheets as sheet (sheet.id)}
+					{@const marksSummary = resolveMarksSummary(sheet)}
+					{@const summaryHtml = renderMarkdownOptional(resolvePreviewSummaryMarkdown(sheet))}
+					{@const developmentSignals = resolveDevelopmentSignals(sheet)}
+					{@const footerText = resolveFooterText(sheet)}
+					<a class="sheet-card" href={`/spark/sheets/${sheet.id}`} data-status={sheet.status}>
+						<div
+							class="sheet-preview"
+							style={buildPreviewStyle(sheet.previewSheet, sheet.primarySubjectKey)}
+						>
+							<header class="sheet-preview__header">
+								<div class="sheet-preview__header-row">
+									<div class="sheet-preview__marks-box">
+										<p class="sheet-preview__marks-label">Marks</p>
+										<p class="sheet-preview__marks-value">{marksSummary.value}</p>
+										{#if marksSummary.detail}
+											<p class="sheet-preview__marks-detail">{marksSummary.detail}</p>
+										{/if}
+									</div>
+
+									<div>
+										<p class="sheet-preview__eyebrow">
+											{sheet.previewSheet?.level ?? 'Worksheet'} ·
+											{sheet.previewSheet?.subject ?? 'Submission'}
+										</p>
+										<h2 class="sheet-preview__title">
+											{sheet.display.title}
+										</h2>
+										<p class="sheet-preview__subtitle">
+											{sheet.display.subtitle ??
+												sheet.previewSheet?.subtitle ??
+												sheet.analysis?.summary ??
+												sheet.display.summaryMarkdown ??
+												'Awaiting sheet output.'}
+										</p>
+										{#if sheet.subjectTags.length > 0}
+											<div class="sheet-preview__tag-row">
+												{#each sheet.subjectTags as subject (subject.key)}
+													<span class="subject-pill" style={buildSubjectStyle(subject)}>
+														{resolveSheetSubjectLabel(subject)}
+													</span>
+												{/each}
+											</div>
+										{/if}
+									</div>
+								</div>
+							</header>
+
+							<div class="sheet-preview__body">
+								<div class="sheet-preview__meta">
+									<span class="status-pill" data-status={resolveStatusTone(sheet)}>
+										{resolveStatusLabel(sheet)}
+									</span>
+									<span>Created {formatDate(sheet.createdAt)}</span>
 								</div>
 
-								<div>
-									<p class="sheet-preview__eyebrow">
-										{sheet.previewSheet?.level ?? 'Worksheet'} ·
-										{sheet.previewSheet?.subject ?? 'Submission'}
-									</p>
-									<h2 class="sheet-preview__title">
-										{sheet.display.title}
-									</h2>
-									<p class="sheet-preview__subtitle">
-										{sheet.display.subtitle ??
-											sheet.previewSheet?.subtitle ??
-											sheet.analysis?.summary ??
-											sheet.display.summaryMarkdown ??
-											'Awaiting sheet output.'}
-									</p>
-									{#if sheet.subjectTags.length > 0}
-										<div class="sheet-preview__tag-row">
-											{#each sheet.subjectTags as subject (subject.key)}
-												<span class="subject-pill" style={buildSubjectStyle(subject)}>
-													{resolveSheetSubjectLabel(subject)}
-												</span>
-											{/each}
-										</div>
-									{/if}
-								</div>
+								{#if sheet.error}
+									<p class="sheet-preview__error">{formatSheetError(sheet.error)}</p>
+								{:else if summaryHtml}
+									<div class="sheet-preview__summary markdown-content">
+										{@html summaryHtml}
+									</div>
+								{/if}
+
+								{#if developmentSignals.length > 0}
+									<div class="sheet-preview__signals">
+										{#each developmentSignals as signal}
+											<span class="sheet-signal sheet-signal--warning">{signal}</span>
+										{/each}
+									</div>
+								{/if}
 							</div>
-						</header>
 
-						<div class="sheet-preview__body">
-							<div class="sheet-preview__meta">
-								<span class="status-pill" data-status={resolveStatusTone(sheet)}>
-									{resolveStatusLabel(sheet)}
-								</span>
-								<span>Created {formatDate(sheet.createdAt)}</span>
-							</div>
-
-							{#if sheet.error}
-								<p class="sheet-preview__error">{formatSheetError(sheet.error)}</p>
-							{:else if summaryHtml}
-								<div class="sheet-preview__summary markdown-content">
-									{@html summaryHtml}
-								</div>
-							{/if}
-
-							{#if sheet.analysis && (sheet.analysis.strongSpots.length > 0 || sheet.analysis.weakSpots.length > 0)}
-								<div class="sheet-preview__signals">
-									{#each sheet.analysis.strongSpots as spot}
-										<span class="sheet-signal sheet-signal--positive">{spot}</span>
-									{/each}
-									{#each sheet.analysis.weakSpots as spot}
-										<span class="sheet-signal sheet-signal--warning">{spot}</span>
-									{/each}
-								</div>
+							{#if footerText}
+								<footer class="sheet-preview__footer">
+									<span>{footerText}</span>
+								</footer>
 							{/if}
 						</div>
-
-						<footer class="sheet-preview__footer">
-							<span>{resolveFooterText(sheet)}</span>
-						</footer>
-					</div>
-				</a>
-			{/each}
-		</div>
-	{/if}
+					</a>
+				{/each}
+			</div>
+		{/if}
+	{:catch}
+		<section class="empty-card" role="alert">
+			<h2>Sheets could not load</h2>
+			<p>Refresh the page and try again.</p>
+		</section>
+	{/await}
 </section>
 
 <style lang="postcss">
@@ -530,6 +728,124 @@
 	.empty-card p {
 		margin: 0.35rem 0 0;
 		color: color-mix(in srgb, var(--foreground) 68%, transparent);
+	}
+
+	.sheets-loading {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.sheets-loading__header {
+		display: flex;
+		align-items: center;
+		gap: 0.8rem;
+		padding: 0.9rem 1rem;
+		border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+		border-radius: 8px;
+		background: color-mix(in srgb, var(--card) 92%, transparent);
+	}
+
+	.sheets-loading__header h2 {
+		margin: 0;
+		font-size: 1rem;
+	}
+
+	.sheets-loading__header p {
+		margin: 0.18rem 0 0;
+		color: color-mix(in srgb, var(--foreground) 64%, transparent);
+		font-size: 0.88rem;
+	}
+
+	.sheets-loading__spinner {
+		width: 1.4rem;
+		height: 1.4rem;
+		border-radius: 999px;
+		border: 2px solid color-mix(in srgb, var(--foreground) 14%, transparent);
+		border-top-color: color-mix(in srgb, #007aff 90%, var(--foreground));
+		animation: sheet-spin 0.8s linear infinite;
+	}
+
+	.sheets-loading__filters {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.55rem;
+	}
+
+	.sheets-loading__filters span {
+		width: 7.6rem;
+		height: 2.15rem;
+		border-radius: 999px;
+		background: linear-gradient(
+			90deg,
+			color-mix(in srgb, var(--foreground) 7%, transparent),
+			color-mix(in srgb, var(--foreground) 13%, transparent),
+			color-mix(in srgb, var(--foreground) 7%, transparent)
+		);
+		background-size: 220% 100%;
+		animation: sheet-skeleton 1.25s ease-in-out infinite;
+	}
+
+	.sheet-grid--loading {
+		pointer-events: none;
+	}
+
+	.sheet-preview--skeleton {
+		--sheet-color: #0057d9;
+		--sheet-accent: #007aff;
+		--sheet-light: #eaf4ff;
+		--sheet-border: #c4ddf8;
+		--sheet-color-08: rgba(0, 87, 217, 0.08);
+		--sheet-accent-18: rgba(0, 122, 255, 0.18);
+		min-height: 17rem;
+	}
+
+	.skeleton-line {
+		width: 100%;
+		height: 0.78rem;
+		border-radius: 8px;
+		background: linear-gradient(
+			90deg,
+			color-mix(in srgb, var(--sheet-color) 8%, transparent),
+			color-mix(in srgb, var(--sheet-color) 18%, transparent),
+			color-mix(in srgb, var(--sheet-color) 8%, transparent)
+		);
+		background-size: 220% 100%;
+		animation: sheet-skeleton 1.25s ease-in-out infinite;
+	}
+
+	.skeleton-line--short {
+		width: 42%;
+	}
+
+	.skeleton-line--title {
+		width: 72%;
+		height: 1.15rem;
+		margin-top: 0.75rem;
+	}
+
+	.skeleton-line--meta {
+		width: 62%;
+	}
+
+	.skeleton-line--half {
+		width: 48%;
+	}
+
+	@keyframes sheet-spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	@keyframes sheet-skeleton {
+		0% {
+			background-position: 120% 0;
+		}
+
+		100% {
+			background-position: -120% 0;
+		}
 	}
 
 	.filters-row {
@@ -731,7 +1047,7 @@
 	.sheet-grid {
 		display: grid;
 		gap: 1rem;
-		grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+		grid-template-columns: repeat(4, minmax(0, 1fr));
 		align-items: start;
 	}
 
@@ -808,11 +1124,6 @@
 		font-size: 0.74rem;
 		font-weight: 700;
 		letter-spacing: 0.02em;
-	}
-
-	.sheet-signal--positive {
-		background: rgba(34, 197, 94, 0.12);
-		color: #166534;
 	}
 
 	.sheet-signal--warning {
@@ -945,11 +1256,32 @@
 
 	:global([data-theme='dark'] .empty-card),
 	:global([data-theme='dark'] .back-button),
+	:global([data-theme='dark'] .sheets-loading__header),
 	:global(:root:not([data-theme='light']) .empty-card),
-	:global(:root:not([data-theme='light']) .back-button) {
+	:global(:root:not([data-theme='light']) .back-button),
+	:global(:root:not([data-theme='light']) .sheets-loading__header) {
 		border-color: #3a3258;
 		background: #1d1934;
 		color: #e4dff5;
+	}
+
+	:global([data-theme='dark'] .sheets-loading__header p),
+	:global(:root:not([data-theme='light']) .sheets-loading__header p) {
+		color: #c5bbdf;
+	}
+
+	:global([data-theme='dark'] .sheets-loading__filters span),
+	:global(:root:not([data-theme='light']) .sheets-loading__filters span) {
+		background: linear-gradient(90deg, #292340, #3a3258, #292340);
+		background-size: 220% 100%;
+	}
+
+	:global([data-theme='dark'] .sheet-preview--skeleton),
+	:global(:root:not([data-theme='light']) .sheet-preview--skeleton) {
+		--sheet-dark-color: #7cc2ff;
+		--sheet-dark-accent: #0a84ff;
+		--sheet-dark-light: #102e4f;
+		--sheet-dark-border: #1f5d9c;
 	}
 
 	:global([data-theme='dark'] .subject-filter),
@@ -961,9 +1293,9 @@
 
 	:global([data-theme='dark'] .subject-filter:not(.subject-filter--active)[style]),
 	:global(:root:not([data-theme='light']) .subject-filter:not(.subject-filter--active)[style]) {
-		border-color: color-mix(in srgb, var(--subject-color) 32%, #3a3258);
-		background: color-mix(in srgb, var(--subject-color) 16%, #201c39);
-		color: color-mix(in srgb, var(--subject-light) 32%, #f0eef8);
+		border-color: color-mix(in srgb, var(--subject-dark-accent) 36%, #3a3258);
+		background: color-mix(in srgb, var(--subject-dark-light) 58%, #201c39);
+		color: color-mix(in srgb, var(--subject-dark-color) 72%, #f0eef8);
 	}
 
 	:global([data-theme='dark'] .subject-filter--active),
@@ -1052,7 +1384,7 @@
 
 	:global([data-theme='dark'] .sheet-preview),
 	:global(:root:not([data-theme='light']) .sheet-preview) {
-		border-color: color-mix(in srgb, var(--sheet-color) 40%, #4a416d);
+		border-color: color-mix(in srgb, var(--sheet-dark-border) 58%, #4a416d);
 		background: #201c39;
 		box-shadow:
 			inset 0 1px 0 rgba(255, 255, 255, 0.03),
@@ -1061,12 +1393,12 @@
 
 	:global([data-theme='dark'] .sheet-preview__title),
 	:global(:root:not([data-theme='light']) .sheet-preview__title) {
-		color: color-mix(in srgb, var(--sheet-color) 56%, #f0eef8);
+		color: color-mix(in srgb, var(--sheet-dark-color) 72%, #f0eef8);
 	}
 
 	:global([data-theme='dark'] .sheet-preview__eyebrow),
 	:global(:root:not([data-theme='light']) .sheet-preview__eyebrow) {
-		color: color-mix(in srgb, var(--sheet-accent) 42%, #f0eef8 58%);
+		color: color-mix(in srgb, var(--sheet-dark-accent) 56%, #f0eef8 44%);
 	}
 
 	:global([data-theme='dark'] .sheet-preview__header),
@@ -1074,13 +1406,17 @@
 		background:
 			radial-gradient(circle at 90% 20%, var(--sheet-accent-18) 0 18%, transparent 19%),
 			radial-gradient(circle at 82% 8%, var(--sheet-color-08) 0 16%, transparent 17%),
-			linear-gradient(135deg, color-mix(in srgb, var(--sheet-color) 18%, #201c39) 0%, #17142a 100%);
-		border-bottom-color: color-mix(in srgb, var(--sheet-color) 34%, #302850);
+			linear-gradient(
+				135deg,
+				color-mix(in srgb, var(--sheet-dark-light) 68%, #201c39) 0%,
+				#17142a 100%
+			);
+		border-bottom-color: color-mix(in srgb, var(--sheet-dark-border) 54%, #302850);
 	}
 
 	:global([data-theme='dark'] .sheet-preview__marks-box),
 	:global(:root:not([data-theme='light']) .sheet-preview__marks-box) {
-		border-color: color-mix(in srgb, var(--sheet-color) 34%, #302850);
+		border-color: color-mix(in srgb, var(--sheet-dark-border) 54%, #302850);
 		background: #201c39;
 	}
 
@@ -1099,7 +1435,7 @@
 	:global(:root:not([data-theme='light']) .sheet-preview__marks-detail),
 	:global(:root:not([data-theme='light']) .sheet-preview__footer),
 	:global(:root:not([data-theme='light']) .sheet-preview__summary) {
-		color: color-mix(in srgb, #c5bbdf 74%, var(--sheet-color) 26%);
+		color: color-mix(in srgb, #c5bbdf 74%, var(--sheet-dark-color) 26%);
 	}
 
 	:global([data-theme='dark'] .sheet-preview__meta),
@@ -1112,9 +1448,9 @@
 		background: linear-gradient(
 			180deg,
 			rgba(23, 20, 42, 0) 0%,
-			color-mix(in srgb, var(--sheet-color) 10%, #1d1934) 160%
+			color-mix(in srgb, var(--sheet-dark-light) 46%, #1d1934) 160%
 		);
-		border-top-color: color-mix(in srgb, var(--sheet-color) 36%, #3a3258);
+		border-top-color: color-mix(in srgb, var(--sheet-dark-border) 54%, #3a3258);
 	}
 
 	:global([data-theme='dark'] .status-pill[data-status='solving']),
@@ -1136,13 +1472,59 @@
 		color: #fde68a;
 	}
 
+	@media (max-width: 1120px) {
+		.sheet-grid {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+	}
+
+	@media (max-width: 860px) {
+		.sheet-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+
 	@media (max-width: 700px) {
+		.sheets-page {
+			width: calc(100vw - 1.5rem);
+			gap: 0.85rem;
+			padding-top: 1rem;
+		}
+
 		.sheets-header {
 			flex-direction: column;
+			gap: 0.7rem;
 		}
 
 		h1 {
 			font-size: 1.7rem;
+		}
+
+		.subtitle {
+			font-size: 0.95rem;
+		}
+
+		.filters-row {
+			gap: 0.45rem;
+		}
+
+		.subject-filter-list {
+			flex-wrap: nowrap;
+			width: calc(100vw - 0.75rem);
+			margin-inline: -0.75rem;
+			padding-inline: 0.75rem;
+			overflow-x: auto;
+			scroll-snap-type: x proximity;
+			scrollbar-width: none;
+		}
+
+		.subject-filter-list::-webkit-scrollbar {
+			display: none;
+		}
+
+		.subject-filter {
+			flex: 0 0 auto;
+			scroll-snap-align: start;
 		}
 
 		.sheet-preview__footer {
@@ -1158,6 +1540,12 @@
 		.gap-card {
 			flex-basis: 80%;
 			min-width: 80%;
+		}
+	}
+
+	@media (max-width: 560px) {
+		.sheet-grid {
+			grid-template-columns: minmax(0, 1fr);
 		}
 	}
 </style>

@@ -16,15 +16,28 @@ describe('sheetSubjects', () => {
 		expect(normalizeSheetSubjectKey('AQA GCSE Combined Science Trilogy Biology Paper 1H')).toBe(
 			'biology'
 		);
+		expect(normalizeSheetSubjectKey('GCSE Computer Science J277')).toBe('computer_science');
 	});
 
 	it('keeps biology on the green palette', () => {
 		expect(resolveSheetSubjectTheme({ key: 'biology' })).toEqual({
-			color: '#13795B',
-			accent: '#1FA57A',
-			light: '#E7F7F0',
-			border: '#9FDCC7'
+			id: 'apple-green',
+			color: '#167A2F',
+			accent: '#34C759',
+			light: '#EAF8EE',
+			border: '#A9E7B8',
+			darkColor: '#8EF0A7',
+			darkAccent: '#30D158',
+			darkLight: '#12381E',
+			darkBorder: '#2F7E43'
 		});
+	});
+
+	it('maps core school subjects onto stable Apple palettes', () => {
+		expect(resolveSheetSubjectTheme({ key: 'mathematics' }).id).toBe('apple-blue');
+		expect(resolveSheetSubjectTheme({ key: 'chemistry' }).id).toBe('apple-purple');
+		expect(resolveSheetSubjectTheme({ key: 'physics' }).id).toBe('apple-indigo');
+		expect(resolveSheetSubjectTheme({ key: 'geography' }).id).toBe('apple-teal');
 	});
 
 	it('builds subject tags with normalized keys and preserved labels', () => {

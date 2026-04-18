@@ -57,22 +57,17 @@ function resolveSubjectTags(options: {
 	return [buildSheetSubjectTag(previewSubject)];
 }
 
-export const load: PageServerLoad = async ({ locals }) => {
-	const user = locals.appUser;
-	if (!user) {
-		throw redirect(302, '/login');
-	}
-
+async function loadSheetDashboard(userId: string) {
 	const [runs, runAnalyses, gapsRaw] = await Promise.all([
-		listGraderRuns(user.uid, 100),
-		getSheetRunAnalyses(user.uid),
-		listLearningGaps(user.uid, 120)
+		listGraderRuns(userId, 100),
+		getSheetRunAnalyses(userId),
+		listLearningGaps(userId, 120)
 	]);
 	const analysisByRunId = new Map(runAnalyses.map((analysis) => [analysis.runId, analysis]));
 	const sheets = await Promise.all(
 		runs.map(async (run) => {
 			const reportPath = run.sheet?.filePath ?? run.sheetPath;
-			const artifactRaw = await getWorkspaceTextFile(user.uid, run.workspaceId, reportPath);
+			const artifactRaw = await getWorkspaceTextFile(userId, run.workspaceId, reportPath);
 			const report = artifactRaw ? safeParseGraderWorksheetReport(artifactRaw) : null;
 			const draft = artifactRaw ? safeParseSolveSheetDraft(artifactRaw) : null;
 			const analysis = analysisByRunId.get(run.id) ?? null;
@@ -139,4 +134,13 @@ export const load: PageServerLoad = async ({ locals }) => {
 	}));
 
 	return { sheets, gaps };
+}
+
+export const load: PageServerLoad = async ({ locals }) => {
+	const user = locals.appUser;
+	if (!user) {
+		throw redirect(302, '/login');
+	}
+
+	return { dashboard: loadSheetDashboard(user.uid) };
 };

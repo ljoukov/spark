@@ -66,6 +66,7 @@ import {
   SparkTutorReviewThreadSchema,
   SparkTutorScreenStateSchema,
   SparkAgentWorkspaceFileSchema,
+  applyPaperSheetSubjectTheme,
   coerceSparkSolveSheetDraft,
   normalizeTutorMarkdown,
   visitPaperSheetQuestions,
@@ -77,6 +78,7 @@ import {
   type SparkAgentAvailableTool,
   type SparkAgentStateTimeline,
   type SparkGraderWorksheetReport,
+  type SparkSolveSheetDraft,
   type SparkTutorComposerState,
   type SparkTutorReviewState,
 } from "@spark/schemas";
@@ -2249,6 +2251,39 @@ function selectGraderResultSummary(options: {
   return undefined;
 }
 
+function normalizeSparkGraderWorksheetReportTheme(
+  report: SparkGraderWorksheetReport,
+): { report: SparkGraderWorksheetReport; changed: boolean } {
+  const sheet = applyPaperSheetSubjectTheme(report.sheet);
+  if (sheet === report.sheet) {
+    return { report, changed: false };
+  }
+  return {
+    report: {
+      ...report,
+      sheet,
+    },
+    changed: true,
+  };
+}
+
+function normalizeSparkSolveSheetDraftTheme(draft: SparkSolveSheetDraft): {
+  draft: SparkSolveSheetDraft;
+  changed: boolean;
+} {
+  const sheet = applyPaperSheetSubjectTheme(draft.sheet);
+  if (sheet === draft.sheet) {
+    return { draft, changed: false };
+  }
+  return {
+    draft: {
+      ...draft,
+      sheet,
+    },
+    changed: true,
+  };
+}
+
 function resolveSparkRepoRoot(): string {
   const currentWorkingDirectory = path.resolve(process.cwd());
   const currentBaseName = path.basename(currentWorkingDirectory);
@@ -2883,8 +2918,7 @@ const MATH_GRID_ROWS_PROSE_PATTERN =
   /\b(?:first|second|left|right)\s+grid\s+rows\s*:/iu;
 const MATH_GRID_BLOCK_PROSE_PATTERN =
   /\b(?:first|second|left|right)?\s*grid\s*:\s*(?:\r?\n)+\s*\d+(?:\s+\d+){2,}\s*(?:\r?\n)+\s*\d+(?:\s+\d+){2,}\s*(?:\r?\n)+\s*\d+(?:\s+\d+){2,}/iu;
-const INLINE_SIGN_ROW_PATTERN =
-  /\bsigns?\s+(?:[+-]\s+){6,}[+-](?:[\s.]|$)/u;
+const INLINE_SIGN_ROW_PATTERN = /\bsigns?\s+(?:[+-]\s+){6,}[+-](?:[\s.]|$)/u;
 const BARE_SIGN_ROW_PATTERN = /(?:^|\n)\s*(?:[+-]\s*){8,}(?:\n|$)/u;
 const DISPLAY_MATH_LAYOUT_PATTERN =
   /\\\[|\\begin\{(?:array|aligned|alignedat|matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|gathered|cases)\b|\$\$/u;
@@ -5804,6 +5838,20 @@ async function validateGraderWorkspaceForPublish(options: {
     );
   }
   let report = parsedSheet.data;
+  const normalizedTheme = normalizeSparkGraderWorksheetReportTheme(report);
+  if (normalizedTheme.changed) {
+    report = normalizedTheme.report;
+    sheetJson = report;
+    sheetRaw = JSON.stringify(report, null, 2).concat("\n");
+    await writeFile(
+      resolveWorkspacePath(options.rootDir, resolvedSheetPath),
+      sheetRaw,
+      {
+        encoding: "utf8",
+      },
+    );
+    options.onWorkspaceFileChanged?.(resolvedSheetPath);
+  }
   const preNormalizationRawAgentLogMarkdown = await readFile(
     resolveWorkspacePath(options.rootDir, "logs/agent/agent.log"),
     { encoding: "utf8" },
@@ -5958,6 +6006,7 @@ async function validateSheetDraftWorkspaceForPublish(options: {
   rootDir: string;
   summaryPath: string;
   sheetPath: string;
+  onWorkspaceFileChanged?: (filePath: string) => void;
 }): Promise<PublishedSheetDraftArtifacts> {
   const normalizeWorkspacePath = (value: string): string =>
     value.replace(/\\/gu, "/").trim();
@@ -6041,7 +6090,7 @@ async function validateSheetDraftWorkspaceForPublish(options: {
     );
   }
   const parsedSheet = SparkSolveSheetDraftSchema.safeParse(sheetJson);
-  const draft = parsedSheet.success
+  let draft = parsedSheet.success
     ? parsedSheet.data
     : coerceSparkSolveSheetDraft(sheetJson);
   if (!draft) {
@@ -6052,10 +6101,15 @@ async function validateSheetDraftWorkspaceForPublish(options: {
       `Worksheet draft "${resolvedSheetPath}" failed schema validation: ${validationSummary}`,
     );
   }
-  const normalizedSheetRaw = parsedSheet.success
-    ? sheetRaw
-    : `${JSON.stringify(draft, null, 2)}\n`;
-  if (!parsedSheet.success) {
+  const normalizedTheme = normalizeSparkSolveSheetDraftTheme(draft);
+  if (normalizedTheme.changed) {
+    draft = normalizedTheme.draft;
+  }
+  const shouldRewriteDraft = !parsedSheet.success || normalizedTheme.changed;
+  const normalizedSheetRaw = shouldRewriteDraft
+    ? `${JSON.stringify(draft, null, 2)}\n`
+    : sheetRaw;
+  if (shouldRewriteDraft) {
     await writeFile(
       resolveWorkspacePath(options.rootDir, resolvedSheetPath),
       normalizedSheetRaw,
@@ -6063,6 +6117,7 @@ async function validateSheetDraftWorkspaceForPublish(options: {
         encoding: "utf8",
       },
     );
+    options.onWorkspaceFileChanged?.(resolvedSheetPath);
   }
 
   let questionCount = 0;
@@ -8618,6 +8673,8 @@ export function buildSparkAgentSystemPrompt(options?: {
     "When the workspace contains grader/task.md or request.json describes a grader run, you are not finished after extracting text, inspecting images, or cropping figures.",
     "You MUST write grader/output/sheet.json and grader/output/run-summary.json, then call publish_sheet({}). Use validation errors as diagnostics, repair the artifacts coherently, and retry only while you are fixing a new class of issue rather than repeating the same failed branch.",
     "For grader/output/run-summary.json, include totals.awardedMarks, totals.maxMarks, presentation.title, presentation.subtitle, presentation.summaryMarkdown, presentation.footer, and sheet.filePath exactly equal to grader/output/sheet.json.",
+    "For worksheet `sheet.color`, `sheet.accent`, `sheet.light`, and `sheet.border`, use Spark's stable Apple-style subject palette: Biology green; Mathematics blue; Chemistry purple; Physics indigo; Geography teal; Science mint; English pink; History or Religious Studies orange; Economics or Business yellow; Computer Science or General gray. The publish tools normalize mismatches, but choose the right palette before publishing.",
+    "For `presentation.summaryMarkdown`, write the Sheets thumbnail body only: one compact sentence or two short fragments, specific, and not repeating title, subject, level, marks, percentage, created date, or footer. In graded runs prefer a known official grade/prize/medal/percentile outcome, common examiner mistake made/avoided, or the strongest concrete next learning target. Do not use generic lead-ins such as \"This sheet\", \"The worksheet\", \"Graded\", \"Checked\", or broad praise.",
     "When official source PDFs are discovered online, the visible sheet should link to Spark's cached shared storage path, not the third-party URL. Include `references.paperStoragePath` / `references.markSchemeStoragePath` in grader/output/sheet.json and `paperStoragePath` / `markSchemeStoragePath` in grader/output/run-summary.json whenever `kb_cache_pdf_from_url` or `kb_download_pdf` provides them. Keep the original URLs only as provenance fields.",
     "Do not copy request.json, brief.md, upload manifests, planning JSON, answer lists, or process summaries into grader/output/sheet.json or grader/output/run-summary.json. Those files must contain only the worksheet report schema and publish summary schema.",
     "For source-paper-only/no-student grader runs, do not solve the paper, derive correct options, list an answer key, or include worked solutions. Build an unanswered worksheet with blank answers and review.mode='awaiting_answers'.",
@@ -14113,6 +14170,9 @@ function buildAgentTools(options: {
           rootDir,
           summaryPath: summaryPath ?? "sheet/output/run-summary.json",
           sheetPath: sheetPath ?? "sheet/output/draft.json",
+          onWorkspaceFileChanged: (filePath) => {
+            workspace.scheduleUpdate(filePath);
+          },
         });
         await beforePublishSheetDraft?.();
 

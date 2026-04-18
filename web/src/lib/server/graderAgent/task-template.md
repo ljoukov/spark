@@ -42,6 +42,23 @@ Classify the run before expensive work:
 7. Write `grader/output/sheet.json` and `grader/output/run-summary.json`.
 8. Call `publish_sheet({})`. Repair coherent validation errors, but do not repeat the same failed branch. Call `review_run_progress_with_fresh_agent` when repeated tool loops suggest the run is off-track.
 
+## Stable Sheet Palette
+
+Map the worksheet subject to Spark's stable Apple-style palette and use the matching values for `sheet.color`, `sheet.accent`, `sheet.light`, and `sheet.border`.
+
+- Biology: green.
+- Mathematics: blue.
+- Chemistry: purple.
+- Physics: indigo.
+- Geography: teal.
+- Science: mint.
+- English: pink.
+- History or Religious Studies: orange.
+- Economics or Business: yellow.
+- Computer Science or General: gray.
+
+Do not invent custom sheet colors. The publish tool normalizes mismatches, but choose the right subject palette before publishing so the list thumbnail and opened worksheet match.
+
 ## Output Contract
 
 `grader/output/run-summary.json` must use this top-level shape:
@@ -82,6 +99,7 @@ Optional paper metadata is allowed only when known. If you include `year`, write
 - do not add review entries for parent `group` ids,
 - keep `review.score` and `run-summary.totals` equal to the sum of per-question scores,
 - format `review.label` as `N/total` and include `review.note`, which may be `""`.
+- `presentation.summaryMarkdown` is the Sheets thumbnail body only: write one compact sentence or two short fragments, concrete and non-redundant. Do not repeat title, subject, level, marks, percentage, created date, or footer. Prefer a known official grade/prize/medal/percentile outcome when suitable; otherwise mention the most useful score driver, common examiner mistake made/avoided, or a concrete next learning target. Do not use generic lead-ins such as "This sheet", "The worksheet", "Graded", "Checked", or broad praise.
 
 ## Guardrails
 
