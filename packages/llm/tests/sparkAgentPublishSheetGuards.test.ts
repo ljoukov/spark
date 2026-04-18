@@ -1424,7 +1424,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
                         displayNumber: "1(a)",
                         badgeLabel: "a",
                         marks: 1,
-                        prompt: "Explain the feature labelled in Figure 1.",
+                        prompt: "Explain the feature labelled in Figure 1 above.",
                         lines: 2,
                       },
                       {
@@ -1451,7 +1451,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
                         displayNumber: "2(a)",
                         badgeLabel: "a",
                         marks: 1,
-                        prompt: "Compare the values in Table 1.",
+                        prompt: "Compare the values in Table 1 above.",
                         lines: 2,
                       },
                       {
@@ -1578,6 +1578,346 @@ describe("Spark agent tool: publish_sheet guards", () => {
         awardedMarks: 4,
         maxMarks: 4,
       });
+    });
+  });
+
+  it("rejects compact handwritten grading reports that omit named source figures", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "GCSE Science grading report",
+        awardedMarks: 1,
+        maxMarks: 1,
+        footer: "AQA 8464/C/1H",
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Science",
+            level: "GCSE",
+            title: "GCSE Science grading report",
+            subtitle: "Uploaded work",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q1",
+                label: "Question 1",
+                questions: [
+                  {
+                    id: "q01_1",
+                    type: "lines",
+                    displayNumber: "01.1",
+                    badgeLabel: "1",
+                    marks: 1,
+                    prompt:
+                      "Figure 1 asks which group had not been discovered.",
+                    lines: 1,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q01_1: "Noble gases",
+          },
+          review: {
+            score: {
+              got: 1,
+              total: 1,
+            },
+            label: "1/1",
+            message: "Correct.",
+            note: "",
+            questions: {
+              q01_1: {
+                status: "correct",
+                score: { got: 1, total: 1 },
+                note: "",
+              },
+            },
+          },
+        },
+      });
+      await writeFile(
+        path.join(rootDir, "request.json"),
+        JSON.stringify(
+          {
+            createdAt: new Date(0).toISOString(),
+            sourceText:
+              "Please grade my handwritten work against the uploaded paper.",
+            input: {},
+            attachments: [
+              {
+                id: "student-page",
+                contentType: "image/png",
+                sizeBytes: 100,
+                filename: "student-page.png",
+              },
+              {
+                id: "source-paper",
+                contentType: "application/pdf",
+                sizeBytes: 1000,
+                filename: "source-paper.pdf",
+              },
+            ],
+          },
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+      await writeSourceProblemStatementTranscription(
+        rootDir,
+        [
+          "## Source problem-statement transcription",
+          "",
+          "**01.1** Figure 1 shows part of Mendeleev's version of the periodic table.",
+          "",
+        ].join("\n"),
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /references a visual|source transcription mentions Figure 1/iu,
+      );
+    });
+  });
+
+  it("rejects compact handwritten grading reports that flatten named source tables into prose", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "GCSE Science grading report",
+        awardedMarks: 1,
+        maxMarks: 1,
+        footer: "AQA 8464/C/1H",
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Science",
+            level: "GCSE",
+            title: "GCSE Science grading report",
+            subtitle: "Uploaded work",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q1",
+                label: "Question 1",
+                questions: [
+                  {
+                    id: "q01_5",
+                    type: "lines",
+                    displayNumber: "01.5",
+                    badgeLabel: "5",
+                    marks: 1,
+                    prompt:
+                      "Table 1: potassium isotopes have mass numbers 39 and 41 with percentage abundances 93.1 and 6.9. Calculate the relative atomic mass.",
+                    lines: 3,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q01_5: "39.1",
+          },
+          review: {
+            score: {
+              got: 1,
+              total: 1,
+            },
+            label: "1/1",
+            message: "Correct.",
+            note: "",
+            questions: {
+              q01_5: {
+                status: "correct",
+                score: { got: 1, total: 1 },
+                note: "",
+              },
+            },
+          },
+        },
+      });
+      await writeFile(
+        path.join(rootDir, "request.json"),
+        JSON.stringify(
+          {
+            createdAt: new Date(0).toISOString(),
+            sourceText:
+              "Please grade my handwritten work against the uploaded paper.",
+            input: {},
+            attachments: [
+              {
+                id: "student-page",
+                contentType: "image/png",
+                sizeBytes: 100,
+                filename: "student-page.png",
+              },
+              {
+                id: "source-paper",
+                contentType: "application/pdf",
+                sizeBytes: 1000,
+                filename: "source-paper.pdf",
+              },
+            ],
+          },
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+      await writeSourceProblemStatementTranscription(
+        rootDir,
+        [
+          "## Source problem-statement transcription",
+          "",
+          "**01.5** Table 1 gives potassium isotope values.",
+          "",
+        ].join("\n"),
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /references a source table/iu,
+      );
+    });
+  });
+
+  it("rejects visible summary score fractions that drift from review.score", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "GCSE Science grading report",
+        awardedMarks: 1,
+        maxMarks: 1,
+        summaryMarkdown: "Scored 1/2 with one good answer.",
+        footer: "AQA 8464/C/1H",
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Science",
+            level: "GCSE",
+            title: "GCSE Science grading report",
+            subtitle: "Uploaded work",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q1",
+                label: "Question 1",
+                questions: [
+                  {
+                    id: "q1",
+                    type: "lines",
+                    displayNumber: "1",
+                    marks: 1,
+                    prompt: "State one result.",
+                    lines: 1,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q1: "Correct.",
+          },
+          review: {
+            score: {
+              got: 1,
+              total: 1,
+            },
+            label: "1/1",
+            message: "Correct.",
+            note: "",
+            questions: {
+              q1: {
+                status: "correct",
+                score: { got: 1, total: 1 },
+                note: "",
+              },
+            },
+          },
+          references: {
+            overallFeedbackMarkdown: "You scored 1/2.",
+          },
+        },
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /says 1\/2 but worksheet score is 1\/1/iu,
+      );
     });
   });
 

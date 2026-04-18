@@ -2865,6 +2865,10 @@ const ABOVE_VISUAL_REFERENCE_PATTERN =
   /\b(?:Figure|Fig\.?|Diagram)\s+\d+(?:\.\d+)*[A-Za-z]?\b[^.?!\n]{0,120}\babove\b|\babove\b[^.?!\n]{0,120}\b(?:Figure|Fig\.?|Diagram)\s+\d+(?:\.\d+)*[A-Za-z]?\b/iu;
 const ANCHORED_VISUAL_REFERENCE_PATTERN =
   /\[(?:Figure|Fig\.?|Diagram)\s+\d+(?:\.\d+)*[A-Za-z]?\]\(#(?:figure|fig|diagram)-[^)\s]+\)/iu;
+const ABOVE_TABLE_REFERENCE_PATTERN =
+  /\bTable\s+\d+(?:\.\d+)*[A-Za-z]?\b[^.?!\n]{0,120}\babove\b|\babove\b[^.?!\n]{0,120}\bTable\s+\d+(?:\.\d+)*[A-Za-z]?\b/iu;
+const ANCHORED_TABLE_REFERENCE_PATTERN =
+  /\[Table\s+\d+(?:\.\d+)*[A-Za-z]?\]\(#table-[^)\s]+\)/iu;
 const MARKDOWN_TABLE_PATTERN = /^\s*\|?(?:\s*:?-{3,}:?\s*\|){2,}\s*$/mu;
 const NAMED_FIGURE_REFERENCE_PATTERN =
   /\b(?:Figure|Fig\.?|Diagram)\s+(\d+(?:\.\d+)*[A-Za-z]?)\b/giu;
@@ -2945,6 +2949,7 @@ const ANSWER_REVEAL_NOTE_PATTERN = new RegExp(
 );
 const SCORE_ONLY_REVIEW_MESSAGE_PATTERN =
   /^\s*\d+(?:\.\d+)?\s*\/\s*\d+(?:\.\d+)?\s*(?:marks?)?\s*$/iu;
+const SCORE_FRACTION_PATTERN = /\b(\d{1,3})\s*\/\s*(\d{1,3})\b/gu;
 const NO_STUDENT_ANSWERS_REQUEST_PATTERN =
   /\b(?:no\s+student\s+answers?\s+(?:were\s+)?provided|no\s+student\s+submission|no\s+submitted\s+answers?|unanswered\s+worksheet|leave\s+answers?\s+blank|awaiting\s+student\s+work)\b/iu;
 const QUESTION_STRUCTURE_REQUEST_PATTERN =
@@ -3329,6 +3334,27 @@ function promptHasVisibleSourceTable(promptText: string): boolean {
   );
 }
 
+function promptNeedsVisibleTable(promptText: string): boolean {
+  const referencesNamedTable =
+    collectNamedReferences(promptText, NAMED_TABLE_REFERENCE_PATTERN).size > 0;
+  if (
+    !referencesNamedTable &&
+    !TABLE_PROMPT_WITHOUT_TABLE_PATTERN.test(promptText)
+  ) {
+    return false;
+  }
+  if (ABOVE_TABLE_REFERENCE_PATTERN.test(promptText)) {
+    return false;
+  }
+  if (ANCHORED_TABLE_REFERENCE_PATTERN.test(promptText)) {
+    return false;
+  }
+  if (SOURCE_PDF_VISUAL_REFERENCE_PATTERN.test(promptText)) {
+    return false;
+  }
+  return !promptHasVisibleSourceTable(promptText);
+}
+
 function promptHasColumnOrStackedLayout(promptText: string): boolean {
   const hasRenderableLatexLayout =
     /\\\[[\s\S]*?(?:\\begin\{(?:array|aligned|matrix|pmatrix|bmatrix)\b|\\\\|\\hline)[\s\S]*?\\\]/iu.test(
@@ -3339,6 +3365,33 @@ function promptHasColumnOrStackedLayout(promptText: string): boolean {
     hasRenderableLatexLayout ||
     /(?:^|\n)\s*[+−-]\s*[01](?:\s+[01]){3,}/u.test(promptText)
   );
+}
+
+function collectScoreFractionMismatchIssues(options: {
+  fieldName: string;
+  text: string | undefined;
+  expectedGot: number;
+  expectedTotal: number;
+}): string[] {
+  const text = options.text;
+  if (typeof text !== "string" || text.trim().length === 0) {
+    return [];
+  }
+  const issues: string[] = [];
+  for (const match of text.matchAll(SCORE_FRACTION_PATTERN)) {
+    const got = Number(match[1]);
+    const total = Number(match[2]);
+    if (!Number.isFinite(got) || !Number.isFinite(total)) {
+      continue;
+    }
+    if (got === options.expectedGot && total === options.expectedTotal) {
+      continue;
+    }
+    issues.push(
+      `${options.fieldName} says ${got.toString()}/${total.toString()} but worksheet score is ${options.expectedGot.toString()}/${options.expectedTotal.toString()}; keep all visible score text synchronized with review.score`,
+    );
+  }
+  return issues;
 }
 
 function hasMalformedLatexLayoutRowBreak(text: string): boolean {
@@ -4716,6 +4769,30 @@ function collectGraderWorksheetPublishIssues(
       "worksheet review.message repeats only the numeric score; use it for a short learning summary because the UI already renders got/total separately",
     );
   }
+  issues.push(
+    ...collectScoreFractionMismatchIssues({
+      fieldName: "worksheet review.message",
+      text: report.review.message,
+      expectedGot: report.review.score.got,
+      expectedTotal: report.review.score.total,
+    }),
+  );
+  issues.push(
+    ...collectScoreFractionMismatchIssues({
+      fieldName: "references.overallFeedbackMarkdown",
+      text: report.references?.overallFeedbackMarkdown,
+      expectedGot: report.review.score.got,
+      expectedTotal: report.review.score.total,
+    }),
+  );
+  issues.push(
+    ...collectScoreFractionMismatchIssues({
+      fieldName: "presentation.summaryMarkdown",
+      text: runSummary?.presentation?.summaryMarkdown,
+      expectedGot: report.review.score.got,
+      expectedTotal: report.review.score.total,
+    }),
+  );
 
   const presentationFields = [
     ["title", runSummary?.presentation?.title],
@@ -5055,10 +5132,7 @@ function collectGraderWorksheetPublishIssues(
             }
           }
         }
-        if (
-          promptNeedsVisibleImage(entry.prompt) &&
-          !compactHandwrittenGrading
-        ) {
+        if (promptNeedsVisibleImage(entry.prompt)) {
           issues.push(
             `group question "${entry.id}" references a visual but does not link a visible worksheet crop in group.prompt; keep question-critical figures visible near the source stem instead of hiding them in references`,
           );
@@ -5148,10 +5222,7 @@ function collectGraderWorksheetPublishIssues(
             `group question "${entry.id}" leaves a long sign row inline; preserve source display layout with display LaTeX or an equivalent line block`,
           );
         }
-        if (
-          TABLE_PROMPT_WITHOUT_TABLE_PATTERN.test(entry.prompt) &&
-          !promptHasVisibleSourceTable(entry.prompt)
-        ) {
+        if (promptNeedsVisibleTable(entry.prompt)) {
           issues.push(
             `group question "${entry.id}" references a source table but group.prompt does not include a visible Markdown table or linked crop`,
           );
@@ -5407,10 +5478,7 @@ function collectGraderWorksheetPublishIssues(
           `question "${question.id}" leaves a long sign row inline; preserve source display layout with display LaTeX or an equivalent line block`,
         );
       }
-      if (
-        TABLE_PROMPT_WITHOUT_TABLE_PATTERN.test(promptText) &&
-        !promptHasVisibleSourceTable(promptText)
-      ) {
+      if (promptNeedsVisibleTable(promptText)) {
         issues.push(
           `question "${question.id}" references a source table but its prompt does not include a visible Markdown table or linked crop`,
         );
@@ -5430,7 +5498,7 @@ function collectGraderWorksheetPublishIssues(
         issues.push(`question "${question.id}" ${orderingIssue}`);
       }
 
-      if (promptNeedsVisibleImage(promptText) && !compactHandwrittenGrading) {
+      if (promptNeedsVisibleImage(promptText)) {
         issues.push(
           `question "${question.id}" references a visual but does not link a visible worksheet crop in the prompt; do not hide question-critical figures in source references or transcription`,
         );
@@ -5466,9 +5534,6 @@ function collectGraderWorksheetPublishIssues(
       NAMED_FIGURE_REFERENCE_PATTERN,
     );
     for (const label of sourceFigureLabels) {
-      if (compactHandwrittenGrading) {
-        continue;
-      }
       if (!hasReferenceLabel(renderedSheetMarkdown, "Figure", label)) {
         issues.push(
           `source transcription mentions Figure ${label} but the worksheet omits that named figure`,
@@ -5495,9 +5560,6 @@ function collectGraderWorksheetPublishIssues(
       NAMED_TABLE_REFERENCE_PATTERN,
     );
     for (const label of sourceTableLabels) {
-      if (compactHandwrittenGrading) {
-        continue;
-      }
       if (!hasReferenceLabel(renderedSheetMarkdown, "Table", label)) {
         issues.push(
           `source transcription mentions Table ${label} but the worksheet omits that named table`,
