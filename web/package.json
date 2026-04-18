@@ -30,7 +30,7 @@
 		"@connectrpc/connect-node": "^2.1.1",
 		"@connectrpc/connect-web": "^2.1.1",
 		"@ljoukov/llm": "7.0.9",
-		"@ljoukov/sheet": "0.3.1",
+		"@ljoukov/sheet": "0.3.4",
 		"@spark/llm": "workspace:*",
 		"@spark/proto": "workspace:*",
 		"@spark/schemas": "workspace:*",
