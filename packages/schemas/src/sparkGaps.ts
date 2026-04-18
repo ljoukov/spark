@@ -121,9 +121,37 @@ export type SparkLearningGapReadingPresentation = z.infer<
   typeof SparkLearningGapReadingPresentationSchema
 >;
 
+export const SparkLearningGapGuidedQuestionSchema = z.object({
+  id: trimmedString,
+  question: trimmedString,
+  expectedAnswer: trimmedString,
+  hint: optionalTrimmedString,
+  maxMarks: z.number().int().min(1).max(4).optional(),
+});
+
+export type SparkLearningGapGuidedQuestion = z.infer<
+  typeof SparkLearningGapGuidedQuestionSchema
+>;
+
+export const SparkLearningGapGuidedPresentationSchema = z.object({
+  question: trimmedString,
+  instructions: optionalTrimmedString,
+  questions: z.array(SparkLearningGapGuidedQuestionSchema).min(2).max(10),
+  memoryChain: trimmedString,
+  answerPrompt: optionalTrimmedString,
+  modelAnswer: trimmedString,
+  markScheme: optionalTrimmedString,
+  maxMarks: z.number().int().min(1).max(8).optional(),
+});
+
+export type SparkLearningGapGuidedPresentation = z.infer<
+  typeof SparkLearningGapGuidedPresentationSchema
+>;
+
 export const SparkLearningGapPresentationsSchema = z.object({
   v11: SparkLearningGapInlinePresentationSchema,
   v16: SparkLearningGapReadingPresentationSchema,
+  v17: SparkLearningGapGuidedPresentationSchema.optional(),
 });
 
 export type SparkLearningGapPresentations = z.infer<

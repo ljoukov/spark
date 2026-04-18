@@ -6,8 +6,10 @@
 		QuizProgress,
 		QuizTypeAnswer
 	} from '$lib/components/quiz/index.js';
+	import GapGuidedMode from '$lib/components/spark/gaps/GapGuidedMode.svelte';
 	import GapInlineMode from '$lib/components/spark/gaps/GapInlineMode.svelte';
 	import GapReadingMode from '$lib/components/spark/gaps/GapReadingMode.svelte';
+	import { fallbackGuidedPresentation } from '$lib/spark/gaps/guidedPresentation';
 	import { renderMarkdownOptional } from '$lib/markdown';
 	import type {
 		QuizFeedback,
@@ -17,6 +19,7 @@
 		QuizTypeAnswerQuestion
 	} from '$lib/types/quiz';
 	import type {
+		SparkLearningGapGuidedPresentation,
 		SparkLearningGapInlinePresentation,
 		SparkLearningGapReadingPresentation
 	} from '@spark/schemas';
@@ -25,7 +28,7 @@
 	import type { PageData } from './$types';
 
 	type Step = PageData['gap']['steps'][number];
-	type GapMode = 'current' | 'v11' | 'v16';
+	type GapMode = 'current' | 'v11' | 'v16' | 'v17';
 	type AttemptStatus = 'pending' | 'correct' | 'incorrect';
 	type AttemptState = {
 		status: AttemptStatus;
@@ -102,7 +105,8 @@
 	const GAP_MODE_OPTIONS: Array<{ value: GapMode; label: string }> = [
 		{ value: 'current', label: 'Current' },
 		{ value: 'v11', label: 'Inline' },
-		{ value: 'v16', label: 'Spine' }
+		{ value: 'v16', label: 'Spine' },
+		{ value: 'v17', label: 'Guided' }
 	];
 
 	let { data }: { data: PageData } = $props();
@@ -554,6 +558,9 @@
 	const activeAttempt = $derived(attempts[currentIndex] ?? createInitialAttempt());
 	const inlinePresentation = $derived(gap.presentations?.v11 ?? fallbackInlinePresentation());
 	const readingPresentation = $derived(gap.presentations?.v16 ?? fallbackReadingPresentation());
+	const guidedPresentation = $derived(
+		(gap.presentations?.v17 ?? fallbackGuidedPresentation(gap)) satisfies SparkLearningGapGuidedPresentation
+	);
 	const progressSteps = $derived(
 		gap.steps.map<QuizProgressStep>((step, index) => {
 			const attempt = attempts[index];
@@ -658,9 +665,18 @@
 			presentation={inlinePresentation}
 		/>
 	</section>
-{:else}
+{:else if selectedMode === 'v16'}
 	<section class="gap-page gap-page--presentation">
 		<GapReadingMode subjectLabel={gap.subjectLabel} presentation={readingPresentation} />
+	</section>
+{:else}
+	<section class="gap-page gap-page--presentation">
+		<GapGuidedMode
+			gapId={gap.id}
+			subjectLabel={gap.subjectLabel}
+			presentation={guidedPresentation}
+			onDone={closeGap}
+		/>
 	</section>
 {/if}
 

@@ -14,6 +14,7 @@ import {
   type SparkGraderRun,
   type SparkGraderWorksheetReport,
   type SparkLearningGap,
+  type SparkLearningGapGuidedPresentation,
   type SparkLearningGapPresentations,
   type SparkLearningGapStep,
 } from "@spark/schemas";
@@ -154,6 +155,9 @@ const generatedGapResponseSchema = z.object({
 });
 
 type GeneratedGap = z.infer<typeof generatedGapSchema>;
+type CompleteLearningGapPresentations = SparkLearningGapPresentations & {
+  v17: SparkLearningGapGuidedPresentation;
+};
 
 function normalizeDocumentId(value: string): string {
   const normalized = value
@@ -967,15 +971,61 @@ function fallbackInlineBlanks(options: {
   ];
 }
 
+function fallbackGuidedQuestions(options: {
+  cardQuestion: string;
+  steps: SparkLearningGapStep[];
+  finalAnswer: string;
+}): SparkLearningGapGuidedPresentation["questions"] {
+  const questions = freeTextSteps(options.steps)
+    .slice(0, 8)
+    .map((step, index) => ({
+      id: `guided-${step.id || (index + 1).toString()}`,
+      question: step.prompt,
+      expectedAnswer: step.expectedAnswer,
+      hint:
+        index === 0
+          ? "What fact from the question starts the chain?"
+          : "Which change follows from the previous answer?",
+      maxMarks: step.maxMarks,
+    }));
+  if (questions.length >= 2) {
+    return questions;
+  }
+  return [
+    {
+      id: "guided-1",
+      question: options.cardQuestion,
+      expectedAnswer: options.finalAnswer,
+      hint: "What key idea should the answer include?",
+      maxMarks: 1,
+    },
+    {
+      id: "guided-2",
+      question: "How should that idea be linked into a complete answer?",
+      expectedAnswer: options.finalAnswer,
+      hint: "What cause-and-effect wording makes the answer clear?",
+      maxMarks: 1,
+    },
+  ];
+}
+
 function fallbackPresentations(options: {
   cardQuestion: string;
   steps: SparkLearningGapStep[];
-}): SparkLearningGapPresentations {
+}): CompleteLearningGapPresentations {
   const finalAnswer = fallbackFinalAnswer({
     cardQuestion: options.cardQuestion,
     steps: options.steps,
   });
   const keySentences = splitSentenceLikeText(finalAnswer, 6);
+  const guidedQuestions = fallbackGuidedQuestions({
+    cardQuestion: options.cardQuestion,
+    steps: options.steps,
+    finalAnswer,
+  });
+  const memoryChain =
+    memoryChainStep(options.steps)?.body ??
+    fallbackIdeaChain(options.steps, finalAnswer).join(" -> ");
   return {
     v11: {
       question: options.cardQuestion,
@@ -989,6 +1039,24 @@ function fallbackPresentations(options: {
       outline: fallbackOutline(options.steps, finalAnswer),
       keySentences: keySentences.length > 0 ? keySentences : [finalAnswer],
       finalAnswer,
+    },
+    v17: {
+      question: options.cardQuestion,
+      instructions: "Answer each guiding question in a short phrase.",
+      questions: guidedQuestions,
+      memoryChain,
+      answerPrompt: "Now combine those ideas into a GCSE model answer.",
+      modelAnswer: finalAnswer,
+      maxMarks: Math.min(
+        8,
+        Math.max(
+          1,
+          guidedQuestions.reduce(
+            (total, question) => total + (question.maxMarks ?? 1),
+            0,
+          ),
+        ),
+      ),
     },
   };
 }
@@ -1015,10 +1083,12 @@ function normalizePresentations(options: {
 
 function mergePresentations(
   candidate: Record<string, unknown> | undefined,
-  fallback: SparkLearningGapPresentations,
-): SparkLearningGapPresentations {
+  fallback: CompleteLearningGapPresentations,
+): CompleteLearningGapPresentations {
   const v11 = asRecord(candidate?.v11);
   const v16 = asRecord(candidate?.v16);
+  const v17 = asRecord(candidate?.v17);
+  const guidedQuestions = normalizeGeneratedGuidedQuestions(v17?.questions);
   return {
     v11: {
       question: firstString(v11 ?? {}, ["question"]) ?? fallback.v11.question,
@@ -1039,6 +1109,27 @@ function mergePresentations(
         stringArray(v16 ?? {}, ["keySentences"]) ?? fallback.v16.keySentences,
       finalAnswer:
         firstString(v16 ?? {}, ["finalAnswer"]) ?? fallback.v16.finalAnswer,
+    },
+    v17: {
+      question: firstString(v17 ?? {}, ["question"]) ?? fallback.v17.question,
+      instructions:
+        firstString(v17 ?? {}, ["instructions"]) ?? fallback.v17.instructions,
+      questions:
+        guidedQuestions.length > 0 ? guidedQuestions : fallback.v17.questions,
+      memoryChain:
+        firstString(v17 ?? {}, ["memoryChain", "chain"]) ??
+        fallback.v17.memoryChain,
+      answerPrompt:
+        firstString(v17 ?? {}, ["answerPrompt", "composePrompt"]) ??
+        fallback.v17.answerPrompt,
+      modelAnswer:
+        firstString(v17 ?? {}, ["modelAnswer", "finalAnswer", "answer"]) ??
+        fallback.v17.modelAnswer,
+      markScheme:
+        firstString(v17 ?? {}, ["markScheme", "rubric"]) ??
+        fallback.v17.markScheme,
+      maxMarks:
+        typeof v17?.maxMarks === "number" ? v17.maxMarks : fallback.v17.maxMarks,
     },
   };
 }
@@ -1157,6 +1248,54 @@ function buildGenerationPrompt(options: {
                 finalAnswer:
                   "Extra glucose lowers the water potential inside guard cells, so water enters by osmosis. The guard cells become turgid and bend apart, opening the stoma.",
               },
+              v17: {
+                question:
+                  "Explain how extra glucose in guard cells makes a stoma open.",
+                instructions:
+                  "Answer each guiding question in a short phrase, then combine the ideas.",
+                questions: [
+                  {
+                    id: "made",
+                    question: "What is made in the guard cells during the day?",
+                    expectedAnswer: "Glucose is made.",
+                    hint: "Which product of photosynthesis starts this chain?",
+                    maxMarks: 1,
+                  },
+                  {
+                    id: "concentration",
+                    question:
+                      "So what happens to the glucose concentration in the guard cells?",
+                    expectedAnswer: "It increases.",
+                    hint: "Does the amount dissolved inside go up or down?",
+                    maxMarks: 1,
+                  },
+                  {
+                    id: "water-potential",
+                    question:
+                      "If a cell has more dissolved glucose inside it, what happens to its water potential?",
+                    expectedAnswer: "Its water potential becomes lower.",
+                    hint: "What happens to water potential when solute concentration rises?",
+                    maxMarks: 1,
+                  },
+                  {
+                    id: "osmosis",
+                    question:
+                      "What happens when guard cells have a lower water potential than nearby cells?",
+                    expectedAnswer: "Water moves into the guard cells by osmosis.",
+                    hint: "Which way does water move across the partially permeable membrane?",
+                    maxMarks: 1,
+                  },
+                ],
+                memoryChain:
+                  "glucose up → water potential down → water in by osmosis → guard cells turgid → bend apart → stoma opens",
+                answerPrompt:
+                  "Now combine those ideas into a GCSE model answer.",
+                modelAnswer:
+                  "Extra glucose lowers the water potential inside guard cells, so water enters by osmosis. The guard cells become turgid and bend apart, opening the stoma.",
+                markScheme:
+                  "Award marks for glucose increasing, water potential falling, water entering by osmosis, guard cells becoming turgid, and the stoma opening.",
+                maxMarks: 5,
+              },
             },
           },
         ],
@@ -1165,7 +1304,10 @@ function buildGenerationPrompt(options: {
       2,
     ),
     "",
-    "For every generated gap, include all three presentation paths: the current `steps` quiz flow, `presentations.v11` inline blank sheet data, and `presentations.v16` answer-spine reading data. The v11 blanks must reconstruct a fluent answer, and their prompts must guide without revealing the missing answer. The v16 ideaChain must use compact 2 to 5 word fragments, not full explanatory sentences. The v16 `finalAnswer` is the GCSE model answer, so write it as a polished model answer.",
+    "For every generated gap, include all four presentation paths: the current `steps` quiz flow, `presentations.v11` inline blank sheet data, `presentations.v16` answer-spine reading data, and `presentations.v17` guided-question answer-builder data.",
+    "The v11 blanks must reconstruct a fluent answer, and their prompts must guide without revealing the missing answer.",
+    "The v16 ideaChain must use compact 2 to 5 word fragments, not full explanatory sentences. The v16 `finalAnswer` is the GCSE model answer, so write it as a polished model answer.",
+    "The v17 questions must form a cause-and-effect path to the same model answer. Each v17 question should be a guiding question, each expectedAnswer should be short, and each hint must be a non-revealing guiding question that ends in `?`, does not repeat the question text, and does not contain or paraphrase the answer. Include a very short `memoryChain`, a polished `modelAnswer`, and a usable `markScheme` for grading the learner's final written answer.",
     "",
     "Existing active gaps to dedupe against:",
     JSON.stringify(existing, null, 2),
@@ -1250,6 +1392,124 @@ function normalizeGeneratedInlineBlanks(
   return blanks;
 }
 
+function normalizeGeneratedGuidedQuestions(
+  value: unknown,
+): SparkLearningGapGuidedPresentation["questions"] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const questions: SparkLearningGapGuidedPresentation["questions"] = [];
+  for (let index = 0; index < value.length; index += 1) {
+    const record = asRecord(value[index]);
+    if (!record) {
+      continue;
+    }
+    const question = firstString(record, ["question", "prompt"]);
+    const expectedAnswer = firstString(record, [
+      "expectedAnswer",
+      "answer",
+      "modelAnswer",
+    ]);
+    if (!question || !expectedAnswer) {
+      continue;
+    }
+    const hint = normalizeGuidedHint({
+      hint: firstString(record, ["hint", "guidance", "placeholder"]),
+      question,
+      expectedAnswer,
+      index,
+    });
+    questions.push({
+      id:
+        firstString(record, ["id", "questionId", "key"]) ??
+        `guided-${(index + 1).toString()}`,
+      question,
+      expectedAnswer,
+      ...(hint ? { hint } : {}),
+      ...(typeof record.maxMarks === "number" ? { maxMarks: record.maxMarks } : {}),
+    });
+  }
+  return questions;
+}
+
+function normalizeGuidedHint(input: {
+  hint: string | undefined;
+  question: string;
+  expectedAnswer: string;
+  index: number;
+}): string {
+  const fallback =
+    input.index === 0
+      ? "Which comparison from the question matters here?"
+      : "What change follows from the previous answer?";
+  if (!input.hint) {
+    return fallback;
+  }
+  const hint = normalizeWhitespace(input.hint);
+  if (
+    !hint.endsWith("?") ||
+    tooSimilarForGuidedHint(hint, input.question) ||
+    revealsGuidedExpectedAnswer(hint, input.expectedAnswer)
+  ) {
+    return fallback;
+  }
+  return hint;
+}
+
+function tooSimilarForGuidedHint(hint: string, question: string): boolean {
+  const hintTerms = meaningfulTerms(hint);
+  const questionTerms = meaningfulTerms(question);
+  if (hintTerms.length === 0 || questionTerms.length === 0) {
+    return false;
+  }
+  const questionSet = new Set(questionTerms);
+  const overlap = hintTerms.filter((term) => questionSet.has(term)).length;
+  return overlap / Math.max(1, Math.min(hintTerms.length, questionTerms.length)) > 0.7;
+}
+
+function revealsGuidedExpectedAnswer(hint: string, expectedAnswer: string): boolean {
+  const hintTerms = new Set(meaningfulTerms(hint));
+  const answerTerms = meaningfulTerms(expectedAnswer);
+  if (answerTerms.length === 0) {
+    return false;
+  }
+  const answerOverlap = answerTerms.filter((term) => hintTerms.has(term)).length;
+  return answerOverlap / answerTerms.length >= 0.5;
+}
+
+function meaningfulTerms(value: string): string[] {
+  const stopWords = new Set([
+    "about",
+    "after",
+    "answer",
+    "because",
+    "before",
+    "does",
+    "from",
+    "happen",
+    "happens",
+    "have",
+    "into",
+    "that",
+    "them",
+    "then",
+    "there",
+    "these",
+    "this",
+    "what",
+    "when",
+    "where",
+    "which",
+    "with",
+  ]);
+  return normalizeWhitespace(value)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]+/gu, " ")
+    .split(/[\s-]+/u)
+    .map((term) => term.trim())
+    .filter((term) => term.length >= 4 && !stopWords.has(term));
+}
+
 function normalizeGeneratedPresentations(
   record: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
@@ -1267,7 +1527,13 @@ function normalizeGeneratedPresentations(
     asRecord(container.answerSpine) ??
     asRecord(container.readingPresentation) ??
     asRecord(container.readingSpine);
-  if (!v11Raw && !v16Raw) {
+  const v17Raw =
+    asRecord(container.v17) ??
+    asRecord(container.guided) ??
+    asRecord(container.guidedQuestions) ??
+    asRecord(container.guidedPresentation) ??
+    asRecord(container.questionGuide);
+  if (!v11Raw && !v16Raw && !v17Raw) {
     return direct ?? undefined;
   }
   const presentations: Record<string, unknown> = {};
@@ -1297,6 +1563,18 @@ function normalizeGeneratedPresentations(
       outline: stringArray(v16Raw, ["outline", "points"]),
       keySentences: stringArray(v16Raw, ["keySentences", "sentences"]),
       finalAnswer: firstString(v16Raw, ["finalAnswer", "modelAnswer", "answer"]),
+    };
+  }
+  if (v17Raw) {
+    presentations.v17 = {
+      question: firstString(v17Raw, ["question", "prompt", "title", "gapQuestion"]),
+      instructions: firstString(v17Raw, ["instructions", "instruction", "objective"]),
+      questions: normalizeGeneratedGuidedQuestions(v17Raw.questions),
+      memoryChain: firstString(v17Raw, ["memoryChain", "chain"]),
+      answerPrompt: firstString(v17Raw, ["answerPrompt", "composePrompt"]),
+      modelAnswer: firstString(v17Raw, ["modelAnswer", "finalAnswer", "answer"]),
+      markScheme: firstString(v17Raw, ["markScheme", "rubric"]),
+      maxMarks: typeof v17Raw.maxMarks === "number" ? v17Raw.maxMarks : undefined,
     };
   }
   return presentations;
@@ -1524,11 +1802,12 @@ function buildPresentationBackfillPrompt(gap: SparkLearningGap): string {
     "You are Spark's gaps-finder agent preparing UI presentation data for one existing GCSE practice gap.",
     "Return JSON only with exactly one top-level key: `presentations`.",
     "",
-    "Create two presentations for the same gap:",
+    "Create three presentations for the same gap:",
     "- `v11`: worksheet-style inline blank data. Turn the model answer into 3 to 6 short blanks. Each blank must have `id`, `before`, `after`, `expectedAnswer`, and a concise non-revealing `prompt`. The filled blanks must reconstruct a fluent answer. Do not include prototype copy or UI commentary.",
     "- `v16`: read-only answer spine data. Include `question`, a 2 to 6 item `ideaChain`, a 2 to 6 item `outline`, 1 to 6 `keySentences`, and `finalAnswer`. The `finalAnswer` field is the GCSE model answer. Each `ideaChain` item must be a compact 2 to 5 word fragment, not a full sentence. Good: `low pressure`, `backflow risk`, `valves stop backflow`, `towards heart`. Bad: `Low pressure means blood in veins could flow backwards.`.",
+    "- `v17`: guided-question answer-builder data. Include `question`, optional `instructions`, 3 to 8 `questions`, `memoryChain`, optional `answerPrompt`, `modelAnswer`, `markScheme`, and `maxMarks`. Each guided question needs `id`, `question`, `expectedAnswer`, and a non-revealing `hint`. The questions should lead step by step to the same GCSE model answer. Every hint must be a guiding question ending in `?`, must not repeat the displayed question, and must not contain or paraphrase the answer.",
     "",
-    "The two presentations must agree with the existing quiz steps and must not add unrelated facts.",
+    "The three presentations must agree with the existing quiz steps and must not add unrelated facts.",
     "",
     "Existing gap:",
     JSON.stringify(
@@ -1639,7 +1918,12 @@ async function backfillGapPresentations(options: {
   });
   let updated = 0;
   for (const gap of gaps) {
-    if (!options.force && gap.presentations?.v11 && gap.presentations.v16) {
+    if (
+      !options.force &&
+      gap.presentations?.v11 &&
+      gap.presentations.v16 &&
+      gap.presentations.v17
+    ) {
       continue;
     }
     const presentations = await generatePresentationsForGap(gap);
