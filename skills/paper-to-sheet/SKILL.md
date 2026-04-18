@@ -28,26 +28,29 @@ Use this skill to translate source material into the paper-sheet JSON contract. 
 
 - For text-selectable PDFs, run `extract_pdf_reference_text` once as a navigation aid.
 - In handwritten-grading mode, when a text-selectable source paper or mark scheme has been extracted successfully, do not send that PDF through `extract_text` again. Use the deterministic markdown reference and targeted line-range reads; reserve `extract_text` for student submissions and genuinely visual/non-text source pages.
-- Start with one `extract_text` call that covers all remaining primary source targets.
+- Start with one `extract_text` call that covers all remaining primary source targets. When one call includes multiple files, pass `instructions` that mention every workspace path and identify each file's role, so source problem text, student submissions, and official solutions stay in separate sections.
 - For long extracted source/reference markdown, avoid whole-file reads. Use `grep_workspace_files` to locate headings, question numbers, figure labels, and mark-scheme items; generated-reference matches include nearby context. Use `read_workspace_file` with `startLine`/`lineCount` only for ranges where grep context is insufficient.
 - Do not repeat unbounded `read_workspace_file` calls on the same large extracted reference. After the first outline, use grep or targeted line ranges.
 - For grader runs, identify the canonical paper/component/session early and carry official source URLs forward in the worksheet references when they are found.
 - Before downloading an official PDF found online, check `knowledge-base/index.md` and call `kb_search_pdfs`. If a matching entry exists, call `kb_download_pdf` and use that local cached PDF. If no match exists, call `kb_cache_pdf_from_url` with semi-structured classification text such as `gcse/aqa/biology/2024/<original filename>` plus source identity, session, component, and whether it is a question paper, mark scheme, examiner report, grade boundary, or threshold document.
 - When a source or reference PDF came from the shared knowledge base, include the returned shared `storagePath` in `references.paperStoragePath` or `references.markSchemeStoragePath` and in `run-summary.json` as `paperStoragePath` or `markSchemeStoragePath`. Keep `paperUrl` and `markSchemeUrl` only as provenance.
 - For source PDFs with figures, run `extract_pdf_images` once on the relevant page range when available. Use useful embedded raster outputs as candidates, but remember they may omit on-page labels/captions or coordinates; validate them like any other crop and fall back to rendered pages for vector/layout-sensitive visuals.
-- For printed worksheets, exam pages, figures, tables, and layout-sensitive pages, render only the relevant pages with `pdf_to_images` when page pixels are needed. In grader-publish runs the main agent does not inspect images directly with `view_image`; use `extract_text` for transcription and the fresh visual helper tools for localized crop planning/validation.
+- For printed worksheets, exam pages, figures, tables, and layout-sensitive pages, render only the relevant pages with `pdf_to_images` when page pixels are needed. In grader-publish runs, use `view_image` for source-page/photo fidelity checks and rendered PDF pages when text or layout matters. Use `extract_text` for primary transcription and the fresh visual helper tools for localized crop planning/validation.
 - For long PDFs, always pass `pageNumbers` to `pdf_to_images`; choose those pages from deterministic text extraction, grep results, or the upload manifest. Do not render a whole exam paper just to look around.
-- In compact grading-report mode, do not use `Use Figure N in the linked original PDF.` as the default for answer-critical visuals. Embed the source table as Markdown or crop the source figure when it is needed to understand the task, the student's answer, or the feedback. Use a linked-source-PDF instruction only after a bounded extraction/crop attempt shows the visual is unavailable, broken, or not feasible to crop cleanly.
+- In compact grading-report mode, do not use `Use Figure N in the linked original PDF.` as the default for answer-critical visuals. Embed the source table as Markdown or crop the source figure when it is needed to understand the task, the student's answer, or the feedback. Preserve source column arithmetic, number grids, stacked calculations, flow/box layouts, and circled/lettered labels with visible Markdown, renderable LaTeX display layout, or a validated crop; never flatten them into a prose cue. Use a linked-source-PDF instruction only after a bounded extraction/crop attempt shows the visual is unavailable, broken, or not feasible to crop cleanly.
 - If `pdf_to_images`, `extract_text`, or the fresh visual helper tools fail for a printed worksheet or exam page that truly needs visual handling, stop and fix or report that failure instead of publishing a partial text-only worksheet.
-- Before publishing, compare the sheet against extracted text and viewed pages. Fix paraphrase, omission, reordering, invented placeholder text, missing visuals, and guessed OCR.
+- Before publishing, compare the sheet against extracted text and viewed source pages. Fix paraphrase, omission, reordering, invented placeholder text, missing visuals, and guessed OCR. If the source is a printed photo or scan, inspect the source image/page directly instead of relying only on OCR text.
 - Mark uncertainty explicitly instead of guessing missing source text, symbols, or labels.
 
 ## Source-Fidelity Rules
 
 - Treat uploaded question sheets as canonical source material.
 - Preserve wording, numbering, formulas, notation, marks, labels, blanks, options, tables, and flow/box layouts.
+- Preserve printed subpart labels and option labels exactly. If the UI would otherwise auto-number leaf badges, set `badgeLabel` to the visible source subpart label, for example `a`, `b`, `c`, `i`, `ii`, or `A`.
+- Preserve exact root stems and interstitial wording from the source. Do not replace printed source text such as `A computer has a Central Processing Unit (CPU).` with a topic summary such as `Central Processing Unit.`
 - Apply only minimal OCR/layout cleanup that keeps meaning unchanged.
 - Do not simplify, reorder, paraphrase, merge, renumber, or redesign an uploaded question sheet into a nicer worksheet.
+- For short uploaded problem sheets or worksheets, keep the full source problem wording and source display math/layouts in the visible worksheet prompts. Do not move the faithful problem statements only into references while publishing compact paraphrases in the questions.
 - Do not omit cover-page scoring rules when needed, but do omit administration boilerplate from visible worksheet content when it is not needed to answer a question.
 - Every worksheet question must include `marks`. For source-paper-only unanswered sheets, marks are still the source total for that question even though no score is awarded yet.
 - Use real source sections when present. Otherwise use useful collapsible navigation:
@@ -88,7 +91,52 @@ Use only these question types:
 
 Use `group` when one numbered source question owns shared context such as a stem, table, figure, or instruction before answer-bearing subparts. Put only the shared source text that appears before the first subpart in `group.prompt`; put interstitial text before later subparts into the following child prompt.
 
+Do not use `group` for a standalone one-part question. If the source has no answer-bearing subparts, put the full source prompt and marks on one leaf question instead of inventing a child prompt such as `give the conclusion` or duplicating the same display number.
+
 Use `displayNumber` whenever the source has visible numbering such as `01.1`, `9(a)`, or `10(b)`. Use `badgeLabel` only when the circular badge should be shorter than the full source label.
+
+When the collapsible section label is already the root, such as `Question 6`, do not create an additional visible parent badge also labelled `6` just to hold the root stem. If the source has one answer-bearing root item, use a single direct question entry instead of a `6` group containing a `6` child. If the source has a root stem followed by subparts, keep the exact root stem in an unnumbered shared context where possible, or at the nearest source-faithful prompt level, and give the subparts full `displayNumber` values plus short `badgeLabel` values such as `a`, `b`, and `c`.
+
+If a root stem is shared by both a direct first-level subpart and a later first-level group, such as `7` followed by `(a)` and then `(b)(i)`, do not attach the root stem to the `(a)` prompt where it will render beside the `a` badge. Put the exact root stem in `section.theory` or another unbadged section-level context, then render `(a)` and `(b)` as separate top-level entries.
+
+Example shape for a `Question 7` section with root text, a direct `(a)` item, and nested `(b)(i)` leaves:
+
+```json
+{
+  "label": "Question 7",
+  "theory": "Embedded system: Follow Me car system.",
+  "questions": [
+    {
+      "id": "q7a",
+      "type": "lines",
+      "displayNumber": "7(a)",
+      "badgeLabel": "a",
+      "marks": 3,
+      "prompt": "Explain why the system is an example of an embedded system."
+    },
+    {
+      "id": "q7b",
+      "type": "group",
+      "displayNumber": "b",
+      "prompt": "For the Follow Me system:",
+      "questions": [
+        {
+          "id": "q7bi",
+          "type": "lines",
+          "displayNumber": "7(b)(i)",
+          "badgeLabel": "i",
+          "marks": 2,
+          "prompt": "State two items that will be stored in ROM for the Follow Me system."
+        }
+      ]
+    }
+  ]
+}
+```
+
+For nested subparts such as `1(a)`, `1(b)`, and `1(c)`, use `displayNumber` for the full source label and `badgeLabel` for the visible subpart marker (`a`, `b`, `c`) when the renderer shows a circular item badge. Do not let those badges default to `1`, `2`, `3`.
+
+For two-level nested source labels such as `2(a)(i)`, make the root question the section label (`Question 2`) when possible, then create one top-level `group` per first-level subpart with `displayNumber: "a"`, `displayNumber: "b"`, etc. Put the `(a)` shared stem in that group prompt. Put the answer-bearing `(i)`, `(ii)`, etc. leaves inside that group with source-faithful `displayNumber: "2(a)(i)"` and short `badgeLabel: "i"` / `"ii"`. Do not put all `2(a)(i)`, `2(a)(ii)`, `2(b)(i)` leaves directly under a single `displayNumber: "2"` group, because that renders only one composite item badge instead of separate first- and second-level circles.
 
 For decimal-style roots such as `01`, `01.1`, `01.2`, create a parent `group` with `displayNumber: "01"` and nest the `01.x` children in `questions[]`; do not put those child questions flat in the section.
 
@@ -130,7 +178,10 @@ Use `flow` for box-and-arrow calculation structures. Keep each row's `items` arr
 
 ## Visuals And Tables
 
-- Convert textual/numeric source tables into Markdown tables whenever possible.
+- Convert textual/numeric source tables into Markdown tables whenever possible. If the source prompt says "Complete the table", the visible worksheet prompt must contain that table or a validated crop of it.
+- Preserve source-authored stacked arithmetic and number grids as renderable display LaTeX or a validated crop. For binary addition, long multiplication/division, vertical column methods, or LaTeX-origin grids, prefer display LaTeX such as a `\[` `array`/`aligned` expression only when it renders cleanly. In JSON strings, LaTeX row breaks must contain two backslash characters in the final Markdown, which means escaping them as `\\\\` inside the JSON string. Do not use fenced code blocks for arithmetic layouts; the renderer adds code UI chrome that is not part of the source paper.
+- Treat mathematical number grids, arranged arithmetic, matrices, and display-only sign/number layouts as math layouts rather than data tables. Preserve them with display LaTeX (`array`, matrix, or aligned environments with borders where appropriate) when that is closer to the source than a Markdown table.
+- Do not describe mathematical grids as prose such as `First grid rows: ... / ...`; render the grid itself with display LaTeX.
 - If a question needs a diagram, figure, graph, chart, map, network, photo, or visual option block, use the `source-image-cropping` skill and link the final crop near the source-faithful prompt.
 - Link final worksheet crops with workspace-relative Markdown image links using the exact final asset path returned by the crop/trim/pad tool. Preserve the real extension exactly; `pad_image` commonly returns `.png`, and the worksheet link, crop-validation record, and fresh validation call must all use that same `.png` path.
 - Prefer simple stable asset names under `grader/output/assets/...` or `sheet/output/assets/...`, but never invent a `.jpg` variant when the tool produced `.png`.

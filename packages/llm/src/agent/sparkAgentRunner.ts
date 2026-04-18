@@ -2847,10 +2847,13 @@ const FLATTENED_OPTIONS_PATTERN = /\boptions:\s/iu;
 const OBJECTIVE_OPTION_LABEL_PATTERN =
   /(?:^|[\s([])(?:[A-H]|[1-9])(?:[.)\]])(?=\s)/u;
 const OBJECTIVE_PROMPT_PATTERN =
-  /\bwhich(?:\s+\w+){0,3}\s+of\s+the\s+following\b|\bmultiple\s+choice\b|\bchoose\s+one\b|\bselect\s+one\b/iu;
+  /\bwhich(?:\s+\w+){0,3}\s+of\s+the\s+following\b|\bmultiple\s+choice\b|\b(?:choose|select)\s+one\s+(?:option|answer|choice)\b/iu;
 const LEADING_PROMPT_NUMBERING_PATTERN =
   /^\s*(?:0?\d+(?:\.\d+)+|0?\d+\([^)]+\)|0?\d+\s*[.)])\s+/u;
 const SUBPART_DISPLAY_NUMBER_PATTERN = /^0?\d+(?:\.\d+|\([^)]+\))/u;
+const ONE_LEVEL_BRACKET_DISPLAY_NUMBER_PATTERN = /^0?(\d+)\(([^)]+)\)$/u;
+const TWO_LEVEL_BRACKET_DISPLAY_NUMBER_PATTERN =
+  /^0?(\d+)\(([^)]+)\)\(([^)]+)\)/u;
 const MARKDOWN_IMAGE_PATTERN = /!\[[^\]]*\]\([^)]+\)/u;
 const FIGURE_REFERENCE_PATTERN = /\b(?:figure|diagram|photo|graph|chart)\b/iu;
 const VISUAL_CONTEXT_PROMPT_PATTERN =
@@ -2868,8 +2871,22 @@ const NAMED_TABLE_REFERENCE_PATTERN = /\bTable\s+(\d+(?:\.\d+)*[A-Za-z]?)\b/giu;
 const REPEATED_SOURCE_ARTIFACT_PATTERN =
   /\b(?:Figure|Fig\.?|Diagram|Table)\s+\d+(?:\.\d+)*[A-Za-z]?\s+(?:is\s+)?(?:repeated|shown\s+again|copied\s+again)\s+(?:below|here|again)\b/iu;
 const RAW_ESCAPED_NEWLINE_PATTERN = /\\n/u;
-const RAW_LAYOUT_LATEX_PATTERN =
-  /\\begin\{(?:array|tabular|matrix|pmatrix|bmatrix|vmatrix|aligned|align|cases)\b/iu;
+const RAW_LAYOUT_LATEX_PATTERN = /\\begin\{(?:tabular)\b/iu;
+const LATEX_LAYOUT_ENVIRONMENT_PATTERN =
+  /\\begin\{(?:array|aligned|matrix|pmatrix|bmatrix)\b/iu;
+const MATH_GRID_ROWS_PROSE_PATTERN =
+  /\b(?:first|second|left|right)\s+grid\s+rows\s*:/iu;
+const MATH_GRID_BLOCK_PROSE_PATTERN =
+  /\b(?:first|second|left|right)?\s*grid\s*:\s*(?:\r?\n)+\s*\d+(?:\s+\d+){2,}\s*(?:\r?\n)+\s*\d+(?:\s+\d+){2,}\s*(?:\r?\n)+\s*\d+(?:\s+\d+){2,}/iu;
+const INLINE_SIGN_ROW_PATTERN =
+  /\bsigns?\s+(?:[+-]\s+){6,}[+-](?:[\s.]|$)/u;
+const BARE_SIGN_ROW_PATTERN = /(?:^|\n)\s*(?:[+-]\s*){8,}(?:\n|$)/u;
+const DISPLAY_MATH_LAYOUT_PATTERN =
+  /\\\[|\\begin\{(?:array|aligned|alignedat|matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|gathered|cases)\b|\$\$/u;
+const TABLE_PROMPT_WITHOUT_TABLE_PATTERN =
+  /\b(?:complete|fill\s+in|fill|use|answer)\s+(?:the\s+)?table\b|\btable\s+(?:below|above|shows?|has|gives?|contains?)\b/iu;
+const COLUMN_METHOD_PROMPT_WITHOUT_LAYOUT_PATTERN =
+  /\b(?:column\s+method|binary\s+addition|stacked\s+addition|show\s+(?:your\s+)?working\s+out)\b/iu;
 const QUESTIONS_RANGE_SECTION_LABEL_PATTERN =
   /^Questions\s+0?\d+\s*[-–]\s*0?\d+$/iu;
 const STANDALONE_OPTION_LABEL_LINE_PATTERN =
@@ -2935,6 +2952,22 @@ const PROBLEM_STATEMENT_TRANSCRIPTION_HEADING_PATTERN =
   /^#{1,}\s+(?:problem\s+statement|source\s+problem[-\s]statement|question\s+paper|source\s+paper|printed\s+paper|source\s+question)[^\n]*(?:transcription|text|questions?)/imu;
 const ANSWER_KEY_REFERENCE_PATTERN =
   /\b(?:answer\s+key|official\s+solution|correct\s+(?:answer|option|choice|response|value)\s+is|solutions?\s*:)\b/iu;
+
+function containsMathGridAsProse(markdown: string): boolean {
+  return (
+    MATH_GRID_ROWS_PROSE_PATTERN.test(markdown) ||
+    MATH_GRID_BLOCK_PROSE_PATTERN.test(markdown)
+  );
+}
+
+function containsLongSignRowOutsideDisplayMath(markdown: string): boolean {
+  return (
+    INLINE_SIGN_ROW_PATTERN.test(markdown) ||
+    (BARE_SIGN_ROW_PATTERN.test(markdown) &&
+      !DISPLAY_MATH_LAYOUT_PATTERN.test(markdown))
+  );
+}
+
 const FAKE_BLANK_OBJECTIVE_OPTION_PATTERN =
   /^(?:blank|no\s+answer(?:\s+(?:marked|selected|given))?|unanswered|not\s+answered)$/iu;
 const FAKE_OBJECTIVE_OPTION_TEXT_PATTERN =
@@ -2997,8 +3030,58 @@ function normalizeDisplayNumberForComparison(
   return trimmed.replace(/\s+/gu, " ");
 }
 
+function normalizeSubpartLabel(label: string): string {
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/^\((.*)\)$/u, "$1")
+    .trim();
+}
+
 function isSubpartDisplayNumber(displayNumber: string): boolean {
   return SUBPART_DISPLAY_NUMBER_PATTERN.test(displayNumber.trim());
+}
+
+function parseOneLevelBracketDisplayNumber(
+  displayNumber: string | undefined,
+): { root: string; firstLevel: string } | null {
+  if (!displayNumber) {
+    return null;
+  }
+  const match = ONE_LEVEL_BRACKET_DISPLAY_NUMBER_PATTERN.exec(
+    displayNumber.trim(),
+  );
+  if (!match?.[1] || !match[2]) {
+    return null;
+  }
+  return {
+    root: match[1],
+    firstLevel: normalizeSubpartLabel(match[2]),
+  };
+}
+
+function parseTwoLevelBracketDisplayNumber(
+  displayNumber: string | undefined,
+): { root: string; firstLevel: string; secondLevel: string } | null {
+  if (!displayNumber) {
+    return null;
+  }
+  const match = TWO_LEVEL_BRACKET_DISPLAY_NUMBER_PATTERN.exec(
+    displayNumber.trim(),
+  );
+  if (!match?.[1] || !match[2] || !match[3]) {
+    return null;
+  }
+  return {
+    root: match[1],
+    firstLevel: normalizeSubpartLabel(match[2]),
+    secondLevel: normalizeSubpartLabel(match[3]),
+  };
+}
+
+function parseQuestionSectionRoot(label: string): string | null {
+  const match = /^Question\s+0?(\d+)\b/iu.exec(label.trim());
+  return match?.[1] ?? null;
 }
 
 function collectSectionRootQuestionKeys(
@@ -3218,6 +3301,41 @@ function promptNeedsVisibleImage(promptText: string): boolean {
     return false;
   }
   return !MARKDOWN_IMAGE_PATTERN.test(promptText);
+}
+
+function promptHasVisibleSourceTable(promptText: string): boolean {
+  return (
+    MARKDOWN_TABLE_PATTERN.test(promptText) ||
+    MARKDOWN_IMAGE_PATTERN.test(promptText)
+  );
+}
+
+function promptHasColumnOrStackedLayout(promptText: string): boolean {
+  const hasRenderableLatexLayout =
+    /\\\[[\s\S]*?(?:\\begin\{(?:array|aligned|matrix|pmatrix|bmatrix)\b|\\\\|\\hline)[\s\S]*?\\\]/iu.test(
+      promptText,
+    ) && !hasMalformedLatexLayoutRowBreak(promptText);
+  return (
+    MARKDOWN_IMAGE_PATTERN.test(promptText) ||
+    hasRenderableLatexLayout ||
+    /(?:^|\n)\s*[+−-]\s*[01](?:\s+[01]){3,}/u.test(promptText)
+  );
+}
+
+function hasMalformedLatexLayoutRowBreak(text: string): boolean {
+  for (const match of text.matchAll(/\\\[[\s\S]*?\\\]/gu)) {
+    const block = match[0];
+    if (!LATEX_LAYOUT_ENVIRONMENT_PATTERN.test(block)) {
+      continue;
+    }
+    for (const line of block.split(/\r?\n/u)) {
+      const trimmed = line.trimEnd();
+      if (trimmed.endsWith("\\") && !trimmed.endsWith("\\\\")) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function formatArtifactAnchorFragment(
@@ -4691,7 +4809,12 @@ function collectGraderWorksheetPublishIssues(
   }
   if (RAW_LAYOUT_LATEX_PATTERN.test(renderedSheetMarkdown)) {
     issues.push(
-      "worksheet contains a raw LaTeX layout environment in visible prompt Markdown; use a Markdown table or a clean crop for layout-critical source text instead of red source text",
+      "worksheet contains an unsupported raw LaTeX tabular environment in visible prompt Markdown; use a Markdown table, supported display math layout, or a clean crop for layout-critical source text",
+    );
+  }
+  if (hasMalformedLatexLayoutRowBreak(renderedSheetMarkdown)) {
+    issues.push(
+      "worksheet contains malformed LaTeX layout row breaks in visible prompt Markdown; array/aligned rows must end with two backslash characters, not a single backslash before the newline",
     );
   }
 
@@ -4743,6 +4866,33 @@ function collectGraderWorksheetPublishIssues(
       }
     }
 
+    const sectionQuestionRoot = parseQuestionSectionRoot(section.label);
+    const sectionQuestionEntries = section.questions ?? [];
+    if (
+      sectionQuestionRoot !== null &&
+      sectionQuestionEntries.length === 1 &&
+      sectionQuestionEntries[0]?.type === "group"
+    ) {
+      const onlyGroup = sectionQuestionEntries[0];
+      const groupRoot = onlyGroup.displayNumber
+        ? normalizeDisplayNumberRoot(onlyGroup.displayNumber)
+        : null;
+      const onlyChild = onlyGroup.questions[0];
+      const childRoot = onlyChild?.displayNumber
+        ? normalizeDisplayNumberRoot(onlyChild.displayNumber)
+        : null;
+      if (
+        groupRoot === sectionQuestionRoot &&
+        onlyGroup.questions.length === 1 &&
+        childRoot === sectionQuestionRoot &&
+        !isSubpartDisplayNumber(onlyChild?.displayNumber ?? "")
+      ) {
+        issues.push(
+          `section "${section.id}" already represents Question ${sectionQuestionRoot}, but wraps the only answer-bearing question in a duplicate "${onlyGroup.displayNumber}" group and child; use one direct question entry instead of rendering a fake subsection`,
+        );
+      }
+    }
+
     const parentCounts = new Map<string, number>();
     const groupRoots = new Set<string>();
     const rootedParentEntries = new Set<string>();
@@ -4776,6 +4926,28 @@ function collectGraderWorksheetPublishIssues(
           firstChild !== undefined
             ? normalizeDisplayNumberForComparison(firstChild.displayNumber)
             : null;
+        const groupDisplayLabel = entry.displayNumber
+          ? normalizeSubpartLabel(entry.displayNumber)
+          : null;
+        if (
+          sectionQuestionRoot !== null &&
+          groupDisplayLabel !== null &&
+          /^[a-z]+$/iu.test(groupDisplayLabel) &&
+          entry.questions.length === 1 &&
+          firstChild !== undefined
+        ) {
+          const firstChildOneLevel = parseOneLevelBracketDisplayNumber(
+            firstChild.displayNumber,
+          );
+          if (
+            firstChildOneLevel?.root === sectionQuestionRoot &&
+            firstChildOneLevel.firstLevel === groupDisplayLabel
+          ) {
+            issues.push(
+              `group question "${entry.id}" repeats subpart "${groupDisplayLabel}" as both a parent group and its only child; use a direct "${firstChild.displayNumber ?? groupDisplayLabel}" question with badgeLabel "${groupDisplayLabel}" instead of rendering duplicate circles`,
+            );
+          }
+        }
         if (!compactHandwrittenGrading) {
           for (const label of groupFigureLabels) {
             const sourceOwners = sourceFigureOwnersByLabel.get(label);
@@ -4862,6 +5034,39 @@ function collectGraderWorksheetPublishIssues(
         if (groupRoot) {
           groupRoots.add(groupRoot);
         }
+        const onlyChild = entry.questions[0];
+        const onlyChildDisplayNumber =
+          onlyChild !== undefined
+            ? normalizeDisplayNumberForComparison(onlyChild.displayNumber)
+            : null;
+        const groupDisplayNumber = normalizeDisplayNumberForComparison(
+          entry.displayNumber,
+        );
+        if (
+          entry.questions.length === 1 &&
+          groupDisplayNumber !== null &&
+          onlyChildDisplayNumber === groupDisplayNumber &&
+          !isSubpartDisplayNumber(onlyChild?.displayNumber ?? "")
+        ) {
+          issues.push(
+            `group question "${entry.id}" wraps a single standalone question with the same displayNumber as child "${onlyChild?.id ?? "unknown"}"; merge the source prompt into one mark-bearing question instead of creating a synthetic subquestion`,
+          );
+        }
+        const directlyFlattenedTwoLevelChildren = entry.questions.filter(
+          (question) => {
+            const parsed = parseTwoLevelBracketDisplayNumber(
+              question.displayNumber,
+            );
+            return parsed !== null && parsed.root === groupRoot;
+          },
+        );
+        if (directlyFlattenedTwoLevelChildren.length > 0) {
+          const example =
+            directlyFlattenedTwoLevelChildren[0]?.displayNumber ?? "unknown";
+          issues.push(
+            `group question "${entry.id}" flattens two-level source subparts such as "${example}" directly under the root question; use the section label for Question ${groupRoot}, first-level groups with circular labels like "a"/"b", and child badgeLabel values like "i"/"ii" so nested source labels render as separate circles`,
+          );
+        }
         const childHasMatchingSubpart = entry.questions.some((question) => {
           if (!question.displayNumber) {
             return false;
@@ -4893,7 +5098,38 @@ function collectGraderWorksheetPublishIssues(
         }
         if (RAW_LAYOUT_LATEX_PATTERN.test(entry.prompt)) {
           issues.push(
-            `group question "${entry.id}" contains a raw LaTeX layout environment in visible prompt Markdown; use a Markdown table or a clean crop for layout-critical source text instead`,
+            `group question "${entry.id}" contains an unsupported raw LaTeX tabular environment in visible prompt Markdown; use a Markdown table, supported display math layout, or a clean crop for layout-critical source text instead`,
+          );
+        }
+        if (hasMalformedLatexLayoutRowBreak(entry.prompt)) {
+          issues.push(
+            `group question "${entry.id}" contains malformed LaTeX layout row breaks; array/aligned rows must end with two backslash characters, not a single backslash before the newline`,
+          );
+        }
+        if (containsMathGridAsProse(entry.prompt)) {
+          issues.push(
+            `group question "${entry.id}" describes a mathematical grid as row prose; use source-faithful display LaTeX arrays/matrices instead`,
+          );
+        }
+        if (containsLongSignRowOutsideDisplayMath(entry.prompt)) {
+          issues.push(
+            `group question "${entry.id}" leaves a long sign row inline; preserve source display layout with display LaTeX or an equivalent line block`,
+          );
+        }
+        if (
+          TABLE_PROMPT_WITHOUT_TABLE_PATTERN.test(entry.prompt) &&
+          !promptHasVisibleSourceTable(entry.prompt)
+        ) {
+          issues.push(
+            `group question "${entry.id}" references a source table but group.prompt does not include a visible Markdown table or linked crop`,
+          );
+        }
+        if (
+          COLUMN_METHOD_PROMPT_WITHOUT_LAYOUT_PATTERN.test(entry.prompt) &&
+          !promptHasColumnOrStackedLayout(entry.prompt)
+        ) {
+          issues.push(
+            `group question "${entry.id}" references layout-critical working or column arithmetic but group.prompt does not preserve a visible stacked layout or linked crop`,
           );
         }
         for (const orderingIssue of collectFigureImageOrderingIssues(
@@ -4916,7 +5152,11 @@ function collectGraderWorksheetPublishIssues(
     }
 
     for (const [parentRoot, count] of parentCounts) {
-      if (groupRoots.has(parentRoot) || rootedParentEntries.has(parentRoot)) {
+      if (
+        groupRoots.has(parentRoot) ||
+        rootedParentEntries.has(parentRoot) ||
+        sectionQuestionRoot === parentRoot
+      ) {
         continue;
       }
       issues.push(
@@ -5030,6 +5270,36 @@ function collectGraderWorksheetPublishIssues(
         );
       }
 
+      const oneLevelDisplayNumber = parseOneLevelBracketDisplayNumber(
+        question.displayNumber,
+      );
+      if (oneLevelDisplayNumber !== null) {
+        const actualBadge =
+          question.badgeLabel !== undefined
+            ? normalizeSubpartLabel(question.badgeLabel)
+            : null;
+        if (actualBadge !== oneLevelDisplayNumber.firstLevel) {
+          issues.push(
+            `question "${question.id}" uses displayNumber "${question.displayNumber}" but does not set badgeLabel "${oneLevelDisplayNumber.firstLevel}"; set the short badge to the printed subpart label so it renders as "${oneLevelDisplayNumber.firstLevel}" instead of the full root label`,
+          );
+        }
+      }
+
+      const twoLevelDisplayNumber = parseTwoLevelBracketDisplayNumber(
+        question.displayNumber,
+      );
+      if (twoLevelDisplayNumber !== null) {
+        const actualBadge =
+          question.badgeLabel !== undefined
+            ? normalizeSubpartLabel(question.badgeLabel)
+            : null;
+        if (actualBadge !== twoLevelDisplayNumber.secondLevel) {
+          issues.push(
+            `question "${question.id}" uses displayNumber "${question.displayNumber}" but does not set badgeLabel "${twoLevelDisplayNumber.secondLevel}"; nested source subparts should render with the short second-level circle label`,
+          );
+        }
+      }
+
       if (
         question.type !== "mcq" &&
         question.type !== "answer_bank" &&
@@ -5069,7 +5339,38 @@ function collectGraderWorksheetPublishIssues(
       }
       if (RAW_LAYOUT_LATEX_PATTERN.test(promptText)) {
         issues.push(
-          `question "${question.id}" contains a raw LaTeX layout environment in visible prompt Markdown; use a Markdown table or a clean crop for layout-critical source text instead`,
+          `question "${question.id}" contains an unsupported raw LaTeX tabular environment in visible prompt Markdown; use a Markdown table, supported display math layout, or a clean crop for layout-critical source text instead`,
+        );
+      }
+      if (hasMalformedLatexLayoutRowBreak(promptText)) {
+        issues.push(
+          `question "${question.id}" contains malformed LaTeX layout row breaks; array/aligned rows must end with two backslash characters, not a single backslash before the newline`,
+        );
+      }
+      if (containsMathGridAsProse(promptText)) {
+        issues.push(
+          `question "${question.id}" describes a mathematical grid as row prose; use source-faithful display LaTeX arrays/matrices instead`,
+        );
+      }
+      if (containsLongSignRowOutsideDisplayMath(promptText)) {
+        issues.push(
+          `question "${question.id}" leaves a long sign row inline; preserve source display layout with display LaTeX or an equivalent line block`,
+        );
+      }
+      if (
+        TABLE_PROMPT_WITHOUT_TABLE_PATTERN.test(promptText) &&
+        !promptHasVisibleSourceTable(promptText)
+      ) {
+        issues.push(
+          `question "${question.id}" references a source table but its prompt does not include a visible Markdown table or linked crop`,
+        );
+      }
+      if (
+        COLUMN_METHOD_PROMPT_WITHOUT_LAYOUT_PATTERN.test(promptText) &&
+        !promptHasColumnOrStackedLayout(promptText)
+      ) {
+        issues.push(
+          `question "${question.id}" references layout-critical working or column arithmetic but its prompt does not preserve a visible stacked layout or linked crop`,
         );
       }
 
@@ -8188,7 +8489,7 @@ export function buildSparkAgentSystemPrompt(options?: {
     "- Use web_fetch to retrieve NON-PDF source pages/files from URLs discovered via web_search.",
     "- For PDF URLs discovered online, search `knowledge-base/index.md` or call `kb_search_pdfs` first. If a matching shared PDF exists, call `kb_download_pdf` and use the local workspace PDF. If no match exists, classify the official PDF and call `kb_cache_pdf_from_url`; use the returned shared `storagePath` in worksheet references such as `paperStoragePath` or `markSchemeStoragePath`.",
     "- Use extract_text to transcribe workspace document files (images/PDFs) into markdown with LaTeX formulas.",
-    "- Use real Markdown line breaks in worksheet-visible text; never leave literal escaped newline text like `\\n`. For arranged arithmetic, grids, or layout-critical text, prefer Markdown tables or clean crops over raw LaTeX array/tabular environments.",
+    "- Use real Markdown line breaks in worksheet-visible text; never leave literal escaped newline text like `\\n`. For source maths layouts such as number grids, arranged arithmetic, matrices, and displayed formula blocks, prefer display LaTeX (`\\[...\\]`) using KaTeX-supported `array`/matrix/aligned environments when that is the source-faithful representation. Use Markdown tables for real tabular data, not for mathematical arrays that only look table-like.",
     "- When writing JSON files directly, especially grader/output/sheet.json, JSON-escape every backslash in string values or avoid LaTeX backslash syntax. A string containing `\\(` in the visible Markdown must appear as `\\\\(` in the JSON file.",
     "- extract_text does not automatically know source filenames/paths; include identifying details inside instructions when needed.",
     "- For multi-page extraction tasks, you can request explicit page markers in the extracted markdown.",
@@ -8209,7 +8510,7 @@ export function buildSparkAgentSystemPrompt(options?: {
     "Do not copy request.json, brief.md, upload manifests, planning JSON, answer lists, or process summaries into grader/output/sheet.json or grader/output/run-summary.json. Those files must contain only the worksheet report schema and publish summary schema.",
     "For source-paper-only/no-student grader runs, do not solve the paper, derive correct options, list an answer key, or include worked solutions. Build an unanswered worksheet with blank answers and review.mode='awaiting_answers'.",
     "Do not use generate_json for grader/output/sheet.json or grader/output/run-summary.json; generate_json is a lesson-output helper and request.json/grader/task.md are not JSON schemas. Write grader JSON outputs directly with write_workspace_file and use publish_sheet for validation.",
-    "Do not spawn subagents for grader intake, upload inventory, workspace file reading, transcription, final grading synthesis, or worksheet assembly. Do not use direct view_image in grader-publish runs; use extract_text for student/photo transcription, propose_crop_bbox_with_fresh_agent for uncertain crop bbox planning, and validate_crop_with_fresh_agent for final crop visual validation. Use bounded subagents only for official-source lookup/verification when allowed by request.json or for visual localization proposals.",
+    "Do not spawn subagents for grader intake, upload inventory, workspace file reading, transcription, final grading synthesis, or worksheet assembly. Use view_image for source-page/photo fidelity checks and for rendered PDF pages when text or layout matters; use extract_text for primary student/photo transcription, propose_crop_bbox_with_fresh_agent for uncertain crop bbox planning, and validate_crop_with_fresh_agent for final crop visual validation. Use bounded subagents only for official-source lookup/verification when allowed by request.json or for visual localization proposals.",
     "Use pad_image only for a crop that has already passed fresh visual validation and only needs a clean white border after publish_sheet reports dark edge contact. Never use pad_image to fix a crop-review failure, missing content, clipping, unrelated text, or a duplicated standalone caption; recrop from the high-resolution source page and validate again.",
     "Every final linked figure/image crop must be validated by its own validate_crop_with_fresh_agent call. Pass expectedContent with the exact visual labels/axes/options/table cells/annotations that must be visible, and duplicatedTextToExclude for surrounding prompt/caption/table text rendered separately; pass `none` only when no surrounding duplicated text needs exclusion. The fresh reviewer uses view_image, transcribes all visible text in the crop, and then judges whether those required visual elements are present, major duplicated caption/question/table text is excluded, unrelated neighbouring content outside the target visual is absent, and required content does not touch or clip at an edge. Treat missing/clipped/wrong target content as blocking; treat small duplicate caption fragments or safe whitespace as minor issues, not reasons for endless recropping.",
     "If you use crop_image or trim_image on a linked worksheet asset after writing grader/output/crop-validation.md, rerun the fresh-context crop check and rewrite crop-validation.md for the final asset before publishing. pad_image is allowed only after a completed passing validation because it only adds a white border.",
@@ -11910,7 +12211,7 @@ function buildAgentTools(options: {
         "Use supportingInstructions to explain how supporting documents should be used for disambiguation.",
         "The model does not know filenames unless you include identifying details in instructions text.",
         "For multi-page tasks, ask for explicit page markers in instructions when needed.",
-        "For formulas/equations, output embedded LaTeX: inline '\\(...\\)', display '\\[...\\]'. Use real line breaks, never literal escaped newline text like '\\n'. For arranged arithmetic, grids, or layout-critical text, prefer Markdown tables or clean crops over raw LaTeX array/tabular environments.",
+        "For formulas/equations, output embedded LaTeX: inline '\\(...\\)', display '\\[...\\]'. Use display LaTeX when the source formula is displayed. For mathematical number grids, arranged arithmetic, matrices, and sign rows, prefer source-faithful display LaTeX arrays/matrices; reserve Markdown tables for true data tables. Use real line breaks, never literal escaped newline text like '\\n'.",
       ].join("\n"),
       inputSchema: z
         .object({

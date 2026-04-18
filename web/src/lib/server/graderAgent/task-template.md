@@ -73,6 +73,7 @@ Optional paper metadata is allowed only when known. If you include `year`, write
 - do not put student answers inside `sheet.sections[].questions[]`; answers belong only in the top-level `answers` object,
 - `review` contains `mode`, `score`, `label`, `message`, `note`, and `questions`,
 - supported question types are `group`, `answer_bank`, `fill`, `cloze`, `mcq`, `lines`, `calc`, `match`, `spelling`, and `flow`,
+- use `group` only for real multipart source questions with answer-bearing subparts; do not wrap a standalone one-part question in a single-child group or invent a child prompt such as `give the conclusion`,
 - every answer-bearing source item must have an answer value and a review entry,
 - every scored review entry must include `status` and `score`,
 - use `status: "correct"` only for full marks, otherwise use `status: "incorrect"` for partial, blank, or unresolved answers,
@@ -84,7 +85,8 @@ Optional paper metadata is allowed only when known. If you include `year`, write
 ## Guardrails
 
 - Keep upload inventory, workspace reading, primary transcription, final grading synthesis, and JSON assembly on the main agent.
-- Direct `view_image` is intentionally not available to the grader main agent. Use `extract_text` for student/photo transcription and the fresh visual helper tools for localized crop inspection.
+- Use `view_image` for source-page/photo fidelity checks and rendered PDF pages when text or layout matters. Use `extract_text` for primary student/photo transcription and the fresh visual helper tools for localized crop inspection.
+- When writing grader JSON, escape LaTeX backslashes correctly instead of flattening displayed source formulas, sign rows, arrays, matrices, or grids into prose.
 - Generic subagents may be used only for bounded official-reference lookup/verification or visual localization proposals. Final crop validation must use `validate_crop_with_fresh_agent`.
 - Before downloading official PDFs found online, check `knowledge-base/index.md` and call `kb_search_pdfs`. If a matching cached PDF exists, call `kb_download_pdf` and use the local file. If no match exists, download/cache the official PDF with `kb_cache_pdf_from_url`, using semi-structured classification text such as `gcse/aqa/biology/2024/<original filename>`, and carry the returned `storagePath` into worksheet references (`paperStoragePath` or `markSchemeStoragePath`). Keep original URLs only as provenance.
 - For long PDFs, pass explicit `pageNumbers` to `pdf_to_images`.

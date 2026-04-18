@@ -21,6 +21,7 @@ Use this skill to capture student responses from handwritten work, completed wor
 
 - Capture what the student visibly selected or wrote before solving anything.
 - Preserve the student's variable names, formulas, notation, terminology, method choice, line breaks, and uncertain symbols as closely as possible.
+- For layout-sensitive working such as column arithmetic, binary addition, long multiplication/division, or carry/borrow rows, transcribe the actual visible rows and carry/borrow marks in words if they cannot be rendered faithfully in the answer value. Never collapse this evidence to a placeholder such as "working shown"; grading must be able to distinguish real working from a student merely writing that phrase.
 - Keep source-fidelity over mathematical correctness. Do not normalize an incorrect expression into an equivalent correct one.
 - Mark unresolved ambiguity explicitly instead of guessing.
 - Ignore unrelated doodles, page clutter, and scribbles unless they clearly form part of an answer.
@@ -31,8 +32,8 @@ Use this skill to capture student responses from handwritten work, completed wor
 1. Classify each upload as student submission target, problem statement target, official solution/mark-scheme target, or supporting-only context.
 2. For text-selectable source-paper, official-solution, or mark-scheme PDFs, run deterministic reference extraction first and use those markdown files as the official/source baseline.
 3. Do not put a text-selectable source paper or mark scheme into `extract_text` `documentPaths` after deterministic reference extraction succeeds. Keep those PDFs out of the expensive visual/OCR pass unless a specific page needs visual disambiguation.
-4. Make exactly one initial `extract_text` call for the remaining primary transcription targets, normally student submissions and any non-text/visual source pages that truly need OCR.
-5. Do not use direct `view_image` from the grader main agent for student/photo inspection. Use `extract_text` for transcription and the fresh visual helper tools for localized crop planning/validation.
+4. Make exactly one initial `extract_text` call for the remaining primary transcription targets, normally student submissions and any non-text/visual source pages that truly need OCR. When one call includes multiple files, pass `instructions` that mention every workspace path and identify each file's role, so source problem text, student submissions, and official solutions stay in separate sections.
+5. Use `view_image` for source-page/photo fidelity checks and rendered PDF pages when text or layout matters. Use `extract_text` for primary student/photo transcription and the fresh visual helper tools for localized crop planning/validation.
 6. Use `supportingPaths` only for disambiguation-only context that is not itself a transcription target.
 7. In extraction instructions, require separate sections for student submissions, problem statements, and official solutions only for files actually sent to `documentPaths`; for deterministic reference files, record their paths and roles instead of copying their full contents.
 8. Write the transcription to the caller's requested output, normally `grader/output/transcription.md`.
@@ -133,9 +134,13 @@ After answer capture:
 
 When grading handwritten answers against an uploaded source paper:
 
-- include every assessed source item in source order, including blanks, but keep each visible prompt compact enough for review,
+- include every assessed source item in source order, including blanks,
+- for short uploaded problem sheets, preserve the full source prompt wording and source display math/layouts in the visible worksheet questions rather than using compact paraphrases,
+- for long exam papers, keep visible prompts compact enough for review while still preserving answer-critical source text, numbering, marks, and visuals,
 - preserve the source question number, marks, and a short faithful cue such as the command word, measured quantity, table row, or answer line,
+- preserve answer-critical source tables, column arithmetic, number grids, flow/box layouts, and printed subpart/option labels in the visible worksheet prompt. Compact grading may omit decorative page chrome, but it must not replace a printed table or stacked calculation with a prose summary.
 - for multi-part source roots, create an explicit parent `group` entry for the root question and put mark-bearing subparts inside it; do not publish a section that contains only flat subparts such as `1.1`, `1.2`, `1.3` with no parent root,
+- for standalone one-part source questions, do not create a parent `group` with one child just to separate the prompt from the answer area; use a single mark-bearing leaf question with the full source prompt,
 - keep full problem/source transcription and official solution text in `references.*Markdown` rather than duplicating the entire paper into every prompt,
 - embed source-paper figures, maps, photos, and text/numeric tables when they are needed to understand the task, the student's answer, or the feedback,
 - use visible text such as `Use Figure 3 in the linked original PDF.` only when the source pixels are unavailable or a clean crop is not feasible after a bounded attempt,

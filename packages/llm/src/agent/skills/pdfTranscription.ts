@@ -112,7 +112,7 @@ const PDF_REFERENCE_PROMPT = [
 
 const PDF_REFERENCE_PROMPT_GEMINI = [
   PDF_REFERENCE_PROMPT,
-  "For formulas/equations, use embedded LaTeX: inline '\\(...\\)', display '\\[...\\]'. Use real Markdown line breaks, never literal escaped newline text like '\\n'. For arranged arithmetic, grids, or layout-critical text, prefer a Markdown table or a clean crop over raw LaTeX array/tabular environments.",
+  "For formulas/equations, use embedded LaTeX: inline '\\(...\\)', display '\\[...\\]'. Use real Markdown line breaks, never literal escaped newline text like '\\n'. For arranged arithmetic, grids, column methods, or layout-critical text, preserve the source layout with a Markdown table, clean crop, or display LaTeX array/aligned expression when it renders cleanly. If writing JSON, LaTeX row breaks must survive as two backslash characters in the final Markdown, so escape them as '\\\\\\\\' in the JSON string; avoid unsupported raw tabular environments.",
 ].join("\n");
 
 type RgbaColor = {

@@ -1422,6 +1422,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
                         id: "q1a",
                         type: "lines",
                         displayNumber: "1(a)",
+                        badgeLabel: "a",
                         marks: 1,
                         prompt: "Explain the feature labelled in Figure 1.",
                         lines: 2,
@@ -1430,6 +1431,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
                         id: "q1b",
                         type: "lines",
                         displayNumber: "1(b)",
+                        badgeLabel: "b",
                         marks: 1,
                         prompt: "Use the student's answer to grade the reason.",
                         lines: 2,
@@ -1441,12 +1443,13 @@ describe("Spark agent tool: publish_sheet guards", () => {
                     type: "group",
                     displayNumber: "2",
                     prompt:
-                      "Use Table 1 in the linked original PDF for the source context.",
+                      "Table 1 gives the source values.\n\n| Trial | Value |\n| --- | --- |\n| A | 1 |",
                     questions: [
                       {
                         id: "q2a",
                         type: "lines",
                         displayNumber: "2(a)",
+                        badgeLabel: "a",
                         marks: 1,
                         prompt: "Compare the values in Table 1.",
                         lines: 2,
@@ -1455,6 +1458,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
                         id: "q2b",
                         type: "lines",
                         displayNumber: "2(b)",
+                        badgeLabel: "b",
                         marks: 1,
                         prompt: "State the conclusion from the comparison.",
                         lines: 2,
@@ -6338,7 +6342,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
     });
   });
 
-  it("rejects raw LaTeX layout environments in visible worksheet prompts", async () => {
+  it("rejects unsupported LaTeX tabular environments in visible worksheet prompts", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =
         await import("../src/agent/sparkAgentRunner");
@@ -6373,10 +6377,10 @@ describe("Spark agent tool: publish_sheet guards", () => {
                     prompt: String.raw`In this subtraction:
 
 \[
-\begin{array}{ccccc}
+\begin{tabular}{ccccc}
 7 & Q & 2 & S & T \\
 -P & 3 & R & 9 & 6
-\end{array}
+\end{tabular}
 \]`,
                     displayMode: "full_options",
                     options: [
@@ -6432,7 +6436,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
       requireFunctionTool(publishSheetTool);
 
       await expect(publishSheetTool.execute({})).rejects.toThrow(
-        /raw LaTeX layout environment/iu,
+        /unsupported raw LaTeX tabular environment/iu,
       );
     });
   });
