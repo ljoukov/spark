@@ -93,7 +93,7 @@ Use `group` when one numbered source question owns shared context such as a stem
 
 Do not use `group` for a standalone one-part question. If the source has no answer-bearing subparts, put the full source prompt and marks on one leaf question instead of inventing a child prompt such as `give the conclusion` or duplicating the same display number.
 
-Use `displayNumber` whenever the source has visible numbering such as `01.1`, `9(a)`, or `10(b)`. Use `badgeLabel` only when the circular badge should be shorter than the full source label.
+Use `displayNumber` whenever the source has visible numbering such as `01.1`, `9(a)`, or `10(b)`. Use `badgeLabel` when the circular badge should be shorter than the full source label.
 
 When the collapsible section label is already the root, such as `Question 6`, do not create an additional visible parent badge also labelled `6` just to hold the root stem. If the source has one answer-bearing root item, use a single direct question entry instead of a `6` group containing a `6` child. If the source has a root stem followed by subparts, keep the exact root stem in an unnumbered shared context where possible, or at the nearest source-faithful prompt level, and give the subparts full `displayNumber` values plus short `badgeLabel` values such as `a`, `b`, and `c`.
 
@@ -138,7 +138,7 @@ For nested subparts such as `1(a)`, `1(b)`, and `1(c)`, use `displayNumber` for 
 
 For two-level nested source labels such as `2(a)(i)`, make the root question the section label (`Question 2`) when possible, then create one top-level `group` per first-level subpart with `displayNumber: "a"`, `displayNumber: "b"`, etc. Put the `(a)` shared stem in that group prompt. Put the answer-bearing `(i)`, `(ii)`, etc. leaves inside that group with source-faithful `displayNumber: "2(a)(i)"` and short `badgeLabel: "i"` / `"ii"`. Do not put all `2(a)(i)`, `2(a)(ii)`, `2(b)(i)` leaves directly under a single `displayNumber: "2"` group, because that renders only one composite item badge instead of separate first- and second-level circles.
 
-For decimal-style roots such as `01`, `01.1`, `01.2`, create a parent `group` with `displayNumber: "01"` and nest the `01.x` children in `questions[]`; do not put those child questions flat in the section.
+For decimal-style exam labels such as `01`, `01.1`, and `01.2`, prefer one collapsible section labelled `Question 1`. Do not render an additional parent circle labelled `01`. Put the root stem in `section.theory` or the nearest unbadged context, then render the answer-bearing `01.x` leaves directly in the section with source-faithful `displayNumber` values and short `badgeLabel` values such as `1`, `2`, and `3`. The visible badges inside `Question 1` should be `1`, `2`, `3`, not `01.1`, `01.2`, `01.3`.
 
 Use `answer_bank` when the source prints visible blanks plus a fixed option bank such as `(A)` to `(D)`. Keep running sentence prose in `segments[]`, keep source labels in `options[].label`, and omit decorative underscore or bracket markers from segments. Use `displayMode: "inline_labeled"` by default; use `banked` only when the source shows a separate answer bank or the labelled option text is too long for the selector.
 

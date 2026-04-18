@@ -74,6 +74,7 @@ Optional paper metadata is allowed only when known. If you include `year`, write
 - `review` contains `mode`, `score`, `label`, `message`, `note`, and `questions`,
 - supported question types are `group`, `answer_bank`, `fill`, `cloze`, `mcq`, `lines`, `calc`, `match`, `spelling`, and `flow`,
 - use `group` only for real multipart source questions with answer-bearing subparts; do not wrap a standalone one-part question in a single-child group or invent a child prompt such as `give the conclusion`,
+- for decimal-style exam labels such as `01.1` inside a `Question 1` section, do not render an extra `01` parent badge; use direct subquestions with short `badgeLabel` values like `1`, `2`, and `3`,
 - every answer-bearing source item must have an answer value and a review entry,
 - every scored review entry must include `status` and `score`,
 - use `status: "correct"` only for full marks, otherwise use `status: "incorrect"` for partial, blank, or unresolved answers,

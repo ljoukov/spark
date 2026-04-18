@@ -3504,27 +3504,21 @@ describe("Spark agent tool: publish_sheet guards", () => {
               {
                 id: "Q5",
                 label: "Question 5",
+                theory: "This question is about electrolysis.",
                 questions: [
                   {
-                    id: "g05",
-                    type: "group",
-                    displayNumber: "05",
-                    prompt: "This question is about electrolysis.",
-                    questions: [
-                      {
-                        id: "q5",
-                        type: "lines",
-                        displayNumber: "05.5",
-                        marks: 1,
-                        prompt: [
-                          `**Figure 4**\n\n[![Figure 4](${figure4Asset})](${figure4Asset})`,
-                          `**Figure 5**\n\n[![Figure 5](${figure5Asset})](${figure5Asset})`,
-                          "Explain the results shown in Figure 5.",
-                        ].join("\n\n"),
-                        lines: 2,
-                        renderMode: "markdown",
-                      },
-                    ],
+                    id: "q5",
+                    type: "lines",
+                    displayNumber: "05.5",
+                    badgeLabel: "5",
+                    marks: 1,
+                    prompt: [
+                      `**Figure 4**\n\n[![Figure 4](${figure4Asset})](${figure4Asset})`,
+                      `**Figure 5**\n\n[![Figure 5](${figure5Asset})](${figure5Asset})`,
+                      "Explain the results shown in Figure 5.",
+                    ].join("\n\n"),
+                    lines: 2,
+                    renderMode: "markdown",
                   },
                 ],
               },
@@ -5690,6 +5684,229 @@ describe("Spark agent tool: publish_sheet guards", () => {
       await expect(publishSheetTool.execute({})).rejects.toThrow(
         /generic label/iu,
       );
+    });
+  });
+
+  it("rejects duplicate decimal root groups inside a matching question section", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "GCSE Chemistry worksheet",
+        awardedMarks: 2,
+        maxMarks: 2,
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Chemistry",
+            level: "GCSE",
+            title: "GCSE Chemistry worksheet",
+            subtitle: "Uploaded paper",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q1",
+                label: "Question 1",
+                questions: [
+                  {
+                    id: "q01",
+                    type: "group",
+                    displayNumber: "01",
+                    marks: 2,
+                    prompt: "Atomic structure and the periodic table.",
+                    questions: [
+                      {
+                        id: "q01_1",
+                        type: "lines",
+                        displayNumber: "01.1",
+                        marks: 1,
+                        prompt: "Which group had not been discovered?",
+                        lines: 1,
+                      },
+                      {
+                        id: "q01_2",
+                        type: "lines",
+                        displayNumber: "01.2",
+                        marks: 1,
+                        prompt: "Which model represents plum pudding?",
+                        lines: 1,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q01_1: "Noble gases",
+            q01_2: "B",
+          },
+          review: {
+            score: {
+              got: 2,
+              total: 2,
+            },
+            label: "2/2",
+            message: "Correct.",
+            note: "",
+            questions: {
+              q01_1: {
+                status: "correct",
+                score: {
+                  got: 1,
+                  total: 1,
+                },
+                note: "",
+              },
+              q01_2: {
+                status: "correct",
+                score: {
+                  got: 1,
+                  total: 1,
+                },
+                note: "",
+              },
+            },
+          },
+        },
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /duplicate "01" root group/iu,
+      );
+    });
+  });
+
+  it("allows decimal subparts in a question section when badges are short", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "GCSE Chemistry worksheet",
+        awardedMarks: 2,
+        maxMarks: 2,
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Chemistry",
+            level: "GCSE",
+            title: "GCSE Chemistry worksheet",
+            subtitle: "Uploaded paper",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q1",
+                label: "Question 1",
+                theory: "Atomic structure and the periodic table.",
+                questions: [
+                  {
+                    id: "q01_1",
+                    type: "lines",
+                    displayNumber: "01.1",
+                    badgeLabel: "1",
+                    marks: 1,
+                    prompt: "Which group had not been discovered?",
+                    lines: 1,
+                  },
+                  {
+                    id: "q01_2",
+                    type: "lines",
+                    displayNumber: "01.2",
+                    badgeLabel: "2",
+                    marks: 1,
+                    prompt: "Which model represents plum pudding?",
+                    lines: 1,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q01_1: "Noble gases",
+            q01_2: "B",
+          },
+          review: {
+            score: {
+              got: 2,
+              total: 2,
+            },
+            label: "2/2",
+            message: "Correct.",
+            note: "",
+            questions: {
+              q01_1: {
+                status: "correct",
+                score: {
+                  got: 1,
+                  total: 1,
+                },
+                note: "",
+              },
+              q01_2: {
+                status: "correct",
+                score: {
+                  got: 1,
+                  total: 1,
+                },
+                note: "",
+              },
+            },
+          },
+        },
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).resolves.toMatchObject({
+        status: "published",
+        awardedMarks: 2,
+      });
     });
   });
 

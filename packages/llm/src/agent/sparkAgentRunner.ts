@@ -2854,6 +2854,7 @@ const SUBPART_DISPLAY_NUMBER_PATTERN = /^0?\d+(?:\.\d+|\([^)]+\))/u;
 const ONE_LEVEL_BRACKET_DISPLAY_NUMBER_PATTERN = /^0?(\d+)\(([^)]+)\)$/u;
 const TWO_LEVEL_BRACKET_DISPLAY_NUMBER_PATTERN =
   /^0?(\d+)\(([^)]+)\)\(([^)]+)\)/u;
+const DECIMAL_SUBPART_DISPLAY_NUMBER_PATTERN = /^0?(\d+)\.(\d+)$/u;
 const MARKDOWN_IMAGE_PATTERN = /!\[[^\]]*\]\([^)]+\)/u;
 const FIGURE_REFERENCE_PATTERN = /\b(?:figure|diagram|photo|graph|chart)\b/iu;
 const VISUAL_CONTEXT_PROMPT_PATTERN =
@@ -3057,6 +3058,24 @@ function parseOneLevelBracketDisplayNumber(
   return {
     root: match[1],
     firstLevel: normalizeSubpartLabel(match[2]),
+  };
+}
+
+function parseDecimalSubpartDisplayNumber(
+  displayNumber: string | undefined,
+): { root: string; subpart: string } | null {
+  if (!displayNumber) {
+    return null;
+  }
+  const match = DECIMAL_SUBPART_DISPLAY_NUMBER_PATTERN.exec(
+    displayNumber.trim(),
+  );
+  if (!match?.[1] || !match[2]) {
+    return null;
+  }
+  return {
+    root: match[1],
+    subpart: match[2],
   };
 }
 
@@ -4891,6 +4910,19 @@ function collectGraderWorksheetPublishIssues(
           `section "${section.id}" already represents Question ${sectionQuestionRoot}, but wraps the only answer-bearing question in a duplicate "${onlyGroup.displayNumber}" group and child; use one direct question entry instead of rendering a fake subsection`,
         );
       }
+      if (
+        groupRoot === sectionQuestionRoot &&
+        onlyGroup.questions.length > 0 &&
+        onlyGroup.questions.some(
+          (question) =>
+            parseDecimalSubpartDisplayNumber(question.displayNumber)?.root ===
+            sectionQuestionRoot,
+        )
+      ) {
+        issues.push(
+          `section "${section.id}" already represents Question ${sectionQuestionRoot}, but renders a duplicate "${onlyGroup.displayNumber}" root group around decimal subparts; put the root stem in section.theory or direct prompt context, then render subparts as direct questions with short badgeLabel values like "1" and "2"`,
+        );
+      }
     }
 
     const parentCounts = new Map<string, number>();
@@ -5273,6 +5305,24 @@ function collectGraderWorksheetPublishIssues(
       const oneLevelDisplayNumber = parseOneLevelBracketDisplayNumber(
         question.displayNumber,
       );
+      const decimalDisplayNumber = parseDecimalSubpartDisplayNumber(
+        question.displayNumber,
+      );
+      if (
+        decimalDisplayNumber !== null &&
+        sectionQuestionRoot === decimalDisplayNumber.root
+      ) {
+        const actualBadge =
+          question.badgeLabel !== undefined
+            ? normalizeSubpartLabel(question.badgeLabel)
+            : null;
+        if (actualBadge !== decimalDisplayNumber.subpart) {
+          issues.push(
+            `question "${question.id}" uses displayNumber "${question.displayNumber}" inside section "${section.label}" but does not set badgeLabel "${decimalDisplayNumber.subpart}"; set the short badge so the section renders subquestions as "${decimalDisplayNumber.subpart}" instead of the full decimal source label`,
+          );
+        }
+      }
+
       if (oneLevelDisplayNumber !== null) {
         const actualBadge =
           question.badgeLabel !== undefined
