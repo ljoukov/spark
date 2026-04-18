@@ -85,42 +85,6 @@ export type SparkLearningGapStep = z.infer<
   typeof SparkLearningGapStepSchema
 >;
 
-export const SparkLearningGapInlineBlankSchema = z.object({
-  id: trimmedString,
-  before: z.string().trim(),
-  after: z.string().trim(),
-  expectedAnswer: trimmedString,
-  prompt: optionalTrimmedString,
-  maxMarks: z.number().int().min(1).max(4).optional(),
-});
-
-export type SparkLearningGapInlineBlank = z.infer<
-  typeof SparkLearningGapInlineBlankSchema
->;
-
-export const SparkLearningGapInlinePresentationSchema = z.object({
-  question: trimmedString,
-  instructions: optionalTrimmedString,
-  blanks: z.array(SparkLearningGapInlineBlankSchema).min(1).max(8),
-  modelAnswer: trimmedString,
-});
-
-export type SparkLearningGapInlinePresentation = z.infer<
-  typeof SparkLearningGapInlinePresentationSchema
->;
-
-export const SparkLearningGapReadingPresentationSchema = z.object({
-  question: trimmedString,
-  ideaChain: z.array(trimmedString).min(2).max(6),
-  outline: z.array(trimmedString).min(2).max(6),
-  keySentences: z.array(trimmedString).min(1).max(6),
-  finalAnswer: trimmedString,
-});
-
-export type SparkLearningGapReadingPresentation = z.infer<
-  typeof SparkLearningGapReadingPresentationSchema
->;
-
 export const SparkLearningGapGuidedQuestionSchema = z.object({
   id: trimmedString,
   question: trimmedString,
@@ -149,8 +113,6 @@ export type SparkLearningGapGuidedPresentation = z.infer<
 >;
 
 export const SparkLearningGapPresentationsSchema = z.object({
-  v11: SparkLearningGapInlinePresentationSchema,
-  v16: SparkLearningGapReadingPresentationSchema,
   v17: SparkLearningGapGuidedPresentationSchema.optional(),
 });
 

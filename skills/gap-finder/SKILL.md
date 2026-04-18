@@ -54,14 +54,11 @@ Use this skill to convert graded worksheet weaknesses into short practice-gap ca
 
 ## Presentation Modes
 
-Every gap must include data for four user-facing presentations:
+Every gap must include data for one user-facing presentation:
 
-- Current quiz flow: the existing `steps` array. Keep it interactive, short, and ordered from retrieval checks to the model answer and memory chain.
-- `presentations.v11`: a worksheet-style inline blank sheet. Use the same target concept as the current quiz flow, but turn the final explanation into 3 to 6 short blanks. Each blank needs `before`, `after`, `expectedAnswer`, and a concise non-revealing `prompt` that can be used as the input placeholder or a grading hint. Use single words or very short phrases for `expectedAnswer` when possible. Do not include prototype copy, UI labels, or text such as "local fields".
-- `presentations.v16`: a read-only answer spine. Reduce the same model answer into a 2 to 6 item `ideaChain`, a 2 to 6 item `outline`, 1 to 6 `keySentences`, and one polished GCSE model answer in `finalAnswer`. Every `ideaChain` item must be a compact fragment of 2 to 5 words, not a full sentence: for example `low pressure`, `backflow risk`, `valves stop backflow`, `towards heart`, not `Low pressure means blood in veins could flow backwards.`.
 - `presentations.v17`: a guided-question answer builder. Use 3 to 8 short guiding questions that lead the learner step by step to the same GCSE model answer. Each item needs `id`, `question`, `expectedAnswer`, and a concise `hint`. Every hint must be phrased as a guiding question ending in `?`, must not repeat the displayed question, and must not trivially reveal, contain, or paraphrase the answer. Include a very short `memoryChain`, an `answerPrompt` such as "Now combine those ideas into a GCSE model answer.", the same polished `modelAnswer`, a usable `markScheme`, and `maxMarks`.
 
-The four presentations must agree with each other. Do not invent a different question for v11, v16, or v17; all modes should help the learner practise the same gap.
+Do not generate `presentations.v11`, `presentations.v16`, or any other presentation variants.
 
 ## Output Contract
 
@@ -100,9 +97,6 @@ Each step object must use `kind` plus the fields needed by that kind:
 
 `presentations` must contain exactly:
 
-- `v11`: `question`, optional `instructions`, `blanks`, `modelAnswer`.
-- `v11.blanks[]`: `id`, `before`, `after`, `expectedAnswer`, optional `prompt`, optional `maxMarks`.
-- `v16`: `question`, `ideaChain`, `outline`, `keySentences`, `finalAnswer`.
 - `v17`: `question`, optional `instructions`, `questions`, `memoryChain`, optional `answerPrompt`, `modelAnswer`, optional `markScheme`, optional `maxMarks`.
 - `v17.questions[]`: `id`, `question`, `expectedAnswer`, optional `hint`, optional `maxMarks`.
 
@@ -116,9 +110,6 @@ Before returning gaps:
 - Check that every gap is useful without opening the original worksheet.
 - Check that every free-text step has a short expected answer and a mark scheme that matches it.
 - Check that every chain ends with both `model_answer` and `memory_chain`.
-- Check that v11 blanks reconstruct a fluent answer when filled in.
-- Check that v11 prompts guide the student without revealing the missing answer.
-- Check that v16 reads like a concise study note, not a dashboard or generic encouragement.
 - Check that v17 questions form a useful reasoning path, and that v17 hints guide without repeating the question or revealing the answer.
 - Check that no step reveals the final model answer before the learner has done useful retrieval or reasoning.
 - Check that the output is parseable JSON and uses only the allowed fields.

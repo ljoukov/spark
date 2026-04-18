@@ -902,7 +902,7 @@
 		justify-content: space-between;
 		gap: 1rem;
 		margin-top: 1.05rem;
-		padding-top: 0.8rem;
+		padding: 0.8rem 1.1rem 0.95rem;
 		border-top: 1px solid #dfe7e1;
 		color: rgba(23, 33, 27, 0.66);
 		font-size: 0.94rem;

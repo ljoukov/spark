@@ -15,7 +15,6 @@ import {
   type SparkGraderWorksheetReport,
   type SparkLearningGap,
   type SparkLearningGapGuidedPresentation,
-  type SparkLearningGapPresentations,
   type SparkLearningGapStep,
 } from "@spark/schemas";
 import { z } from "zod";
@@ -155,7 +154,7 @@ const generatedGapResponseSchema = z.object({
 });
 
 type GeneratedGap = z.infer<typeof generatedGapSchema>;
-type CompleteLearningGapPresentations = SparkLearningGapPresentations & {
+type CompleteLearningGapPresentations = {
   v17: SparkLearningGapGuidedPresentation;
 };
 
@@ -783,10 +782,22 @@ function normalizeDedupeKey(value: string): string {
 }
 
 function buildGapId(gap: GeneratedGap, source: WeakQuestionCandidate): string {
-  const base = normalizeDedupeKey(
-    `${source.subjectKey}-${gap.type}-${gap.dedupeKey || gap.cardQuestion}`,
-  );
-  return `${base.slice(0, 72)}-${shortHash(`${source.id}:${gap.cardQuestion}`, 10)}`;
+  return buildShortGapId({
+    subjectKey: source.subjectKey,
+    seed: `${source.id}:${gap.type}:${gap.dedupeKey || gap.cardQuestion}`,
+  });
+}
+
+function buildExistingGapId(gap: SparkLearningGap): string {
+  return buildShortGapId({
+    subjectKey: gap.subjectKey,
+    seed: `${gap.source.runVersion}:${gap.source.questionId}:${gap.type}:${gap.dedupeKey}:${gap.cardQuestion}`,
+  });
+}
+
+function buildShortGapId(options: { subjectKey: string; seed: string }): string {
+  const subject = normalizeDocumentId(options.subjectKey).slice(0, 24) || "gap";
+  return `${subject}-${shortHash(options.seed, 10)}`;
 }
 
 function normalizeSteps(steps: GeneratedGap["steps"]): SparkLearningGapStep[] {
@@ -931,46 +942,6 @@ function fallbackIdeaChain(steps: SparkLearningGapStep[], finalAnswer: string): 
   return sentences.length >= 2 ? sentences : [finalAnswer, "GCSE answer"];
 }
 
-function fallbackOutline(steps: SparkLearningGapStep[], finalAnswer: string): string[] {
-  const freeTextOutlines = freeTextSteps(steps)
-    .map((step) => step.modelAnswer)
-    .slice(0, 6);
-  if (freeTextOutlines.length >= 2) {
-    return freeTextOutlines;
-  }
-  const sentences = splitSentenceLikeText(finalAnswer, 6);
-  return sentences.length >= 2 ? sentences : [finalAnswer, "Use the model answer wording."];
-}
-
-function fallbackInlineBlanks(options: {
-  cardQuestion: string;
-  steps: SparkLearningGapStep[];
-}): SparkLearningGapPresentations["v11"]["blanks"] {
-  const blanks = freeTextSteps(options.steps)
-    .slice(0, 6)
-    .map((step, index) => ({
-      id: `blank-${(index + 1).toString()}`,
-      before: step.prompt,
-      after: "",
-      expectedAnswer: step.expectedAnswer,
-      prompt: step.placeholder ?? step.label ?? "Short answer",
-      maxMarks: step.maxMarks,
-    }));
-  if (blanks.length > 0) {
-    return blanks;
-  }
-  return [
-    {
-      id: "blank-1",
-      before: options.cardQuestion,
-      after: "",
-      expectedAnswer: "answer",
-      prompt: "Key idea",
-      maxMarks: 1,
-    },
-  ];
-}
-
 function fallbackGuidedQuestions(options: {
   cardQuestion: string;
   steps: SparkLearningGapStep[];
@@ -1017,7 +988,6 @@ function fallbackPresentations(options: {
     cardQuestion: options.cardQuestion,
     steps: options.steps,
   });
-  const keySentences = splitSentenceLikeText(finalAnswer, 6);
   const guidedQuestions = fallbackGuidedQuestions({
     cardQuestion: options.cardQuestion,
     steps: options.steps,
@@ -1027,19 +997,6 @@ function fallbackPresentations(options: {
     memoryChainStep(options.steps)?.body ??
     fallbackIdeaChain(options.steps, finalAnswer).join(" -> ");
   return {
-    v11: {
-      question: options.cardQuestion,
-      instructions: "Complete the missing words, then check your answer.",
-      blanks: fallbackInlineBlanks(options),
-      modelAnswer: finalAnswer,
-    },
-    v16: {
-      question: options.cardQuestion,
-      ideaChain: fallbackIdeaChain(options.steps, finalAnswer),
-      outline: fallbackOutline(options.steps, finalAnswer),
-      keySentences: keySentences.length > 0 ? keySentences : [finalAnswer],
-      finalAnswer,
-    },
     v17: {
       question: options.cardQuestion,
       instructions: "Answer each guiding question in a short phrase.",
@@ -1065,7 +1022,7 @@ function normalizePresentations(options: {
   generated?: Pick<GeneratedGap, "cardQuestion" | "presentations">;
   cardQuestion: string;
   steps: SparkLearningGapStep[];
-}): SparkLearningGapPresentations {
+}): CompleteLearningGapPresentations {
   const fallback = fallbackPresentations({
     cardQuestion: options.cardQuestion,
     steps: options.steps,
@@ -1078,38 +1035,19 @@ function normalizePresentations(options: {
   const parsed = SparkLearningGapPresentationsSchema.safeParse(
     mergePresentations(rawPresentations, fallback),
   );
-  return parsed.success ? parsed.data : fallback;
+  if (parsed.success && parsed.data.v17) {
+    return { v17: parsed.data.v17 };
+  }
+  return fallback;
 }
 
 function mergePresentations(
   candidate: Record<string, unknown> | undefined,
   fallback: CompleteLearningGapPresentations,
 ): CompleteLearningGapPresentations {
-  const v11 = asRecord(candidate?.v11);
-  const v16 = asRecord(candidate?.v16);
   const v17 = asRecord(candidate?.v17);
   const guidedQuestions = normalizeGeneratedGuidedQuestions(v17?.questions);
   return {
-    v11: {
-      question: firstString(v11 ?? {}, ["question"]) ?? fallback.v11.question,
-      instructions:
-        firstString(v11 ?? {}, ["instructions"]) ?? fallback.v11.instructions,
-      blanks:
-        normalizeGeneratedInlineBlanks(v11?.blanks).length > 0
-          ? normalizeGeneratedInlineBlanks(v11?.blanks)
-          : fallback.v11.blanks,
-      modelAnswer:
-        firstString(v11 ?? {}, ["modelAnswer"]) ?? fallback.v11.modelAnswer,
-    },
-    v16: {
-      question: firstString(v16 ?? {}, ["question"]) ?? fallback.v16.question,
-      ideaChain: stringArray(v16 ?? {}, ["ideaChain"]) ?? fallback.v16.ideaChain,
-      outline: stringArray(v16 ?? {}, ["outline"]) ?? fallback.v16.outline,
-      keySentences:
-        stringArray(v16 ?? {}, ["keySentences"]) ?? fallback.v16.keySentences,
-      finalAnswer:
-        firstString(v16 ?? {}, ["finalAnswer"]) ?? fallback.v16.finalAnswer,
-    },
     v17: {
       question: firstString(v17 ?? {}, ["question"]) ?? fallback.v17.question,
       instructions:
@@ -1191,63 +1129,6 @@ function buildGenerationPrompt(options: {
               },
             ],
             presentations: {
-              v11: {
-                question:
-                  "Complete the explanation of how extra glucose in guard cells makes a stoma open.",
-                instructions:
-                  "Fill each blank with the short biological word or phrase that completes the chain.",
-                blanks: [
-                  {
-                    id: "glucose",
-                    before: "Glucose concentration in the guard cells",
-                    after: ".",
-                    expectedAnswer: "increases",
-                    prompt: "What happens to glucose?",
-                    maxMarks: 1,
-                  },
-                  {
-                    id: "water-potential",
-                    before: "This makes the water potential",
-                    after: "inside the guard cells.",
-                    expectedAnswer: "lower",
-                    prompt: "Higher or lower?",
-                    maxMarks: 1,
-                  },
-                  {
-                    id: "osmosis",
-                    before: "Water enters the guard cells by",
-                    after: ".",
-                    expectedAnswer: "osmosis",
-                    prompt: "Water movement process",
-                    maxMarks: 1,
-                  },
-                ],
-                modelAnswer:
-                  "Glucose concentration increases in the guard cells, lowering their water potential. Water enters by osmosis, the cells become turgid and bend apart, and the stoma opens.",
-              },
-              v16: {
-                question:
-                  "Explain how extra glucose in guard cells makes a stoma open.",
-                ideaChain: [
-                  "glucose up",
-                  "water potential down",
-                  "osmosis in",
-                  "cells turgid",
-                  "stoma opens",
-                ],
-                outline: [
-                  "More glucose lowers water potential in guard cells.",
-                  "Water moves into the guard cells by osmosis.",
-                  "Turgid guard cells bend apart and open the stoma.",
-                ],
-                keySentences: [
-                  "Extra glucose lowers the water potential inside guard cells.",
-                  "Water enters the guard cells by osmosis.",
-                  "The guard cells become turgid and bend apart, opening the stoma.",
-                ],
-                finalAnswer:
-                  "Extra glucose lowers the water potential inside guard cells, so water enters by osmosis. The guard cells become turgid and bend apart, opening the stoma.",
-              },
               v17: {
                 question:
                   "Explain how extra glucose in guard cells makes a stoma open.",
@@ -1304,9 +1185,7 @@ function buildGenerationPrompt(options: {
       2,
     ),
     "",
-    "For every generated gap, include all four presentation paths: the current `steps` quiz flow, `presentations.v11` inline blank sheet data, `presentations.v16` answer-spine reading data, and `presentations.v17` guided-question answer-builder data.",
-    "The v11 blanks must reconstruct a fluent answer, and their prompts must guide without revealing the missing answer.",
-    "The v16 ideaChain must use compact 2 to 5 word fragments, not full explanatory sentences. The v16 `finalAnswer` is the GCSE model answer, so write it as a polished model answer.",
+    "For every generated gap, include only `presentations.v17` guided-question answer-builder data. Do not generate `presentations.v11`, `presentations.v16`, or any other presentation variants.",
     "The v17 questions must form a cause-and-effect path to the same model answer. Each v17 question should be a guiding question, each expectedAnswer should be short, and each hint must be a non-revealing guiding question that ends in `?`, does not repeat the question text, and does not contain or paraphrase the answer. Include a very short `memoryChain`, a polished `modelAnswer`, and a usable `markScheme` for grading the learner's final written answer.",
     "",
     "Existing active gaps to dedupe against:",
@@ -1332,64 +1211,6 @@ function firstString(record: Record<string, unknown>, keys: string[]): string | 
     }
   }
   return undefined;
-}
-
-function stringArray(record: Record<string, unknown>, keys: string[]): string[] | undefined {
-  for (const key of keys) {
-    const value = record[key];
-    if (!Array.isArray(value)) {
-      continue;
-    }
-    const strings = value
-      .map((entry) => (typeof entry === "string" ? normalizeWhitespace(entry) : ""))
-      .filter((entry) => entry.length > 0);
-    if (strings.length > 0) {
-      return strings;
-    }
-  }
-  return undefined;
-}
-
-function normalizeGeneratedInlineBlanks(
-  value: unknown,
-): SparkLearningGapPresentations["v11"]["blanks"] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  const blanks: SparkLearningGapPresentations["v11"]["blanks"] = [];
-  for (let index = 0; index < value.length; index += 1) {
-    const record = asRecord(value[index]);
-    if (!record) {
-      continue;
-    }
-    const before =
-      firstString(record, ["before", "prefix", "textBefore"]) ??
-      (typeof record.before === "string" ? record.before.trim() : "");
-    const after =
-      firstString(record, ["after", "suffix", "textAfter"]) ??
-      (typeof record.after === "string" ? record.after.trim() : "");
-    const expectedAnswer = firstString(record, [
-      "expectedAnswer",
-      "answer",
-      "missingAnswer",
-      "correctAnswer",
-    ]);
-    if (!expectedAnswer) {
-      continue;
-    }
-    const prompt = firstString(record, ["prompt", "hint", "placeholder", "question"]);
-    blanks.push({
-      id:
-        firstString(record, ["id", "blankId", "key"]) ??
-        `blank-${(index + 1).toString()}`,
-      before,
-      after,
-      expectedAnswer,
-      ...(prompt ? { prompt } : {}),
-      ...(typeof record.maxMarks === "number" ? { maxMarks: record.maxMarks } : {}),
-    });
-  }
-  return blanks;
 }
 
 function normalizeGeneratedGuidedQuestions(
@@ -1515,68 +1336,26 @@ function normalizeGeneratedPresentations(
 ): Record<string, unknown> | undefined {
   const direct = asRecord(record.presentations);
   const container = direct ?? record;
-  const v11Raw =
-    asRecord(container.v11) ??
-    asRecord(container.inline) ??
-    asRecord(container.inlineBlanks) ??
-    asRecord(container.inlinePresentation) ??
-    asRecord(container.inlineBlankSheet);
-  const v16Raw =
-    asRecord(container.v16) ??
-    asRecord(container.reading) ??
-    asRecord(container.answerSpine) ??
-    asRecord(container.readingPresentation) ??
-    asRecord(container.readingSpine);
   const v17Raw =
     asRecord(container.v17) ??
     asRecord(container.guided) ??
     asRecord(container.guidedQuestions) ??
     asRecord(container.guidedPresentation) ??
     asRecord(container.questionGuide);
-  if (!v11Raw && !v16Raw && !v17Raw) {
+  if (!v17Raw) {
     return direct ?? undefined;
   }
   const presentations: Record<string, unknown> = {};
-  if (v11Raw) {
-    presentations.v11 = {
-      question: firstString(v11Raw, [
-        "question",
-        "prompt",
-        "title",
-        "worksheetQuestion",
-        "gapQuestion",
-      ]),
-      instructions: firstString(v11Raw, ["instructions", "instruction", "objective"]),
-      blanks: normalizeGeneratedInlineBlanks(v11Raw.blanks),
-      modelAnswer: firstString(v11Raw, [
-        "modelAnswer",
-        "finalAnswer",
-        "answer",
-        "completedAnswer",
-      ]),
-    };
-  }
-  if (v16Raw) {
-    presentations.v16 = {
-      question: firstString(v16Raw, ["question", "prompt", "title", "gapQuestion"]),
-      ideaChain: stringArray(v16Raw, ["ideaChain", "chain", "spine"]),
-      outline: stringArray(v16Raw, ["outline", "points"]),
-      keySentences: stringArray(v16Raw, ["keySentences", "sentences"]),
-      finalAnswer: firstString(v16Raw, ["finalAnswer", "modelAnswer", "answer"]),
-    };
-  }
-  if (v17Raw) {
-    presentations.v17 = {
-      question: firstString(v17Raw, ["question", "prompt", "title", "gapQuestion"]),
-      instructions: firstString(v17Raw, ["instructions", "instruction", "objective"]),
-      questions: normalizeGeneratedGuidedQuestions(v17Raw.questions),
-      memoryChain: firstString(v17Raw, ["memoryChain", "chain"]),
-      answerPrompt: firstString(v17Raw, ["answerPrompt", "composePrompt"]),
-      modelAnswer: firstString(v17Raw, ["modelAnswer", "finalAnswer", "answer"]),
-      markScheme: firstString(v17Raw, ["markScheme", "rubric"]),
-      maxMarks: typeof v17Raw.maxMarks === "number" ? v17Raw.maxMarks : undefined,
-    };
-  }
+  presentations.v17 = {
+    question: firstString(v17Raw, ["question", "prompt", "title", "gapQuestion"]),
+    instructions: firstString(v17Raw, ["instructions", "instruction", "objective"]),
+    questions: normalizeGeneratedGuidedQuestions(v17Raw.questions),
+    memoryChain: firstString(v17Raw, ["memoryChain", "chain"]),
+    answerPrompt: firstString(v17Raw, ["answerPrompt", "composePrompt"]),
+    modelAnswer: firstString(v17Raw, ["modelAnswer", "finalAnswer", "answer"]),
+    markScheme: firstString(v17Raw, ["markScheme", "rubric"]),
+    maxMarks: typeof v17Raw.maxMarks === "number" ? v17Raw.maxMarks : undefined,
+  };
   return presentations;
 }
 
@@ -1802,12 +1581,10 @@ function buildPresentationBackfillPrompt(gap: SparkLearningGap): string {
     "You are Spark's gaps-finder agent preparing UI presentation data for one existing GCSE practice gap.",
     "Return JSON only with exactly one top-level key: `presentations`.",
     "",
-    "Create three presentations for the same gap:",
-    "- `v11`: worksheet-style inline blank data. Turn the model answer into 3 to 6 short blanks. Each blank must have `id`, `before`, `after`, `expectedAnswer`, and a concise non-revealing `prompt`. The filled blanks must reconstruct a fluent answer. Do not include prototype copy or UI commentary.",
-    "- `v16`: read-only answer spine data. Include `question`, a 2 to 6 item `ideaChain`, a 2 to 6 item `outline`, 1 to 6 `keySentences`, and `finalAnswer`. The `finalAnswer` field is the GCSE model answer. Each `ideaChain` item must be a compact 2 to 5 word fragment, not a full sentence. Good: `low pressure`, `backflow risk`, `valves stop backflow`, `towards heart`. Bad: `Low pressure means blood in veins could flow backwards.`.",
-    "- `v17`: guided-question answer-builder data. Include `question`, optional `instructions`, 3 to 8 `questions`, `memoryChain`, optional `answerPrompt`, `modelAnswer`, `markScheme`, and `maxMarks`. Each guided question needs `id`, `question`, `expectedAnswer`, and a non-revealing `hint`. The questions should lead step by step to the same GCSE model answer. Every hint must be a guiding question ending in `?`, must not repeat the displayed question, and must not contain or paraphrase the answer.",
+    "Create only `presentations.v17` guided-question answer-builder data. Do not create `v11`, `v16`, or any other presentation variant.",
+    "`v17` must include `question`, optional `instructions`, 3 to 8 `questions`, `memoryChain`, optional `answerPrompt`, `modelAnswer`, `markScheme`, and `maxMarks`. Each guided question needs `id`, `question`, `expectedAnswer`, and a non-revealing `hint`. The questions should lead step by step to the same GCSE model answer. Every hint must be a guiding question ending in `?`, must not repeat the displayed question, and must not contain or paraphrase the answer.",
     "",
-    "The three presentations must agree with the existing quiz steps and must not add unrelated facts.",
+    "The guided presentation must agree with the existing quiz steps and must not add unrelated facts.",
     "",
     "Existing gap:",
     JSON.stringify(
@@ -1854,7 +1631,7 @@ function buildPresentationBackfillPrompt(gap: SparkLearningGap): string {
 
 async function generatePresentationsForGap(
   gap: SparkLearningGap,
-): Promise<SparkLearningGapPresentations> {
+): Promise<CompleteLearningGapPresentations> {
   let lastError: unknown = null;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
@@ -1884,10 +1661,14 @@ async function generatePresentationsForGap(
       const parsed = SparkLearningGapPresentationsSchema.safeParse(
         mergePresentations(normalized, fallback),
       );
-      if (parsed.success) {
-        return parsed.data;
+      if (parsed.success && parsed.data.v17) {
+        return { v17: parsed.data.v17 };
       }
-      throw new Error(`Invalid generated gap presentations: ${parsed.error.message}`);
+      throw new Error(
+        parsed.success
+          ? "Invalid generated gap presentations: missing presentations.v17"
+          : `Invalid generated gap presentations: ${parsed.error.message}`,
+      );
     } catch (error) {
       lastError = error;
       console.warn("[gaps-finder] presentation generation attempt failed", {
@@ -1918,28 +1699,40 @@ async function backfillGapPresentations(options: {
   });
   let updated = 0;
   for (const gap of gaps) {
-    if (
-      !options.force &&
-      gap.presentations?.v11 &&
-      gap.presentations.v16 &&
-      gap.presentations.v17
-    ) {
+    const nextGapId = buildExistingGapId(gap);
+    if (!options.force && gap.presentations?.v17 && gap.id === nextGapId) {
       continue;
     }
     const presentations = await generatePresentationsForGap(gap);
-    await patchFirestoreDocument({
-      serviceAccountJson: options.serviceAccountJson,
-      documentPath: gapDocPath(options.userId, gap.id),
-      updates: {
-        presentations,
-        updatedAt: new Date(),
-      },
-    });
+    if (nextGapId === gap.id) {
+      await patchFirestoreDocument({
+        serviceAccountJson: options.serviceAccountJson,
+        documentPath: gapDocPath(options.userId, gap.id),
+        updates: {
+          presentations,
+          updatedAt: new Date(),
+        },
+      });
+    } else {
+      await setFirestoreDocument({
+        serviceAccountJson: options.serviceAccountJson,
+        documentPath: gapDocPath(options.userId, nextGapId),
+        data: {
+          ...gap,
+          id: nextGapId,
+          presentations,
+          updatedAt: new Date(),
+        } as unknown as Record<string, unknown>,
+      });
+      await deleteFirestoreDocument({
+        serviceAccountJson: options.serviceAccountJson,
+        documentPath: gapDocPath(options.userId, gap.id),
+      });
+    }
     updated += 1;
   }
   return updated;
 }
-
 async function writeGapFinderWorkspace(options: {
   serviceAccountJson: string;
   userId: string;
