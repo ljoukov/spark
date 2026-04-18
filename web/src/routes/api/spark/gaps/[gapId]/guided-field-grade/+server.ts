@@ -215,6 +215,7 @@ function buildJudgePrompt(input: {
 	return [
 		'You are checking one short guided answer in a GCSE practice gap.',
 		'Judge only this one guided question, not the final written answer.',
+		'The practice question and guided question may include Markdown or LaTeX; interpret the content, not the markup.',
 		'Use the whole guided path and all previous student replies to understand the misconception.',
 		'Use this rubric:',
 		'- correct: the answer gives the expected concept, allowing minor spelling errors or a clear synonym.',
@@ -225,6 +226,7 @@ function buildJudgePrompt(input: {
 		'Do not mark an answer partial just because it omits nouns already present in the guided question.',
 		'If correct, feedback must be exactly: Correct.',
 		'If partial or incorrect, feedback must be one short guiding question under 140 characters.',
+		'Feedback is shown under a one-line field: use plain text only, no Markdown, no LaTeX, no bullets, and no line breaks. Unicode symbols are OK if useful.',
 		'Make the hint more guided than earlier hints for this same field, using the previous attempts.',
 		'The initial hint is already visible; do not reuse it or closely paraphrase it.',
 		'Avoid vague hints like "where?" on their own; ask a complete guiding question.',
@@ -435,6 +437,9 @@ function nextFallbackHint(input: {
 function usesBannedHintPattern(feedback: string): boolean {
 	const normalized = feedback.toLowerCase();
 	return (
+		/(?:\r|\n|\${1,2}|\\\(|\\\[|`|\*\*|__|^\s{0,3}#{1,6}\s|^\s*[-*+]\s+)/mu.test(
+			feedback
+		) ||
 		normalized.includes('the answer is') ||
 		normalized.includes('answer should') ||
 		normalized.includes('use the word') ||

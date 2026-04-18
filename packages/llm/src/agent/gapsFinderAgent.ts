@@ -277,6 +277,29 @@ function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
+function normalizeGuidedFieldText(value: string): string {
+  const normalized = normalizeWhitespace(value)
+    .replace(/\\times\b/gu, "×")
+    .replace(/\\(?:rightarrow|to)\b/gu, "→")
+    .replace(/\\leq\b/gu, "≤")
+    .replace(/\\geq\b/gu, "≥")
+    .replace(/\\Delta\b/gu, "Δ")
+    .replace(/\\%/gu, "%")
+    .replace(/\\text\{([^{}]*)\}/gu, "$1")
+    .replace(/\\\(|\\\)|\\\[|\\\]/gu, "")
+    .replace(/\${1,2}/gu, "")
+    .replace(/\*\*([^*]+)\*\*/gu, "$1")
+    .replace(/__([^_]+)__/gu, "$1")
+    .replace(/`([^`]+)`/gu, "$1");
+  return normalizeWhitespace(normalized);
+}
+
+function hasGuidedFieldFormatting(value: string): boolean {
+  return /(?:\r|\n|\${1,2}|\\\(|\\\[|`|\*\*|__|^\s{0,3}#{1,6}\s|^\s*[-*+]\s+)/mu.test(
+    value,
+  );
+}
+
 function compactText(value: string, maxLength: number): string {
   const compact = normalizeWhitespace(value);
   if (compact.length <= maxLength) {
@@ -1186,7 +1209,8 @@ function buildGenerationPrompt(options: {
     ),
     "",
     "For every generated gap, include only `presentations.v17` guided-question answer-builder data. Do not generate `presentations.v11`, `presentations.v16`, or any other presentation variants.",
-    "The v17 questions must form a cause-and-effect path to the same model answer. Each v17 question should be a guiding question, each expectedAnswer should be short, and each hint must be a non-revealing guiding question that ends in `?`, does not repeat the question text, and does not contain or paraphrase the answer. Include a very short `memoryChain`, a polished `modelAnswer`, and a usable `markScheme` for grading the learner's final written answer.",
+    "`presentations.v17.question` is displayed as normal Markdown with LaTeX support, so use Markdown and LaTeX for formulas, equations, calculations, units, and structured source details when that makes the problem clearer. In JSON output, prefer `$...$` and `$$...$$` math delimiters; avoid backslash math delimiters because unescaped backslashes make invalid JSON.",
+    "The v17 questions must form a cause-and-effect path to the same model answer. Each `v17.questions[].question` is shown beside a short answer field, so keep it single-line plain text with no LaTeX, no display math, and no multiline formatting; use Unicode symbols such as `×`, `→`, `≤`, or `Δ` when helpful. Each `expectedAnswer` must be short, single-line plain text with no Markdown, no LaTeX, and no formatting. Each `hint` must be a single-line plain-text non-revealing guiding question that ends in `?`, does not repeat the question text, and does not contain or paraphrase the answer. Include a very short `memoryChain`, a polished `modelAnswer`, and a usable `markScheme` for grading the learner's final written answer.",
     "",
     "Existing active gaps to dedupe against:",
     JSON.stringify(existing, null, 2),
@@ -1234,18 +1258,20 @@ function normalizeGeneratedGuidedQuestions(
     if (!question || !expectedAnswer) {
       continue;
     }
+    const normalizedQuestion = normalizeGuidedFieldText(question);
+    const normalizedExpectedAnswer = normalizeGuidedFieldText(expectedAnswer);
     const hint = normalizeGuidedHint({
       hint: firstString(record, ["hint", "guidance", "placeholder"]),
-      question,
-      expectedAnswer,
+      question: normalizedQuestion,
+      expectedAnswer: normalizedExpectedAnswer,
       index,
     });
     questions.push({
       id:
         firstString(record, ["id", "questionId", "key"]) ??
         `guided-${(index + 1).toString()}`,
-      question,
-      expectedAnswer,
+      question: normalizedQuestion,
+      expectedAnswer: normalizedExpectedAnswer,
       ...(hint ? { hint } : {}),
       ...(typeof record.maxMarks === "number" ? { maxMarks: record.maxMarks } : {}),
     });
@@ -1259,22 +1285,59 @@ function normalizeGuidedHint(input: {
   expectedAnswer: string;
   index: number;
 }): string {
-  const fallback =
-    input.index === 0
-      ? "Which comparison from the question matters here?"
-      : "What change follows from the previous answer?";
+  const fallback = fallbackGuidedHint(input);
   if (!input.hint) {
     return fallback;
   }
   const hint = normalizeWhitespace(input.hint);
   if (
     !hint.endsWith("?") ||
+    hasGuidedFieldFormatting(input.hint) ||
     tooSimilarForGuidedHint(hint, input.question) ||
     revealsGuidedExpectedAnswer(hint, input.expectedAnswer)
   ) {
     return fallback;
   }
   return hint;
+}
+
+function fallbackGuidedHint(input: {
+  question: string;
+  index: number;
+}): string {
+  const question = normalizeWhitespace(input.question).toLowerCase();
+  if (question.includes("%") || question.includes("percent")) {
+    return "How do you convert the percentage before using it?";
+  }
+  if (question.includes("calculation") || question.includes("calculate")) {
+    return "Which values need to be combined for this step?";
+  }
+  if (question.includes("mean rate") || question.includes("rate")) {
+    return "Which change and time interval are needed here?";
+  }
+  if (
+    question.includes("higher") ||
+    question.includes("lower") ||
+    question.includes("compare") ||
+    question.includes("which source")
+  ) {
+    return "Which option matches the clue in the original question?";
+  }
+  if (question.includes("gain") || question.includes("lose")) {
+    return "Which electron change happens at this electrode?";
+  }
+  if (question.startsWith("where") || question.includes(" where ")) {
+    return "Which location does the model place it in?";
+  }
+  if (question.includes("called") || question.includes("term")) {
+    return "Which technical term names this idea?";
+  }
+  if (question.includes("problem") || question.includes("cause")) {
+    return "What problem does the previous idea create?";
+  }
+  return input.index === 0
+    ? "Which first fact or calculation starts the answer chain?"
+    : "Which next link connects to your previous answer?";
 }
 
 function tooSimilarForGuidedHint(hint: string, question: string): boolean {
@@ -1582,7 +1645,7 @@ function buildPresentationBackfillPrompt(gap: SparkLearningGap): string {
     "Return JSON only with exactly one top-level key: `presentations`.",
     "",
     "Create only `presentations.v17` guided-question answer-builder data. Do not create `v11`, `v16`, or any other presentation variant.",
-    "`v17` must include `question`, optional `instructions`, 3 to 8 `questions`, `memoryChain`, optional `answerPrompt`, `modelAnswer`, `markScheme`, and `maxMarks`. Each guided question needs `id`, `question`, `expectedAnswer`, and a non-revealing `hint`. The questions should lead step by step to the same GCSE model answer. Every hint must be a guiding question ending in `?`, must not repeat the displayed question, and must not contain or paraphrase the answer.",
+    "`v17` must include `question`, optional `instructions`, 3 to 8 `questions`, `memoryChain`, optional `answerPrompt`, `modelAnswer`, `markScheme`, and `maxMarks`. `v17.question` is rendered as normal Markdown with LaTeX support, so use Markdown and math delimiters for formulas, calculations, units, and structured source detail when useful. In JSON output, prefer `$...$` and `$$...$$` math delimiters; avoid backslash math delimiters because unescaped backslashes make invalid JSON. Each guided question needs `id`, `question`, `expectedAnswer`, and a non-revealing `hint`. Each guided `question` is shown beside a short answer field, so keep it single-line plain text with no LaTeX, no display math, and no multiline formatting; Unicode symbols are allowed when helpful. The questions should lead step by step to the same GCSE model answer. Every `expectedAnswer` and `hint` must be short single-line plain text with no Markdown, no LaTeX, and no formatting. Every hint must be a guiding question ending in `?`, must not repeat the displayed question, and must not contain or paraphrase the answer.",
     "",
     "The guided presentation must agree with the existing quiz steps and must not add unrelated facts.",
     "",

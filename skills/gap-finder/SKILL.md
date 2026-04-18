@@ -56,7 +56,7 @@ Use this skill to convert graded worksheet weaknesses into short practice-gap ca
 
 Every gap must include data for one user-facing presentation:
 
-- `presentations.v17`: a guided-question answer builder. Use 3 to 8 short guiding questions that lead the learner step by step to the same GCSE model answer. Each item needs `id`, `question`, `expectedAnswer`, and a concise `hint`. Every hint must be phrased as a guiding question ending in `?`, must not repeat the displayed question, and must not trivially reveal, contain, or paraphrase the answer. Include a very short `memoryChain`, an `answerPrompt` such as "Now combine those ideas into a GCSE model answer.", the same polished `modelAnswer`, a usable `markScheme`, and `maxMarks`.
+- `presentations.v17`: a guided-question answer builder. Use 3 to 8 short guiding questions that lead the learner step by step to the same GCSE model answer. `v17.question` is rendered as normal Markdown with LaTeX support, so use Markdown plus LaTeX for formulas, calculations, units, and structured source detail when useful. In JSON output, prefer `$...$` and `$$...$$` math delimiters; avoid backslash math delimiters because unescaped backslashes make invalid JSON. Each item needs `id`, `question`, `expectedAnswer`, and a concise `hint`. Each item `question` is shown beside a short answer field, so it must be single-line plain text with no LaTeX, no display math, and no multiline formatting; use Unicode symbols such as `×`, `→`, `≤`, or `Δ` when helpful. `expectedAnswer` and `hint` must also be short, single-line plain text with no Markdown, no LaTeX, and no formatting. Every hint must be phrased as a guiding question ending in `?`, must not repeat the displayed question, and must not trivially reveal, contain, or paraphrase the answer. Include a very short `memoryChain`, an `answerPrompt` such as "Now combine those ideas into a GCSE model answer.", the same polished `modelAnswer`, a usable `markScheme`, and `maxMarks`.
 
 Do not generate `presentations.v11`, `presentations.v16`, or any other presentation variants.
 
@@ -111,5 +111,6 @@ Before returning gaps:
 - Check that every free-text step has a short expected answer and a mark scheme that matches it.
 - Check that every chain ends with both `model_answer` and `memory_chain`.
 - Check that v17 questions form a useful reasoning path, and that v17 hints guide without repeating the question or revealing the answer.
+- Check that the v17 main display question uses Markdown/LaTeX where formulas or calculations would otherwise read as awkward plain text, while field questions, field answers, and hints remain plain single-line text.
 - Check that no step reveals the final model answer before the learner has done useful retrieval or reasoning.
 - Check that the output is parseable JSON and uses only the allowed fields.

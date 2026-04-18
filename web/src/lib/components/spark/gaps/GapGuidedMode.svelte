@@ -5,6 +5,7 @@
 		type AnnotatedTextDocument,
 		type AnnotatedTextTheme
 	} from '$lib/components/annotated-text';
+	import { MarkdownContent } from '$lib/components/markdown/index.js';
 	import type { SparkLearningGapGuidedPresentation } from '@spark/schemas';
 	import { tick } from 'svelte';
 	import { z } from 'zod';
@@ -365,12 +366,16 @@
 	function fieldFeedbackText(question: GuidedQuestion): string {
 		const result = fieldResultFor(question.id);
 		if (result.status === 'idle') {
-			return question.hint ?? '';
+			return plainSingleLine(question.hint ?? '');
 		}
 		if (result.status === 'judging') {
 			return 'Checking...';
 		}
-		return result.feedback;
+		return plainSingleLine(result.feedback);
+	}
+
+	function plainSingleLine(value: string): string {
+		return value.replace(/\s+/g, ' ').trim();
 	}
 </script>
 
@@ -379,23 +384,16 @@
 		<header class="gap-guided-header">
 			<div>
 				<span>{subjectLabel}</span>
-				<h1>{presentation.question}</h1>
+				<div class="gap-guided-title" role="heading" aria-level="1">
+					<MarkdownContent markdown={presentation.question} />
+				</div>
 			</div>
-			<strong>{phase === 'questions' ? 'Guided questions' : 'Guided answer'}</strong>
 		</header>
 
 		<div class="gap-guided-body">
 			{#if phase === 'questions'}
-				<section class="gap-guided-objective">
-					<span>Build the answer</span>
-					<p>
-						{presentation.instructions ??
-							'Answer each guiding question in a short phrase, then combine the ideas.'}
-					</p>
-				</section>
-
 				<div class="gap-guided-section-bar">
-					<strong>A. Guiding questions</strong>
+					<strong>Build the answer</strong>
 					<span>{answeredAllQuestions ? 'Ready' : 'In progress'}</span>
 				</div>
 
@@ -403,8 +401,10 @@
 					{#each presentation.questions as question, index (question.id)}
 						<label class="gap-guided-question" for={inputId(question.id)}>
 							<span class="gap-guided-number">{(index + 1).toString()}</span>
-							<span class="gap-guided-question-body">
-								<span class="gap-guided-question-text">{question.question}</span>
+							<div class="gap-guided-question-body">
+								<div class="gap-guided-question-text">
+									<MarkdownContent markdown={question.question} />
+								</div>
 								<textarea
 									id={inputId(question.id)}
 									class={fieldInputClass(question.id)}
@@ -420,14 +420,14 @@
 										void handleFieldKeydown(event, question, index);
 									}}
 									placeholder="Type a short answer"
-									aria-label={question.question}
+									aria-label={plainSingleLine(question.question)}
 								></textarea>
 								<small
 									class={`gap-guided-field-feedback gap-guided-field-feedback--${fieldResultFor(question.id).status}`}
 								>
 									{fieldFeedbackText(question)}
 								</small>
-							</span>
+							</div>
 						</label>
 					{/each}
 
@@ -619,21 +619,50 @@
 		color: rgba(255, 255, 255, 0.72);
 	}
 
-	.gap-guided-header h1 {
-		margin: 0;
-		font-size: clamp(1.45rem, 2.2vw, 1.9rem);
-		font-weight: 900;
-		line-height: 1.16;
+	.gap-guided-title {
+		font-size: clamp(1.18rem, 1.7vw, 1.55rem);
+		font-weight: 400;
+		line-height: 1.28;
 		overflow-wrap: anywhere;
+		--markdown-heading: #ffffff;
+		--markdown-link: #ffffff;
+		--markdown-strong: #ffffff;
+		--markdown-text: #ffffff;
 	}
 
-	.gap-guided-header strong {
-		flex-shrink: 0;
-		margin-top: 0.15rem;
-		color: rgba(255, 255, 255, 0.82);
-		font-size: 0.94rem;
-		text-align: right;
-		white-space: nowrap;
+	.gap-guided-title :global(.markdown-content) {
+		font-weight: 400;
+		line-height: 1.28;
+	}
+
+	.gap-guided-title :global(.markdown-content > * + *) {
+		margin-top: 0.5rem;
+	}
+
+	.gap-guided-title :global(.markdown-content h1),
+	.gap-guided-title :global(.markdown-content h2),
+	.gap-guided-title :global(.markdown-content h3),
+	.gap-guided-title :global(.markdown-content h4) {
+		margin: 0;
+		font-size: 1em;
+		font-weight: 500;
+		line-height: 1.28;
+	}
+
+	.gap-guided-title :global(.markdown-content p) {
+		margin: 0;
+	}
+
+	.gap-guided-title :global(.markdown-content strong) {
+		font-weight: 500;
+	}
+
+	.gap-guided-title :global(.markdown-content .katex-display) {
+		margin: 0.45rem 0 0;
+	}
+
+	.gap-guided-title :global(.markdown-content .katex) {
+		font-size: 0.98em;
 	}
 
 	.gap-guided-body {
@@ -729,8 +758,47 @@
 
 	.gap-guided-question-text {
 		font-size: 1rem;
-		font-weight: 750;
+		font-weight: 400;
 		line-height: 1.45;
+		--markdown-heading: #17211b;
+		--markdown-link: var(--sheet-color);
+		--markdown-strong: #17211b;
+		--markdown-text: #17211b;
+	}
+
+	.gap-guided-question-text :global(.markdown-content) {
+		font-weight: 400;
+		line-height: 1.45;
+	}
+
+	.gap-guided-question-text :global(.markdown-content > * + *) {
+		margin-top: 0.38rem;
+	}
+
+	.gap-guided-question-text :global(.markdown-content h1),
+	.gap-guided-question-text :global(.markdown-content h2),
+	.gap-guided-question-text :global(.markdown-content h3),
+	.gap-guided-question-text :global(.markdown-content h4) {
+		margin: 0;
+		font-size: 1em;
+		font-weight: 600;
+		line-height: 1.4;
+	}
+
+	.gap-guided-question-text :global(.markdown-content p) {
+		margin: 0;
+	}
+
+	.gap-guided-question-text :global(.markdown-content strong) {
+		font-weight: 600;
+	}
+
+	.gap-guided-question-text :global(.markdown-content .katex-display) {
+		margin: 0.35rem 0;
+	}
+
+	.gap-guided-question-text :global(.markdown-content .katex) {
+		font-size: 0.98em;
 	}
 
 	.gap-guided-field-feedback {
@@ -739,7 +807,7 @@
 		min-height: 1.45rem;
 		color: rgba(23, 33, 27, 0.62);
 		font-size: 0.78rem;
-		font-weight: 650;
+		font-weight: 550;
 		line-height: 1.35;
 	}
 
@@ -763,7 +831,7 @@
 	.gap-guided-short-input {
 		min-height: 2.5rem;
 		padding: 0.42rem 0.5rem 0.34rem;
-		font-weight: 650;
+		font-weight: 550;
 		field-sizing: content;
 		overflow: hidden;
 		resize: none;
@@ -1065,6 +1133,14 @@
 		border-color: rgba(104, 199, 157, 0.34);
 		background: rgba(104, 199, 157, 0.12);
 		color: #f4f1ea;
+	}
+
+	:global([data-theme='dark'] .gap-guided-question-text),
+	:global(:root:not([data-theme='light']) .gap-guided-question-text) {
+		--markdown-heading: #f4f1ea;
+		--markdown-link: #9be4bd;
+		--markdown-strong: #f4f1ea;
+		--markdown-text: #f4f1ea;
 	}
 
 	:global([data-theme='dark'] .gap-guided-field-feedback),
