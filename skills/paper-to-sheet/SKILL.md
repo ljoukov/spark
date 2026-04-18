@@ -47,7 +47,7 @@ Use this skill to translate source material into the paper-sheet JSON contract. 
 
 - Treat uploaded question sheets as canonical source material.
 - Preserve wording, numbering, formulas, notation, marks, labels, blanks, options, tables, and flow/box layouts. For official question papers, the visible worksheet prompt should be a verbatim transcription of the printed item, not a paraphrase.
-- Do not treat a learner's broad focus wording as permission to drop visible source items. Unless the user explicitly says to grade only specific question numbers, include every source item that is visibly answered, partially answered, selected, or left as an answer space in the submitted work; score blanks/partials normally or mark unresolved evidence explicitly instead of omitting the item.
+- Do not treat a learner's broad focus wording as permission to drop visible source items. Focus phrases such as "first 4 paragraphs" are grading-focus guidance, not exclusions. Unless the user explicitly says to grade only specific question numbers, include every source item that is visibly answered, partially answered, selected, or left as an answer space in the submitted work; score blanks/partials normally or mark unresolved evidence explicitly instead of omitting the item.
 - Preserve printed subpart labels and option labels exactly. If the UI would otherwise auto-number leaf badges, set `badgeLabel` to the visible source subpart label, for example `a`, `b`, `c`, `i`, `ii`, or `A`.
 - Preserve exact root stems and interstitial wording from the source. Do not replace printed source text such as `A computer has a Central Processing Unit (CPU).` with a topic summary such as `Central Processing Unit.`
 - Apply only minimal OCR/layout cleanup that keeps meaning unchanged.

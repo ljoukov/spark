@@ -21,7 +21,7 @@ The detailed reusable workflow lives in skills. Read and follow the matching fil
 - `skills/handwritten-answers-to-sheet/SKILL.md`
 - `skills/source-image-cropping/SKILL.md`
 
-Use `paper-to-sheet` to choose the mode and model the sheet structure. Use `handwritten-answers-to-sheet` for answer capture, official-reference lookup, scoring, and outcome reporting. Use `source-image-cropping` only when a visible crop is actually needed.
+Use `paper-to-sheet` for sheet structure, `handwritten-answers-to-sheet` for answer capture/reference lookup/scoring, and `source-image-cropping` only when a crop is needed.
 
 ## Mode Decision
 
@@ -37,7 +37,7 @@ Classify the run before expensive work:
 2. For text-selectable source papers and mark schemes, run `extract_pdf_reference_text` once and use `grep_workspace_files` plus targeted `read_workspace_file` line ranges. Do not send those same PDFs through `extract_text` again unless a specific visual/non-text page truly needs OCR.
 3. Run one primary `extract_text` pass for remaining transcription targets, normally student submissions and non-text source/solution files. Write `grader/output/transcription.md`. In grading runs with an official/source paper reference, include a compact `## Source problem-statement transcription` section in that file even when the source text came from deterministic PDF extraction; list the assessed root stems, subquestion labels, figure/table labels, and mark-bearing prompts needed to audit the worksheet structure.
 4. If online references are allowed and the paper or competition is identifiable, make a bounded official-source lookup effort for mark schemes/solutions, examiner reports, and grade/prize/medal thresholds that are not already uploaded.
-5. Build a compact `grader/output/sheet-plan.md` before writing a large sheet. List source leaves, worksheet ids, marks, answer shapes, visual handling, score totals, and any visible submitted-work item intentionally excluded. Unless the learner explicitly excludes specific question numbers, keep visible answered, partial, selected, and blank answer-bearing items.
+5. Build `grader/output/sheet-plan.md` before a large sheet. List source leaves, ids, marks, answer shapes, visual handling, score totals, and any visible submitted-work item intentionally excluded. Focus phrases like "first 4 paragraphs" are not exclusions; unless the learner names question numbers to exclude, keep visible answered, partial, selected, and blank answer-bearing items.
 6. Once `transcription.md`, the needed official/source references, and `sheet-plan.md` exist, stop broad reference reading and move directly to report assembly. Do only targeted reads for a named missing mark point or publish error.
 7. Write `grader/output/sheet.json` and `grader/output/run-summary.json`.
 8. Before publishing source-paper/PDF/photo-derived sheets, call `validate_source_fidelity_with_fresh_agent`, write its `reviewMarkdown` to `grader/output/source-fidelity-audit.md`, and split long material by source page or root question. Check only transfer fidelity: verbatim text, visible items, numbering/badges, figures/tables/layouts near the prompt, and answer evidence alignment. Fix blocking failures and re-audit.
@@ -58,7 +58,7 @@ Map the worksheet subject to Spark's stable Apple-style palette and use the matc
 - Economics or Business: yellow.
 - Computer Science or General: gray.
 
-Do not invent custom sheet colors. The publish tool normalizes mismatches, but choose the right subject palette before publishing so the list thumbnail and opened worksheet match.
+Do not invent custom sheet colors.
 
 ## Output Contract
 
