@@ -126,14 +126,15 @@
 					? resolveSheetSubjectTheme({ label: sheet.subject })
 					: null
 				: resolveSheetSubjectTheme({ key: primarySubjectKey });
-		const color = subjectTheme?.color ?? sheet?.color ?? '#36587a';
-		const accent = subjectTheme?.accent ?? sheet?.accent ?? '#4d7aa5';
-		const light = subjectTheme?.light ?? sheet?.light ?? '#e8f2fb';
-		const border = subjectTheme?.border ?? sheet?.border ?? '#bfd0e0';
-		const darkColor = subjectTheme?.darkColor ?? color;
-		const darkAccent = subjectTheme?.darkAccent ?? accent;
-		const darkLight = subjectTheme?.darkLight ?? light;
-		const darkBorder = subjectTheme?.darkBorder ?? border;
+		const fallbackTheme = resolveSheetSubjectTheme({ key: 'general' });
+		const color = subjectTheme?.color ?? sheet?.color ?? fallbackTheme.color;
+		const accent = subjectTheme?.accent ?? sheet?.accent ?? fallbackTheme.accent;
+		const light = subjectTheme?.light ?? sheet?.light ?? fallbackTheme.light;
+		const border = subjectTheme?.border ?? sheet?.border ?? fallbackTheme.border;
+		const darkColor = subjectTheme?.darkColor ?? fallbackTheme.darkColor;
+		const darkAccent = subjectTheme?.darkAccent ?? fallbackTheme.darkAccent;
+		const darkLight = subjectTheme?.darkLight ?? fallbackTheme.darkLight;
+		const darkBorder = subjectTheme?.darkBorder ?? fallbackTheme.darkBorder;
 		return [
 			`--sheet-color:${color}`,
 			`--sheet-accent:${accent}`,
@@ -1069,10 +1070,14 @@
 		position: relative;
 		padding: 1.1rem 1.2rem 1rem;
 		background:
-			radial-gradient(circle at 90% 20%, var(--sheet-accent-18) 0 18%, transparent 19%),
-			radial-gradient(circle at 82% 8%, var(--sheet-color-08) 0 16%, transparent 17%),
-			linear-gradient(135deg, var(--sheet-light) 0%, white 100%);
-		border-bottom: 1px solid var(--sheet-border);
+			radial-gradient(circle at 90% 20%, rgba(255, 255, 255, 0.08) 0 18%, transparent 19%),
+			radial-gradient(circle at 82% 8%, rgba(255, 255, 255, 0.06) 0 16%, transparent 17%),
+			linear-gradient(
+				135deg,
+				var(--sheet-color) 0%,
+				color-mix(in srgb, var(--sheet-color) 88%, black) 100%
+			);
+		border-bottom: 1px solid color-mix(in srgb, var(--sheet-color) 76%, black);
 	}
 
 	.sheet-preview__header-row {
@@ -1085,20 +1090,20 @@
 		letter-spacing: 0.18em;
 		text-transform: uppercase;
 		font-weight: 700;
-		color: var(--sheet-accent);
+		color: rgba(255, 255, 255, 0.78);
 	}
 
 	.sheet-preview__title {
 		margin: 0.5rem 0 0;
 		font-size: 1.3rem;
 		line-height: 1.15;
-		color: var(--sheet-color);
+		color: #ffffff;
 	}
 
 	.sheet-preview__subtitle {
 		margin: 0.4rem 0 0;
 		font-size: 0.92rem;
-		color: color-mix(in srgb, var(--sheet-color) 72%, transparent);
+		color: rgba(255, 255, 255, 0.76);
 	}
 
 	.sheet-preview__tag-row {
@@ -1106,6 +1111,12 @@
 		flex-wrap: wrap;
 		gap: 0.45rem;
 		margin-top: 0.7rem;
+	}
+
+	.sheet-preview__tag-row .subject-pill {
+		border-color: rgba(255, 255, 255, 0.34);
+		background: rgba(255, 255, 255, 0.13);
+		color: #ffffff;
 	}
 
 	.sheet-preview__signals {
@@ -1139,8 +1150,9 @@
 		padding: 0.58rem 0.72rem;
 		text-align: center;
 		border-radius: 0.95rem;
-		background: white;
-		border: 1px solid var(--sheet-border);
+		background: rgba(255, 255, 255, 0.13);
+		border: 1px solid rgba(255, 255, 255, 0.32);
+		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
 	}
 
 	.sheet-preview__marks-label {
@@ -1148,7 +1160,7 @@
 		font-size: 0.62rem;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		color: color-mix(in srgb, var(--sheet-color) 62%, transparent);
+		color: rgba(255, 255, 255, 0.72);
 	}
 
 	.sheet-preview__marks-value {
@@ -1158,7 +1170,7 @@
 		line-height: 1.1;
 		white-space: nowrap;
 		font-variant-numeric: tabular-nums;
-		color: var(--sheet-color);
+		color: #ffffff;
 	}
 
 	.sheet-preview__marks-detail {
@@ -1166,7 +1178,7 @@
 		font-size: 0.7rem;
 		font-weight: 600;
 		font-variant-numeric: tabular-nums;
-		color: color-mix(in srgb, var(--sheet-color) 66%, transparent);
+		color: rgba(255, 255, 255, 0.7);
 	}
 
 	.sheet-preview__body {
@@ -1393,31 +1405,31 @@
 
 	:global([data-theme='dark'] .sheet-preview__title),
 	:global(:root:not([data-theme='light']) .sheet-preview__title) {
-		color: color-mix(in srgb, var(--sheet-dark-color) 72%, #f0eef8);
+		color: #ffffff;
 	}
 
 	:global([data-theme='dark'] .sheet-preview__eyebrow),
 	:global(:root:not([data-theme='light']) .sheet-preview__eyebrow) {
-		color: color-mix(in srgb, var(--sheet-dark-accent) 56%, #f0eef8 44%);
+		color: rgba(255, 255, 255, 0.78);
 	}
 
 	:global([data-theme='dark'] .sheet-preview__header),
 	:global(:root:not([data-theme='light']) .sheet-preview__header) {
 		background:
-			radial-gradient(circle at 90% 20%, var(--sheet-accent-18) 0 18%, transparent 19%),
-			radial-gradient(circle at 82% 8%, var(--sheet-color-08) 0 16%, transparent 17%),
+			radial-gradient(circle at 90% 20%, rgba(255, 255, 255, 0.045) 0 18%, transparent 19%),
+			radial-gradient(circle at 82% 8%, rgba(255, 255, 255, 0.035) 0 16%, transparent 17%),
 			linear-gradient(
 				135deg,
-				color-mix(in srgb, var(--sheet-dark-light) 68%, #201c39) 0%,
-				#17142a 100%
+				color-mix(in srgb, var(--sheet-color, #1f7a4d) 66%, #17142a) 0%,
+				color-mix(in srgb, var(--sheet-color, #1f7a4d) 48%, #17142a) 100%
 			);
 		border-bottom-color: color-mix(in srgb, var(--sheet-dark-border) 54%, #302850);
 	}
 
 	:global([data-theme='dark'] .sheet-preview__marks-box),
 	:global(:root:not([data-theme='light']) .sheet-preview__marks-box) {
-		border-color: color-mix(in srgb, var(--sheet-dark-border) 54%, #302850);
-		background: #201c39;
+		border-color: rgba(255, 255, 255, 0.22);
+		background: rgba(255, 255, 255, 0.1);
 	}
 
 	:global([data-theme='dark'] .sheet-preview__body),
@@ -1428,11 +1440,14 @@
 	:global([data-theme='dark'] .sheet-preview__subtitle),
 	:global([data-theme='dark'] .sheet-preview__marks-label),
 	:global([data-theme='dark'] .sheet-preview__marks-detail),
-	:global([data-theme='dark'] .sheet-preview__footer),
-	:global([data-theme='dark'] .sheet-preview__summary),
 	:global(:root:not([data-theme='light']) .sheet-preview__subtitle),
 	:global(:root:not([data-theme='light']) .sheet-preview__marks-label),
-	:global(:root:not([data-theme='light']) .sheet-preview__marks-detail),
+	:global(:root:not([data-theme='light']) .sheet-preview__marks-detail) {
+		color: rgba(255, 255, 255, 0.72);
+	}
+
+	:global([data-theme='dark'] .sheet-preview__footer),
+	:global([data-theme='dark'] .sheet-preview__summary),
 	:global(:root:not([data-theme='light']) .sheet-preview__footer),
 	:global(:root:not([data-theme='light']) .sheet-preview__summary) {
 		color: color-mix(in srgb, #c5bbdf 74%, var(--sheet-dark-color) 26%);
