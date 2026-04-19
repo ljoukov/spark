@@ -81,9 +81,7 @@ export const SparkLearningGapStepSchema = z.discriminatedUnion("kind", [
   SparkLearningGapMemoryChainStepSchema,
 ]);
 
-export type SparkLearningGapStep = z.infer<
-  typeof SparkLearningGapStepSchema
->;
+export type SparkLearningGapStep = z.infer<typeof SparkLearningGapStepSchema>;
 
 export const SparkLearningGapGuidedQuestionSchema = z.object({
   id: trimmedString,
@@ -100,12 +98,12 @@ export type SparkLearningGapGuidedQuestion = z.infer<
 export const SparkLearningGapGuidedPresentationSchema = z.object({
   question: trimmedString,
   instructions: optionalTrimmedString,
-  questions: z.array(SparkLearningGapGuidedQuestionSchema).min(2).max(10),
+  questions: z.array(SparkLearningGapGuidedQuestionSchema).min(2).max(12),
   memoryChain: trimmedString,
   answerPrompt: optionalTrimmedString,
   modelAnswer: trimmedString,
   markScheme: optionalTrimmedString,
-  maxMarks: z.number().int().min(1).max(8).optional(),
+  maxMarks: z.number().int().min(1).max(12).optional(),
 });
 
 export type SparkLearningGapGuidedPresentation = z.infer<
@@ -196,6 +194,4 @@ export const SparkGapsFinderStateSchema = z.object({
   lastError: optionalTrimmedString,
 });
 
-export type SparkGapsFinderState = z.infer<
-  typeof SparkGapsFinderStateSchema
->;
+export type SparkGapsFinderState = z.infer<typeof SparkGapsFinderStateSchema>;

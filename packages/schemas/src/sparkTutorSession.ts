@@ -7,6 +7,7 @@ import {
   PaperSheetDataSchema,
   PaperSheetReviewSchema,
 } from "./paperSheet";
+import { SparkLearningGapGuidedPresentationSchema } from "./sparkGaps";
 
 const trimmedString = z.string().trim().min(1);
 
@@ -113,6 +114,105 @@ export type SparkTutorReviewGapBand = z.infer<
   typeof SparkTutorReviewGapBandSchema
 >;
 
+export const SparkTutorGuidedPhaseSchema = z.enum([
+  "questions",
+  "memory",
+  "compose",
+  "feedback",
+  "model",
+]);
+
+export type SparkTutorGuidedPhase = z.infer<typeof SparkTutorGuidedPhaseSchema>;
+
+export const SparkTutorGuidedFieldStatusSchema = z.enum([
+  "idle",
+  "judging",
+  "correct",
+  "partial",
+  "incorrect",
+  "error",
+]);
+
+export type SparkTutorGuidedFieldStatus = z.infer<
+  typeof SparkTutorGuidedFieldStatusSchema
+>;
+
+export const SparkTutorGuidedFieldResultSchema = z.object({
+  status: SparkTutorGuidedFieldStatusSchema,
+  feedback: z.string(),
+});
+
+export type SparkTutorGuidedFieldResult = z.infer<
+  typeof SparkTutorGuidedFieldResultSchema
+>;
+
+export const SparkTutorGuidedFieldAttemptSchema = z.object({
+  answer: z.string().max(400),
+  result: z.enum(["correct", "partial", "incorrect"]),
+  feedback: z.string().max(400),
+});
+
+export type SparkTutorGuidedFieldAttempt = z.infer<
+  typeof SparkTutorGuidedFieldAttemptSchema
+>;
+
+export const SparkTutorGuidedAnnotationSchema = z.object({
+  id: trimmedString,
+  start: z.number().int().nonnegative(),
+  end: z.number().int().nonnegative(),
+  type: trimmedString,
+  label: trimmedString,
+  comment: trimmedString,
+});
+
+export const SparkTutorGuidedAnnotationTypeSchema = z.object({
+  label: trimmedString.optional(),
+  lightColor: trimmedString,
+  lightBackground: trimmedString,
+  lightBorderColor: trimmedString,
+  darkColor: trimmedString,
+  darkBackground: trimmedString,
+  darkBorderColor: trimmedString,
+});
+
+export const SparkTutorGuidedGradeResultSchema = z.object({
+  awardedMarks: z.number().int().nonnegative(),
+  maxMarks: z.number().int().positive(),
+  summary: trimmedString,
+  document: z.object({
+    heading: trimmedString,
+    description: trimmedString,
+    text: z.string(),
+    annotations: z.array(SparkTutorGuidedAnnotationSchema).max(16),
+    annotationTypes: z.record(
+      trimmedString,
+      SparkTutorGuidedAnnotationTypeSchema,
+    ),
+  }),
+});
+
+export type SparkTutorGuidedGradeResult = z.infer<
+  typeof SparkTutorGuidedGradeResultSchema
+>;
+
+export const SparkTutorGuidedStateSchema = z.object({
+  phase: SparkTutorGuidedPhaseSchema.optional(),
+  maxVisitedPhaseIndex: z.number().int().min(0).max(4).optional(),
+  answers: z.record(trimmedString, z.string().max(1000)).optional(),
+  writtenAnswer: z.string().max(4000).optional(),
+  fieldResults: z
+    .record(trimmedString, SparkTutorGuidedFieldResultSchema)
+    .optional(),
+  lastChecked: z.record(trimmedString, z.string().max(1000)).optional(),
+  fieldAttempts: z
+    .record(trimmedString, z.array(SparkTutorGuidedFieldAttemptSchema).max(8))
+    .optional(),
+  gradeResult: SparkTutorGuidedGradeResultSchema.nullable().optional(),
+  updatedAt: z.string().datetime({ offset: true }).optional(),
+});
+
+export type SparkTutorGuidedState = z.infer<typeof SparkTutorGuidedStateSchema>;
+
 export const SparkTutorReviewMessageSchema = z
   .object({
     id: trimmedString,
@@ -144,6 +244,8 @@ export const SparkTutorReviewThreadSchema = z.object({
   status: SparkTutorReviewThreadStatusSchema,
   gapBand: SparkTutorReviewGapBandSchema.optional(),
   messages: z.array(SparkTutorReviewMessageSchema),
+  guidedPresentation: SparkLearningGapGuidedPresentationSchema.optional(),
+  guidedState: SparkTutorGuidedStateSchema.optional(),
   resolvedAt: z.string().datetime({ offset: true }).optional(),
 });
 
@@ -159,9 +261,7 @@ export const SparkTutorReviewStateSchema = z.object({
   updatedAt: z.string().datetime({ offset: true }),
 });
 
-export type SparkTutorReviewState = z.infer<
-  typeof SparkTutorReviewStateSchema
->;
+export type SparkTutorReviewState = z.infer<typeof SparkTutorReviewStateSchema>;
 
 export const SparkTutorSessionSchema = z.object({
   id: trimmedString,

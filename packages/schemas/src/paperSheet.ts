@@ -624,6 +624,7 @@ export const PaperSheetQuestionReviewSchema = z.object({
   note: trimmedMaybeEmptyString,
   replyPlaceholder: trimmedString.optional(),
   followUp: trimmedString.optional(),
+  modelAnswer: trimmedString.optional(),
 });
 
 export type PaperSheetQuestionReview = z.infer<

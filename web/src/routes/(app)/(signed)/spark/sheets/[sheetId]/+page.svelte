@@ -2,20 +2,17 @@
 	import { browser } from '$app/environment';
 	import { invalidateAll } from '$app/navigation';
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
-	import {
-		Sheet as PaperSheet,
-		type SheetDocument,
-		type SheetFeedbackStateMap
-	} from '@ljoukov/sheet';
+	import { Sheet as PaperSheet, type SheetDocument } from '@ljoukov/sheet';
 	import type {
 		PaperSheetAnswers,
-		PaperSheetFeedbackAttachment,
-		PaperSheetFeedbackThread,
 		PaperSheetQuestion,
+		SparkLearningGapGuidedPresentation,
 		SparkGraderWorksheetReport,
 		SparkSheetPageState,
 		SparkSolveSheetDraft,
 		SparkSolveSheetAnswers,
+		SparkTutorGuidedPhase,
+		SparkTutorGuidedState,
 		SparkTutorReviewGapBand,
 		SparkTutorReviewState
 	} from '@spark/schemas';
@@ -41,11 +38,6 @@
 	let { data }: { data: PageData } = $props();
 
 	type ClientUser = NonNullable<PageData['user']> | null;
-	type FeedbackRuntimeStatus = 'connecting' | 'thinking' | 'responding';
-	type PendingReply = {
-		text: string;
-		attachments: PaperSheetFeedbackAttachment[];
-	};
 	type PaperSheetSection = SheetDocument['sections'][number];
 	type PaperSheetContentSection = Extract<PaperSheetSection, { id: string }>;
 	type PaperSheetQuestionEntry = NonNullable<PaperSheetContentSection['questions']>[number];
@@ -60,22 +52,16 @@
 		text: string;
 		tone: QuestionScoreTone | null;
 	};
-	type CloseGapMessage = {
-		id: string;
-		author: 'assistant' | 'student';
-		markdown: string;
-		attachments?: PaperSheetFeedbackAttachment[];
-	};
 	type CloseGapQuestionContext = {
 		questionId: string;
 		questionLabel: string;
 		questionPrompt: string;
 		studentAnswer: string;
 		reviewNote: string;
-		replyPlaceholder: string;
 		gapBand: SparkTutorReviewGapBand;
-		messages: CloseGapMessage[];
 		resolved: boolean;
+		guidedPresentation: SparkLearningGapGuidedPresentation | null;
+		guidedState: SparkTutorGuidedState | null;
 	};
 
 	const userStore = getContext<Readable<ClientUser> | undefined>('spark:user');
@@ -90,7 +76,6 @@
 		() => data.interaction?.reviewState ?? data.initialReviewState ?? null
 	);
 	const initialInteractionSessionId = untrack(() => data.interaction?.id ?? null);
-	const initialActiveTurnQuestionId = untrack(() => data.interaction?.activeTurnQuestionId ?? null);
 
 	let authReady = $state(false);
 	let run = $state<PageData['run']>(initialRun);
@@ -100,16 +85,17 @@
 	let report = $state<SparkGraderWorksheetReport | null>(initialReport);
 	let reviewState = $state<SparkTutorReviewState | null>(initialReviewState);
 	let interactionSessionId = $state<string | null>(initialInteractionSessionId);
-	let activeTurnQuestionId = $state<string | null>(initialActiveTurnQuestionId);
 	let requestError = $state<string | null>(null);
 	let draftSaveError = $state<string | null>(null);
 	let savingDraft = $state(false);
 	let gradingDraft = $state(false);
-	let submittingQuestionIds = $state<Record<string, boolean>>({});
-	let pendingReplies = $state<Record<string, PendingReply>>({});
-	let responseDrafts = $state<Record<string, string>>({});
 	let activeResponseQuestionId = $state<string | null>(null);
-	let activeResponseDraft = $state('');
+	let activeGuidedPhase = $state<SparkTutorGuidedPhase>('questions');
+	let loadingGuidedPresentationQuestionId = $state<string | null>(null);
+	let guidedPresentationError = $state<string | null>(null);
+	let guidedStateSaveTimer = $state<ReturnType<typeof setTimeout> | null>(null);
+	let lastSavedGuidedStateSignatures = $state<Record<string, string>>({});
+	let suppressNextUrlPhaseUpdate = $state(false);
 	let draftSaveTimer = $state<ReturnType<typeof setTimeout> | null>(null);
 	let lastSavedDraftSignature = $state(JSON.stringify(initialDraftAnswers));
 	let artifactRefreshInFlight = $state(false);
@@ -141,38 +127,6 @@
 
 	function encodeWorkspaceFileId(filePath: string): string {
 		return encodeURIComponent(filePath);
-	}
-
-	function removeQuestionKey<T extends Record<string, unknown>>(value: T, questionId: string): T {
-		const { [questionId]: _removed, ...rest } = value;
-		return rest as T;
-	}
-
-	function cleanupPendingReply(reply: PendingReply | undefined): void {
-		if (typeof URL === 'undefined') {
-			return;
-		}
-		for (const attachment of reply?.attachments ?? []) {
-			if (attachment.url?.startsWith('blob:')) {
-				URL.revokeObjectURL(attachment.url);
-			}
-		}
-	}
-
-	function buildSheetAttachmentUrl(filePath: string, filename: string): string {
-		const params = new URLSearchParams({
-			path: filePath,
-			filename
-		});
-		return `/api/spark/sheets/${run.id}/attachment?${params.toString()}`;
-	}
-
-	function buildAttachmentSignature(attachment: {
-		filename: string;
-		contentType: string;
-		sizeBytes: number;
-	}): string {
-		return `${attachment.filename}::${attachment.contentType}::${attachment.sizeBytes.toString()}`;
 	}
 
 	function parseWorkspaceTextFile(
@@ -725,8 +679,8 @@
 				case 'mcq':
 					return [
 						question.prompt,
-						...question.options.map((option) =>
-							`${option.label ? `(${option.label}) ` : ''}${option.text}`
+						...question.options.map(
+							(option) => `${option.label ? `(${option.label}) ` : ''}${option.text}`
 						)
 					]
 						.filter((part) => part.trim().length > 0)
@@ -836,41 +790,28 @@
 			if (!review || !thread) {
 				return null;
 			}
-			const pendingReply = pendingReplies[questionId];
-			const messages: CloseGapMessage[] = thread.messages.map((message) => ({
-				id: message.id,
-				author: message.author,
-				markdown: message.markdown,
-				...(message.attachments ? { attachments: message.attachments } : {})
-			}));
-			if (pendingReply) {
-				messages.push({
-					id: `pending-${questionId}`,
-					author: 'student',
-					markdown: pendingReply.text,
-					attachments: pendingReply.attachments
-				});
-			}
 			return {
 				questionId,
 				questionLabel: result.questionLabel,
 				questionPrompt: formatCloseGapQuestionPrompt(result.question, result.parentPrompt),
 				studentAnswer: formatCloseGapStudentAnswer(questionId),
 				reviewNote: review.note,
-				replyPlaceholder:
-					review.replyPlaceholder ?? 'Write what you would change, and why that fixes the gap.',
 				gapBand: resolveCloseGapBand({
 					thread,
 					score: review.score ?? null
 				}),
-				messages,
-				resolved: thread.status === 'resolved'
+				resolved: thread.status === 'resolved',
+				guidedPresentation: thread.guidedPresentation ?? null,
+				guidedState: thread.guidedState ?? null
 			};
 		}
 		return null;
 	}
 
-	function annotateQuestionMarkBadges(root: HTMLElement, labels: readonly QuestionMarkLabel[]): void {
+	function annotateQuestionMarkBadges(
+		root: HTMLElement,
+		labels: readonly QuestionMarkLabel[]
+	): void {
 		const badges = root.querySelectorAll<HTMLElement>('.paper-sheet__question-marks');
 		for (let index = 0; index < badges.length; index += 1) {
 			const badge = badges[index];
@@ -956,9 +897,6 @@
 		}
 		if (next.interaction?.id) {
 			interactionSessionId = next.interaction.id;
-		}
-		if (next.interaction) {
-			activeTurnQuestionId = next.interaction.activeTurnQuestionId;
 		}
 		if (next.run.status !== 'executing') {
 			gradingDraft = false;
@@ -1143,126 +1081,233 @@
 		}
 	}
 
-	async function submitQuestionReply(
-		questionId: string,
-		draft: string,
-		attachments: File[]
-	): Promise<boolean> {
-		if (submittingQuestionIds[questionId] || run.status !== 'done') {
-			return false;
-		}
-		const pendingReply: PendingReply = {
-			text: draft,
-			attachments: attachments.map((file, index) => ({
-				id:
-					typeof crypto !== 'undefined' && 'randomUUID' in crypto
-						? crypto.randomUUID()
-						: `pending-${questionId}-${index.toString()}-${Date.now().toString()}`,
-				filename: file.name,
-				contentType: file.type || 'application/octet-stream',
-				sizeBytes: file.size,
-				...(file.type.startsWith('image/') ? { url: URL.createObjectURL(file) } : {})
-			}))
-		};
-		submittingQuestionIds = {
-			...submittingQuestionIds,
-			[questionId]: true
-		};
-		pendingReplies = {
-			...pendingReplies,
-			[questionId]: pendingReply
-		};
-		activeTurnQuestionId = questionId;
-		requestError = null;
+	const guidedPhases = new Set<SparkTutorGuidedPhase>([
+		'questions',
+		'memory',
+		'compose',
+		'feedback',
+		'model'
+	]);
 
-		try {
-			const formData = new FormData();
-			formData.append('action', 'reply');
-			formData.append('questionId', questionId);
-			formData.append('text', draft);
-			for (const attachment of attachments) {
-				formData.append('file', attachment);
-			}
-			const response = await window.fetch(`/api/spark/sheets/${run.id}/turn`, {
-				method: 'POST',
-				body: formData
-			});
-
-			const payload = (await response.json().catch(() => null)) as
-				| {
-						error?: string;
-						issues?: Array<{ message?: string }>;
-						sessionId?: string;
-						reviewState?: unknown;
-				  }
-				| null;
-			if (!response.ok) {
-				requestError =
-					payload?.issues?.[0]?.message ?? payload?.error ?? 'Unable to send your worksheet reply.';
-				cleanupPendingReply(pendingReply);
-				pendingReplies = removeQuestionKey(pendingReplies, questionId);
-				return false;
-			} else {
-				if (payload?.sessionId) {
-					interactionSessionId = payload.sessionId;
-				}
-				if (payload?.reviewState) {
-					const parsedReviewState = SparkTutorReviewStateSchema.safeParse(payload.reviewState);
-					if (parsedReviewState.success) {
-						reviewState = parsedReviewState.data;
-						activeTurnQuestionId = null;
-					}
-				}
-				return true;
-			}
-		} catch {
-			requestError = 'Unable to send your worksheet reply.';
-			cleanupPendingReply(pendingReply);
-			pendingReplies = removeQuestionKey(pendingReplies, questionId);
-			return false;
-		} finally {
-			submittingQuestionIds = removeQuestionKey(submittingQuestionIds, questionId);
-		}
+	function isGuidedPhase(value: string | null | undefined): value is SparkTutorGuidedPhase {
+		return Boolean(value && guidedPhases.has(value as SparkTutorGuidedPhase));
 	}
 
-	function openCloseGapResponse(questionId: string): void {
-		if (activeResponseQuestionId && activeResponseQuestionId !== questionId) {
-			responseDrafts = {
-				...responseDrafts,
-				[activeResponseQuestionId]: activeResponseDraft
+	function parseCloseGapHash(): { questionId: string; phase: SparkTutorGuidedPhase } | null {
+		if (!browser) {
+			return null;
+		}
+		const hash = window.location.hash.replace(/^#/u, '').trim();
+		if (!hash) {
+			return null;
+		}
+		if (hash.startsWith('gap=')) {
+			const params = new URLSearchParams(hash);
+			const questionId = params.get('gap');
+			if (!questionId) {
+				return null;
+			}
+			const phase = params.get('stage');
+			return {
+				questionId,
+				phase: isGuidedPhase(phase) ? phase : 'questions'
 			};
 		}
+		const [encodedQuestionId, rawPhase] = hash.split('/');
+		if (!encodedQuestionId) {
+			return null;
+		}
+		return {
+			questionId: decodeURIComponent(encodedQuestionId),
+			phase: isGuidedPhase(rawPhase) ? rawPhase : 'questions'
+		};
+	}
+
+	function updateCloseGapUrl(
+		questionId: string,
+		phase: SparkTutorGuidedPhase,
+		mode: 'push' | 'replace' = 'push'
+	): void {
+		if (!browser) {
+			return;
+		}
+		const url = new URL(window.location.href);
+		url.hash = `${encodeURIComponent(questionId)}/${phase}`;
+		if (url.href === window.location.href) {
+			return;
+		}
+		if (mode === 'replace') {
+			window.history.replaceState(null, '', url);
+			return;
+		}
+		window.history.pushState(null, '', url);
+	}
+
+	function clearCloseGapUrl(): void {
+		if (!browser) {
+			return;
+		}
+		const url = new URL(window.location.href);
+		url.hash = '';
+		window.history.pushState(null, '', url);
+	}
+
+	function openCloseGapResponse(
+		questionId: string,
+		options: { phase?: SparkTutorGuidedPhase; updateUrl?: boolean } = {}
+	): void {
+		const threadState = reviewState?.threads[questionId]?.guidedState ?? null;
 		activeResponseQuestionId = questionId;
-		activeResponseDraft = responseDrafts[questionId] ?? '';
+		activeGuidedPhase = options.phase ?? threadState?.phase ?? 'questions';
+		guidedPresentationError = null;
+		if (options.updateUrl !== false) {
+			updateCloseGapUrl(questionId, activeGuidedPhase);
+		}
+		void ensureGuidedPresentation(questionId);
 	}
 
 	function closeCloseGapResponse(): void {
-		if (activeResponseQuestionId) {
-			const trimmedDraft = activeResponseDraft.trim();
-			responseDrafts =
-				trimmedDraft.length > 0
-					? {
-							...responseDrafts,
-							[activeResponseQuestionId]: activeResponseDraft
-						}
-					: removeQuestionKey(responseDrafts, activeResponseQuestionId);
-		}
 		activeResponseQuestionId = null;
-		activeResponseDraft = '';
+		activeGuidedPhase = 'questions';
+		guidedPresentationError = null;
+		clearCloseGapUrl();
 	}
 
-	async function submitActiveResponse(value: string, files: File[]): Promise<boolean> {
+	async function ensureGuidedPresentation(questionId: string): Promise<void> {
+		if (reviewState?.threads[questionId]?.guidedPresentation) {
+			return;
+		}
+		if (loadingGuidedPresentationQuestionId === questionId) {
+			return;
+		}
+		loadingGuidedPresentationQuestionId = questionId;
+		guidedPresentationError = null;
+		try {
+			const response = await window.fetch(`/api/spark/sheets/${run.id}/guided-presentation`, {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json'
+				},
+				body: JSON.stringify({ questionId })
+			});
+			const payload = (await response.json().catch(() => null)) as {
+				error?: string;
+				issues?: Array<{ message?: string }>;
+				sessionId?: string;
+				reviewState?: unknown;
+				guidedState?: SparkTutorGuidedState;
+			} | null;
+			if (!response.ok) {
+				guidedPresentationError =
+					payload?.issues?.[0]?.message ??
+					payload?.error ??
+					'Unable to build the answer steps right now.';
+				return;
+			}
+			if (payload?.sessionId) {
+				interactionSessionId = payload.sessionId;
+			}
+			if (payload?.guidedState) {
+				lastSavedGuidedStateSignatures = {
+					...lastSavedGuidedStateSignatures,
+					[questionId]: JSON.stringify(payload.guidedState)
+				};
+			}
+			if (payload?.reviewState) {
+				const parsedReviewState = SparkTutorReviewStateSchema.safeParse(payload.reviewState);
+				if (parsedReviewState.success) {
+					reviewState = parsedReviewState.data;
+				}
+			}
+		} catch {
+			guidedPresentationError = 'Unable to build the answer steps right now.';
+		} finally {
+			if (loadingGuidedPresentationQuestionId === questionId) {
+				loadingGuidedPresentationQuestionId = null;
+			}
+		}
+	}
+
+	function handleGuidedPhaseChange(phase: SparkTutorGuidedPhase): void {
+		activeGuidedPhase = phase;
 		const questionId = activeResponseQuestionId;
 		if (!questionId) {
-			return false;
+			return;
 		}
-		const sent = await submitQuestionReply(questionId, value, files);
-		if (!sent) {
-			return false;
+		if (suppressNextUrlPhaseUpdate) {
+			suppressNextUrlPhaseUpdate = false;
+			return;
 		}
-		activeResponseDraft = '';
-		responseDrafts = removeQuestionKey(responseDrafts, questionId);
-		return true;
+		updateCloseGapUrl(questionId, phase);
+	}
+
+	function handleGuidedProgressChange(state: SparkTutorGuidedState): void {
+		const questionId = activeResponseQuestionId;
+		if (!questionId) {
+			return;
+		}
+		const signature = JSON.stringify(state);
+		if (lastSavedGuidedStateSignatures[questionId] === signature) {
+			return;
+		}
+		if (guidedStateSaveTimer) {
+			clearTimeout(guidedStateSaveTimer);
+		}
+		guidedStateSaveTimer = setTimeout(() => {
+			void persistGuidedState(questionId, state, signature);
+		}, 500);
+	}
+
+	async function persistGuidedState(
+		questionId: string,
+		state: SparkTutorGuidedState,
+		signature: string
+	): Promise<void> {
+		try {
+			const response = await window.fetch(`/api/spark/sheets/${run.id}/guided-state`, {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json'
+				},
+				body: JSON.stringify({ questionId, state })
+			});
+			const payload = (await response.json().catch(() => null)) as {
+				sessionId?: string;
+				reviewState?: unknown;
+			} | null;
+			if (!response.ok) {
+				return;
+			}
+			lastSavedGuidedStateSignatures = {
+				...lastSavedGuidedStateSignatures,
+				[questionId]: signature
+			};
+			if (payload?.sessionId) {
+				interactionSessionId = payload.sessionId;
+			}
+			if (payload?.reviewState) {
+				const parsedReviewState = SparkTutorReviewStateSchema.safeParse(payload.reviewState);
+				if (parsedReviewState.success) {
+					reviewState = parsedReviewState.data;
+				}
+			}
+		} catch {
+			// Keep the local input responsive; the next edit will try again.
+		}
+	}
+
+	function syncCloseGapFromLocation(): void {
+		const parsed = parseCloseGapHash();
+		if (!parsed) {
+			activeResponseQuestionId = null;
+			activeGuidedPhase = 'questions';
+			return;
+		}
+		suppressNextUrlPhaseUpdate = true;
+		openCloseGapResponse(parsed.questionId, {
+			phase: parsed.phase,
+			updateUrl: false
+		});
 	}
 
 	onMount(() => {
@@ -1285,6 +1330,19 @@
 		} catch (error) {
 			console.warn('Failed to initialize sheet auth guard', error);
 		}
+	});
+
+	onMount(() => {
+		if (!browser) {
+			return;
+		}
+		syncCloseGapFromLocation();
+		window.addEventListener('popstate', syncCloseGapFromLocation);
+		window.addEventListener('hashchange', syncCloseGapFromLocation);
+		return () => {
+			window.removeEventListener('popstate', syncCloseGapFromLocation);
+			window.removeEventListener('hashchange', syncCloseGapFromLocation);
+		};
 	});
 
 	$effect(() => {
@@ -1331,9 +1389,6 @@
 	$effect(() => {
 		if (!interactionSessionId && data.interaction?.id) {
 			interactionSessionId = data.interaction.id;
-		}
-		if (!activeTurnQuestionId && data.interaction?.activeTurnQuestionId) {
-			activeTurnQuestionId = data.interaction.activeTurnQuestionId;
 		}
 	});
 
@@ -1559,7 +1614,6 @@
 				if (!parsed.success) {
 					return;
 				}
-				activeTurnQuestionId = parsed.data.activeTurnQuestionId ?? null;
 				if (parsed.data.reviewState) {
 					reviewState = parsed.data.reviewState;
 				}
@@ -1568,161 +1622,6 @@
 				console.warn('Sheet tutor session subscription failed', error);
 			}
 		);
-	});
-
-	$effect(() => {
-		if (!reviewState || Object.keys(pendingReplies).length === 0) {
-			return;
-		}
-		let nextPendingReplies = pendingReplies;
-		let changed = false;
-		for (const [questionId, pendingReply] of Object.entries(pendingReplies)) {
-			const thread = reviewState.threads[questionId];
-			const lastStudentMessage =
-				thread?.messages.findLast((message) => message.author === 'student') ?? null;
-			const lastMessageSignatures = (lastStudentMessage?.attachments ?? []).map(
-				buildAttachmentSignature
-			);
-			const pendingSignatures = pendingReply.attachments.map(buildAttachmentSignature);
-			if (
-				lastStudentMessage?.markdown === pendingReply.text &&
-				lastMessageSignatures.length === pendingSignatures.length &&
-				lastMessageSignatures.every((signature, index) => signature === pendingSignatures[index])
-			) {
-				if (!changed) {
-					nextPendingReplies = { ...pendingReplies };
-					changed = true;
-				}
-				cleanupPendingReply(pendingReply);
-				delete nextPendingReplies[questionId];
-			}
-		}
-		if (changed) {
-			pendingReplies = nextPendingReplies;
-		}
-	});
-
-	const activeRuntimeQuestionId = $derived.by(() => {
-		if (activeTurnQuestionId) {
-			return activeTurnQuestionId;
-		}
-		if (reviewState) {
-			for (const [questionId, thread] of Object.entries(reviewState.threads)) {
-				if (thread.status === 'responding') {
-					return questionId;
-				}
-			}
-		}
-		const firstPendingQuestionId = Object.keys(submittingQuestionIds)[0];
-		return firstPendingQuestionId ?? null;
-	});
-
-	const feedbackThreads = $derived.by((): Record<string, PaperSheetFeedbackThread> => {
-		const threads: Record<string, PaperSheetFeedbackThread> = {};
-		if (!reviewState) {
-			return threads;
-		}
-		for (const [questionId, thread] of Object.entries(reviewState.threads)) {
-			const turns: PaperSheetFeedbackThread['turns'] = thread.messages.map((message) => ({
-				id: message.id,
-				speaker: message.author === 'assistant' ? ('tutor' as const) : ('student' as const),
-				text: message.markdown,
-				attachments: message.attachments?.map((attachment) => ({
-					...attachment,
-					...(attachment.filePath
-						? { url: buildSheetAttachmentUrl(attachment.filePath, attachment.filename) }
-						: {})
-				}))
-			}));
-			const pendingReply = pendingReplies[questionId];
-			const lastStudentTurn = turns.findLast((turn) => turn.speaker === 'student') ?? null;
-			const lastTurnSignatures = (lastStudentTurn?.attachments ?? []).map(buildAttachmentSignature);
-			const pendingSignatures = (pendingReply?.attachments ?? []).map(buildAttachmentSignature);
-			const shouldAppendPendingTurn =
-				pendingReply !== undefined &&
-				(lastStudentTurn?.text !== pendingReply.text ||
-					lastTurnSignatures.length !== pendingSignatures.length ||
-					lastTurnSignatures.some((signature, index) => signature !== pendingSignatures[index]));
-			const status: PaperSheetFeedbackThread['status'] = shouldAppendPendingTurn
-				? 'responding'
-				: thread.status;
-			const nextTurns: PaperSheetFeedbackThread['turns'] = shouldAppendPendingTurn
-				? [
-						...turns,
-						{
-							id: `pending-${questionId}`,
-							speaker: 'student',
-							text: pendingReply.text,
-							attachments: pendingReply.attachments
-						}
-					]
-				: turns;
-			threads[questionId] = {
-				status,
-				turns: nextTurns
-			};
-		}
-		return threads;
-	});
-
-	const feedbackRuntimeStatuses = $derived.by((): Record<string, FeedbackRuntimeStatus> => {
-		if (!activeRuntimeQuestionId) {
-			return {};
-		}
-
-		const questionId = activeRuntimeQuestionId;
-		const runtimeStatus: FeedbackRuntimeStatus | null =
-			reviewState?.threads[questionId]?.status === 'responding' || submittingQuestionIds[questionId]
-				? 'thinking'
-				: null;
-
-		if (!runtimeStatus) {
-			return {};
-		}
-
-		return {
-			[questionId]: runtimeStatus
-		};
-	});
-
-	const feedbackThinking = $derived.by((): Record<string, string> => ({}));
-
-	const feedbackAssistantDrafts = $derived.by((): Record<string, string> => ({}));
-
-	const feedbackState = $derived.by((): SheetFeedbackStateMap => {
-		const next: SheetFeedbackStateMap = {};
-
-		for (const [questionId, sending] of Object.entries(submittingQuestionIds)) {
-			if (sending) {
-				next[questionId] = {
-					...(next[questionId] ?? {}),
-					sending: true
-				};
-			}
-		}
-
-		for (const [questionId, runtimeStatus] of Object.entries(feedbackRuntimeStatuses)) {
-			next[questionId] = {
-				...(next[questionId] ?? {}),
-				runtimeStatus
-			};
-		}
-
-		for (const [questionId, thinkingText] of Object.entries(feedbackThinking)) {
-			next[questionId] = {
-				...(next[questionId] ?? {}),
-				thinkingText
-			};
-		}
-
-		for (const [questionId, assistantDraftText] of Object.entries(feedbackAssistantDrafts)) {
-			next[questionId] = {
-				...(next[questionId] ?? {}),
-				assistantDraftText
-			};
-		}
-
-		return next;
 	});
 
 	const awaitingAnswersReport = $derived(report?.review.mode === 'awaiting_answers');
@@ -1767,14 +1666,9 @@
 				answers={reviewState.answers}
 				review={awaitingAnswersReport ? null : reviewState.review}
 				mode={awaitingAnswersReport ? 'readonly' : 'review'}
-				allowReplies={!awaitingAnswersReport && run.status === 'done'}
+				allowReplies={!awaitingAnswersReport}
 				showCompletedFeedbackCards={false}
 				footerLabel={sheetFooterLabel}
-				feedbackThreads={awaitingAnswersReport ? {} : feedbackThreads}
-				feedbackState={awaitingAnswersReport ? {} : feedbackState}
-				onReply={(questionId, payload) => {
-					return submitQuestionReply(questionId, payload.text, payload.attachments);
-				}}
 				onOpenResponse={openCloseGapResponse}
 			/>
 		</div>
@@ -1829,21 +1723,19 @@
 
 	{#if activeResponseContext}
 		<CloseGapResponseModal
+			sheetId={run.id}
+			questionId={activeResponseContext.questionId}
 			questionLabel={activeResponseContext.questionLabel}
-			questionPrompt={activeResponseContext.questionPrompt}
-			studentAnswer={activeResponseContext.studentAnswer}
-			reviewNote={activeResponseContext.reviewNote}
+			subjectLabel={reviewSheetDocument?.subject ?? run.display.title}
 			gapBand={activeResponseContext.gapBand}
-			messages={activeResponseContext.messages}
-			bind:draft={activeResponseDraft}
-			placeholder={activeResponseContext.replyPlaceholder}
-			runtimeStatus={feedbackRuntimeStatuses[activeResponseContext.questionId] ?? null}
-			thinkingText={feedbackThinking[activeResponseContext.questionId] ?? null}
-			assistantDraftText={feedbackAssistantDrafts[activeResponseContext.questionId] ?? null}
-			sending={submittingQuestionIds[activeResponseContext.questionId] ?? false}
-			resolved={activeResponseContext.resolved}
+			presentation={activeResponseContext.guidedPresentation}
+			initialState={activeResponseContext.guidedState}
+			bind:phase={activeGuidedPhase}
+			loading={loadingGuidedPresentationQuestionId === activeResponseContext.questionId}
+			errorMessage={guidedPresentationError}
 			onClose={closeCloseGapResponse}
-			onSubmit={submitActiveResponse}
+			onPhaseChange={handleGuidedPhaseChange}
+			onProgressChange={handleGuidedProgressChange}
 		/>
 	{/if}
 

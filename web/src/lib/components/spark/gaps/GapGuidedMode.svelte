@@ -6,8 +6,12 @@
 		type AnnotatedTextTheme
 	} from '$lib/components/annotated-text';
 	import { MarkdownContent } from '$lib/components/markdown/index.js';
-	import type { SparkLearningGapGuidedPresentation } from '@spark/schemas';
-	import { tick } from 'svelte';
+	import type {
+		SparkLearningGapGuidedPresentation,
+		SparkTutorGuidedGradeResult,
+		SparkTutorGuidedState
+	} from '@spark/schemas';
+	import { tick, untrack } from 'svelte';
 	import { z } from 'zod';
 
 	type GuidedQuestion = SparkLearningGapGuidedPresentation['questions'][number];
@@ -23,16 +27,20 @@
 		result: JudgedStatus;
 		feedback: string;
 	};
-	type GradeResult = {
-		awardedMarks: number;
-		maxMarks: number;
-		summary: string;
-		document: AnnotatedTextDocument;
-	};
+	type GradeResult = SparkTutorGuidedGradeResult & { document: AnnotatedTextDocument };
 	type Props = {
 		gapId: string;
 		subjectLabel: string;
 		presentation: SparkLearningGapGuidedPresentation;
+		initialState?: SparkTutorGuidedState | null;
+		fieldGradeEndpoint?: string;
+		finalGradeEndpoint?: string;
+		modalLayout?: boolean;
+		showStageNavigation?: boolean;
+		copyGuard?: boolean;
+		phase?: GuidedPhase;
+		onPhaseChange?: (phase: GuidedPhase) => void;
+		onProgressChange?: (state: SparkTutorGuidedState) => void;
 		onDone: () => void;
 	};
 
@@ -73,9 +81,22 @@
 		feedback: z.string().min(1)
 	});
 
-	let { gapId, subjectLabel, presentation, onDone }: Props = $props();
+	let {
+		gapId,
+		subjectLabel,
+		presentation,
+		initialState = null,
+		fieldGradeEndpoint,
+		finalGradeEndpoint,
+		modalLayout = false,
+		showStageNavigation = false,
+		copyGuard = false,
+		phase = $bindable<GuidedPhase>('questions'),
+		onPhaseChange,
+		onProgressChange,
+		onDone
+	}: Props = $props();
 
-	let phase = $state<GuidedPhase>('questions');
 	let answers = $state<Record<string, string>>({});
 	let fieldResults = $state<Record<string, GuidedFieldResult>>({});
 	let lastChecked = $state<Record<string, string>>({});
@@ -86,6 +107,7 @@
 	let errorMessage = $state('');
 	let theme = $state<AnnotatedTextTheme>('light');
 	let lastPresentationKey = $state('');
+	let maxVisitedPhaseIndex = $state(0);
 
 	const presentationKey = $derived(
 		`${gapId}:${presentation.questions.map((question) => question.id).join('|')}`
@@ -100,6 +122,10 @@
 	const fullMarks = $derived(
 		gradeResult ? gradeResult.awardedMarks >= gradeResult.maxMarks : false
 	);
+	const phaseOrder: GuidedPhase[] = ['questions', 'memory', 'compose', 'feedback', 'model'];
+	const currentPhaseIndex = $derived(phaseIndex(phase));
+	const canGoPreviousStage = $derived(currentPhaseIndex > 0);
+	const canGoNextVisitedStage = $derived(currentPhaseIndex < maxVisitedPhaseIndex);
 	const memoryParts = $derived(
 		presentation.memoryChain
 			.split(/\s*(?:->|→|;|\|)\s*/u)
@@ -113,6 +139,29 @@
 			resetState();
 			lastPresentationKey = key;
 		}
+	});
+
+	$effect(() => {
+		const nextPhase = phase;
+		untrack(() => {
+			onPhaseChange?.(nextPhase);
+		});
+	});
+
+	$effect(() => {
+		const progressState: SparkTutorGuidedState = {
+			phase,
+			maxVisitedPhaseIndex,
+			answers,
+			writtenAnswer,
+			fieldResults,
+			lastChecked,
+			fieldAttempts,
+			gradeResult
+		};
+		untrack(() => {
+			onProgressChange?.(progressState);
+		});
 	});
 
 	$effect(() => {
@@ -169,15 +218,19 @@
 	}
 
 	function resetState(): void {
-		phase = 'questions';
-		answers = createAnswerMap();
-		fieldResults = createFieldResultMap();
-		lastChecked = createAnswerMap();
-		fieldAttempts = createFieldAttemptMap();
-		writtenAnswer = '';
-		gradeResult = null;
+		const initialAnswers = initialState?.answers ?? {};
+		const initialFieldResults = initialState?.fieldResults ?? {};
+		const initialLastChecked = initialState?.lastChecked ?? {};
+		const initialFieldAttempts = initialState?.fieldAttempts ?? {};
+		answers = { ...createAnswerMap(), ...initialAnswers };
+		fieldResults = { ...createFieldResultMap(), ...initialFieldResults };
+		lastChecked = { ...createAnswerMap(), ...initialLastChecked };
+		fieldAttempts = { ...createFieldAttemptMap(), ...initialFieldAttempts };
+		writtenAnswer = initialState?.writtenAnswer ?? '';
+		gradeResult = initialState?.gradeResult ?? null;
 		grading = false;
 		errorMessage = '';
+		maxVisitedPhaseIndex = Math.max(initialState?.maxVisitedPhaseIndex ?? 0, phaseIndex(phase));
 	}
 
 	function answerValue(questionId: string): string {
@@ -223,6 +276,38 @@
 		return `gap-guided-${gapId}-${questionId}`;
 	}
 
+	function phaseIndex(value: GuidedPhase): number {
+		const index = phaseOrder.indexOf(value);
+		return index === -1 ? 0 : index;
+	}
+
+	function setGuidedPhase(value: GuidedPhase): void {
+		phase = value;
+		maxVisitedPhaseIndex = Math.max(maxVisitedPhaseIndex, phaseIndex(value));
+		errorMessage = '';
+	}
+
+	function goPreviousStage(): void {
+		if (!canGoPreviousStage) {
+			return;
+		}
+		setGuidedPhase(phaseOrder[currentPhaseIndex - 1] ?? 'questions');
+	}
+
+	function goNextVisitedStage(): void {
+		if (!canGoNextVisitedStage) {
+			return;
+		}
+		setGuidedPhase(phaseOrder[currentPhaseIndex + 1] ?? phase);
+	}
+
+	function blockClipboard(event: ClipboardEvent): void {
+		if (!copyGuard) {
+			return;
+		}
+		event.preventDefault();
+	}
+
 	async function judgeGuidedField(questionId: string): Promise<GuidedFieldStatus> {
 		const answer = answerValue(questionId).trim();
 		if (!answer) {
@@ -243,16 +328,19 @@
 		setFieldResult(questionId, { status: 'judging', feedback: 'Checking...' });
 
 		try {
-			const response = await fetch(`/api/spark/gaps/${gapId}/guided-field-grade`, {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({
-					questionId,
-					answer,
-					answers,
-					previousAttempts: fieldAttemptsFor(questionId)
-				})
-			});
+			const response = await fetch(
+				fieldGradeEndpoint ?? `/api/spark/gaps/${gapId}/guided-field-grade`,
+				{
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({
+						questionId,
+						answer,
+						answers,
+						previousAttempts: fieldAttemptsFor(questionId)
+					})
+				}
+			);
 			if (!response.ok) {
 				throw new Error(`Guided field grade request failed with ${response.status.toString()}`);
 			}
@@ -308,17 +396,15 @@
 		for (const question of presentation.questions) {
 			await judgeGuidedField(question.id);
 		}
-		phase = 'memory';
-		errorMessage = '';
+		setGuidedPhase('memory');
 	}
 
 	function goToCompose(): void {
-		phase = 'compose';
-		errorMessage = '';
+		setGuidedPhase('compose');
 	}
 
 	function retryAnswer(): void {
-		phase = 'compose';
+		setGuidedPhase('compose');
 		errorMessage = '';
 		gradeResult = null;
 	}
@@ -332,7 +418,7 @@
 		grading = true;
 		errorMessage = '';
 		try {
-			const response = await fetch(`/api/spark/gaps/${gapId}/guided-grade`, {
+			const response = await fetch(finalGradeEndpoint ?? `/api/spark/gaps/${gapId}/guided-grade`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({
@@ -350,7 +436,7 @@
 				summary: parsed.summary,
 				document: parsed.document
 			};
-			phase = 'feedback';
+			setGuidedPhase('feedback');
 		} catch (error) {
 			console.error('Failed to grade guided gap answer', error);
 			errorMessage = 'Could not check this answer right now. Try again in a moment.';
@@ -379,7 +465,12 @@
 	}
 </script>
 
-<section class="gap-guided-stage">
+<section
+	class={`gap-guided-stage ${modalLayout ? 'is-modal' : ''} ${copyGuard ? 'is-copy-guarded' : ''}`}
+	oncopy={blockClipboard}
+	oncut={blockClipboard}
+	onpaste={blockClipboard}
+>
 	<div class="gap-guided-card">
 		<header class="gap-guided-header">
 			<div>
@@ -388,6 +479,28 @@
 					<MarkdownContent markdown={presentation.question} />
 				</div>
 			</div>
+			{#if showStageNavigation}
+				<div class="gap-guided-header-actions" aria-label="Answer-builder navigation">
+					<button
+						type="button"
+						class="gap-guided-nav-button"
+						disabled={!canGoPreviousStage}
+						aria-label="Previous step"
+						onclick={goPreviousStage}
+					>
+						&lt;
+					</button>
+					<button
+						type="button"
+						class="gap-guided-nav-button"
+						disabled={!canGoNextVisitedStage}
+						aria-label="Next visited step"
+						onclick={goNextVisitedStage}
+					>
+						&gt;
+					</button>
+				</div>
+			{/if}
 		</header>
 
 		<div class="gap-guided-body">
@@ -439,7 +552,10 @@
 									? 'All parts are filled.'
 									: 'Fill every field to continue.'}
 						</span>
-						<button class="gap-guided-button" disabled={!answeredAllQuestions || judgingGuidedFields}>
+						<button
+							class="gap-guided-button"
+							disabled={!answeredAllQuestions || judgingGuidedFields}
+						>
 							{judgingGuidedFields ? 'Checking' : 'Next'}
 						</button>
 					</footer>
@@ -487,7 +603,11 @@
 						<p id={`gap-guided-error-${gapId}`} class="gap-guided-error">{errorMessage}</p>
 					{/if}
 					<footer class="gap-guided-footer">
-						<span>{grading ? 'Checking your answer...' : 'Use the memory chain, but write naturally.'}</span>
+						<span
+							>{grading
+								? 'Checking your answer...'
+								: 'Use the memory chain, but write naturally.'}</span
+						>
 						<button class="gap-guided-button" disabled={!writtenAnswerReady || grading}>
 							{grading ? 'Checking' : 'Check answer'}
 						</button>
@@ -507,13 +627,15 @@
 				</div>
 
 				<footer class="gap-guided-footer">
-					<span>{fullMarks ? 'That is a full-mark answer.' : 'Use the notes, then improve it.'}</span>
+					<span
+						>{fullMarks ? 'That is a full-mark answer.' : 'Use the notes, then improve it.'}</span
+					>
 					{#if fullMarks}
 						<button
 							class="gap-guided-button"
 							type="button"
 							onclick={() => {
-								phase = 'model';
+								setGuidedPhase('model');
 							}}
 						>
 							Next
@@ -551,6 +673,22 @@
 		color: #17211b;
 	}
 
+	.gap-guided-stage.is-modal {
+		width: 100%;
+		min-height: 0;
+		padding: 0;
+	}
+
+	.gap-guided-stage.is-copy-guarded {
+		-webkit-user-select: none;
+		user-select: none;
+	}
+
+	.gap-guided-stage.is-copy-guarded textarea {
+		-webkit-user-select: text;
+		user-select: text;
+	}
+
 	.gap-guided-card {
 		--sheet-color: #27745d;
 		--sheet-color-08: rgba(39, 116, 93, 0.08);
@@ -566,6 +704,11 @@
 		box-shadow: 0 22px 70px -48px rgba(15, 23, 42, 0.5);
 	}
 
+	.gap-guided-stage.is-modal .gap-guided-card {
+		width: 100%;
+		box-shadow: none;
+	}
+
 	.gap-guided-header {
 		position: relative;
 		display: flex;
@@ -576,6 +719,37 @@
 		padding: 1.2rem 2rem 1.1rem;
 		background: var(--sheet-color);
 		color: #ffffff;
+	}
+
+	.gap-guided-header-actions {
+		position: relative;
+		z-index: 1;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		flex: 0 0 auto;
+	}
+
+	.gap-guided-nav-button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2.15rem;
+		height: 2.15rem;
+		border: 1px solid rgba(255, 255, 255, 0.34);
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.14);
+		color: #ffffff;
+		font: inherit;
+		font-size: 1.05rem;
+		font-weight: 900;
+		line-height: 1;
+		cursor: pointer;
+	}
+
+	.gap-guided-nav-button:disabled {
+		cursor: not-allowed;
+		opacity: 0.42;
 	}
 
 	.gap-guided-header::before,
