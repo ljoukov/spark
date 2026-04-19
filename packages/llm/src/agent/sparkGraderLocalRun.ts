@@ -98,6 +98,7 @@ export async function launchSparkLocalGraderRun(options: {
   });
   const systemPrompt = buildSparkAgentSystemPrompt({
     includePdfTranscriptionSkill: true,
+    mode: "grader",
   });
   await materializeSparkLocalGraderWorkspace({
     rootDir: workspace.rootDir,

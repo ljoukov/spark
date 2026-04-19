@@ -316,7 +316,10 @@ export async function runSparkGraderLocal(options: {
   const systemPrompt =
     options.systemPrompt?.trim() && options.systemPrompt.trim().length > 0
       ? options.systemPrompt.trim()
-      : buildSparkAgentSystemPrompt({ includePdfTranscriptionSkill: true });
+      : buildSparkAgentSystemPrompt({
+          includePdfTranscriptionSkill: true,
+          mode: "grader",
+        });
   const maxSteps = options.maxSteps ?? DEFAULT_GRADER_MAX_STEPS;
   const thinkingLevel =
     options.thinkingLevel ??

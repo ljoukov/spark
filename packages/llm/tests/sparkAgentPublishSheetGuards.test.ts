@@ -356,7 +356,7 @@ async function writeSourceFidelityAudit(
   await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
   await appendFile(
     path.join(rootDir, "logs/agent/agent.log"),
-    "tool=validate_source_fidelity_with_fresh_agent source fidelity\n",
+    "2026-04-13T10:00:00.000Z [agent:test] tool_call_completed: turn=1 index=1 tool=validate_source_fidelity_with_fresh_agent callId=call_source_fidelity status=ok durationMs=1\n",
     { encoding: "utf8" },
   );
 }
@@ -395,12 +395,55 @@ async function writeFreshCropReviewToolCall(options: {
 
 async function writeSourceProblemStatementTranscription(
   rootDir: string,
-  markdown = "## Source problem-statement transcription\n\n**Question 1** What is shown in the source paper?\n",
+  markdown = "## Source problem-statement transcription\n\n**Question 1** What is shown in Figure 1?\n",
 ): Promise<void> {
   await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
   await writeFile(
     path.join(rootDir, "grader/output/transcription.md"),
     markdown,
+    { encoding: "utf8" },
+  );
+}
+
+async function writeLongHandwrittenTranscription(rootDir: string): Promise<void> {
+  const labels = Array.from({ length: 13 }, (_, index) => {
+    const label = `01.${(index + 1).toString()}`;
+    return `- **${label}** Source prompt ${label}. [1]`;
+  });
+  await writeSourceProblemStatementTranscription(
+    rootDir,
+    [
+      "# Transcription",
+      "",
+      "## Upload inventory and mode",
+      "- Mode: handwritten-grading",
+      "",
+      "## Student answer transcription",
+      "- **01.1** Student answer.",
+      "",
+      "## Source problem-statement transcription",
+      ...labels,
+      "",
+    ].join("\n"),
+  );
+}
+
+async function writeScoreAnswersAgentLog(rootDir: string): Promise<void> {
+  await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
+  await appendFile(
+    path.join(rootDir, "logs/agent/agent.log"),
+    "tool=score_answers_with_fresh_agent bounded scoring\n",
+    { encoding: "utf8" },
+  );
+}
+
+async function writeScoreAnswersResult(rootDir: string): Promise<void> {
+  await mkdir(path.join(rootDir, "grader/output/scoring"), {
+    recursive: true,
+  });
+  await writeFile(
+    path.join(rootDir, "grader/output/scoring/Question-1.json"),
+    '{"scope":"Question 1","totals":{"got":1,"total":1},"questions":[],"uncertainties":[]}\n',
     { encoding: "utf8" },
   );
 }
@@ -590,6 +633,3534 @@ describe("Spark agent tool: publish_sheet guards", () => {
     });
   });
 
+  it("exposes grader-specific preflight and hides generic JSON schema helpers for publish runs", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      expect(tools).toHaveProperty("publish_sheet");
+      expect(tools).toHaveProperty("validate_grader_artifacts");
+      expect(tools).not.toHaveProperty("generate_json");
+      expect(tools).not.toHaveProperty("validate_json");
+      expect(tools).not.toHaveProperty("validate_schema");
+    });
+  });
+
+  it("reports invalid grader JSON through validate_grader_artifacts without publishing", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeValidSheetArtifacts(rootDir);
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet.json"),
+        '{ "schemaVersion": 1, "sheet": { "title": "\\(" } }\n',
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const validateTool = tools.validate_grader_artifacts;
+      requireFunctionTool(validateTool);
+
+      await expect(
+        validateTool.execute({ requireSourceFidelityAudit: false }),
+      ).resolves.toMatchObject({
+        status: "needs_fix",
+        sheetPath: "grader/output/sheet.json",
+        error: expect.stringMatching(/invalid JSON/iu),
+      });
+    });
+  });
+
+  it("normalizes segmented fill questions to cloze during grader validation", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeValidSheetArtifacts(rootDir);
+      const sheetPath = path.join(rootDir, "grader/output/sheet.json");
+      const sheet = JSON.parse(await readFile(sheetPath, { encoding: "utf8" }));
+      sheet.sheet.sections[0].questions[0] = {
+        id: "q1",
+        type: "fill",
+        marks: 1,
+        prompt: "The state symbol is",
+        segments: ["Nitric acid is ", "."],
+        blanks: [{ placeholder: "state" }],
+      };
+      await writeFile(sheetPath, JSON.stringify(sheet, null, 2).concat("\n"), {
+        encoding: "utf8",
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const validateTool = tools.validate_grader_artifacts;
+      requireFunctionTool(validateTool);
+
+      await expect(
+        validateTool.execute({ requireSourceFidelityAudit: false }),
+      ).resolves.toMatchObject({
+        status: "ok",
+      });
+
+      const normalizedSheet = JSON.parse(
+        await readFile(sheetPath, { encoding: "utf8" }),
+      );
+      expect(normalizedSheet.sheet.sections[0].questions[0]).toMatchObject({
+        id: "q1",
+        type: "cloze",
+        segments: ["Nitric acid is ", "."],
+      });
+    });
+  });
+
+  it("normalizes missing MCQ display modes during grader validation", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeValidSheetArtifacts(rootDir);
+      const sheetPath = path.join(rootDir, "grader/output/sheet.json");
+      const sheet = JSON.parse(await readFile(sheetPath, { encoding: "utf8" }));
+      sheet.sheet.sections[0].questions[0] = {
+        id: "q1",
+        type: "mcq",
+        marks: 1,
+        prompt: "What happens to the pH of water when nitric acid is added?",
+        options: [
+          { id: "decreases", label: "A", text: "Decreases" },
+          { id: "stays", label: "B", text: "Stays the same" },
+          { id: "increases", label: "C", text: "Increases" },
+        ],
+      };
+      sheet.answers.q1 = "decreases";
+      await writeFile(sheetPath, JSON.stringify(sheet, null, 2).concat("\n"), {
+        encoding: "utf8",
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const validateTool = tools.validate_grader_artifacts;
+      requireFunctionTool(validateTool);
+
+      await expect(
+        validateTool.execute({ requireSourceFidelityAudit: false }),
+      ).resolves.toMatchObject({
+        status: "ok",
+      });
+
+      const normalizedSheet = JSON.parse(
+        await readFile(sheetPath, { encoding: "utf8" }),
+      );
+      expect(normalizedSheet.sheet.sections[0].questions[0]).toMatchObject({
+        id: "q1",
+        type: "mcq",
+        displayMode: "full_options",
+      });
+    });
+  });
+
+  it("rejects incomplete source-transcription placeholders", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeValidSheetArtifacts(rootDir);
+      await writeFile(
+        path.join(rootDir, "grader/output/transcription.md"),
+        [
+          "# Transcription",
+          "",
+          "## Source problem-statement transcription",
+          "",
+          "### Question 7",
+          "- Full source wording for Question 7 has not yet been copied into this compact audit section.",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const validateTool = tools.validate_grader_artifacts;
+      requireFunctionTool(validateTool);
+
+      await expect(
+        validateTool.execute({ requireSourceFidelityAudit: false }),
+      ).resolves.toMatchObject({
+        status: "needs_fix",
+        error: expect.stringMatching(/incomplete source-transcription/iu),
+      });
+    });
+  });
+
+  it("rejects compact source-transcription summaries", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeValidSheetArtifacts(rootDir);
+      await writeFile(
+        path.join(rootDir, "grader/output/transcription.md"),
+        [
+          "# Transcription",
+          "",
+          "## Source problem-statement transcription",
+          "",
+          "Compact audit of the source paper prompts actually needed for grading, in source order.",
+          "- **01.1** Figure 1 shows part of the periodic table.",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const validateTool = tools.validate_grader_artifacts;
+      requireFunctionTool(validateTool);
+
+      await expect(
+        validateTool.execute({ requireSourceFidelityAudit: false }),
+      ).resolves.toMatchObject({
+        status: "needs_fix",
+        error: expect.stringMatching(/compact audit/iu),
+      });
+    });
+  });
+
+  it("rejects source transcriptions that flatten diagram choices to labels", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeValidSheetArtifacts(rootDir);
+      await writeFile(
+        path.join(rootDir, "grader/output/transcription.md"),
+        [
+          "# Transcription",
+          "",
+          "## Source problem-statement transcription",
+          "",
+          "- **01.2** Figure 2 represents different models of the atom. Which model represents the plum pudding model? Options: A, B, C, D shown as diagram choices. [1 mark]",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const validateTool = tools.validate_grader_artifacts;
+      requireFunctionTool(validateTool);
+
+      await expect(
+        validateTool.execute({ requireSourceFidelityAudit: false }),
+      ).resolves.toMatchObject({
+        status: "needs_fix",
+        error: expect.stringMatching(/diagram\/visual options/iu),
+      });
+    });
+  });
+
+  it("rejects source transcriptions that point label-only options at a figure", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeValidSheetArtifacts(rootDir);
+      await writeFile(
+        path.join(rootDir, "grader/output/transcription.md"),
+        [
+          "# Transcription",
+          "",
+          "## Source problem-statement transcription",
+          "",
+          "- **01.2** Figure 2 represents different models of the atom. Which model represents the plum pudding model? Options: A, B, C, D shown in Figure 2. [1 mark]",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const validateTool = tools.validate_grader_artifacts;
+      requireFunctionTool(validateTool);
+
+      await expect(
+        validateTool.execute({ requireSourceFidelityAudit: false }),
+      ).resolves.toMatchObject({
+        status: "needs_fix",
+        error: expect.stringMatching(/diagram\/visual options/iu),
+      });
+    });
+  });
+
+  it("rejects source transcriptions that put labels after a figure reference", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const writeWorkspaceFileTool = tools.write_workspace_file;
+      requireFunctionTool(writeWorkspaceFileTool);
+
+      const result = await writeWorkspaceFileTool.execute({
+        filePath: "grader/output/transcription.md",
+        content: [
+          "# Transcription",
+          "",
+          "## Source problem-statement transcription",
+          "",
+          "- **01.2** Figure 2 represents different models of the atom.",
+          "Options shown in Figure 2 with labels **A, B, C, D**.",
+          "",
+        ].join("\n"),
+      });
+
+      expect(result).toMatchObject({
+        status: "written_invalid_source_transcription",
+        filePath: "grader/output/transcription.md",
+      });
+      expect(JSON.stringify(result)).toContain("diagram/visual options");
+    });
+  });
+
+  it("rejects source transcriptions that summarize figure options as ranges", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeValidSheetArtifacts(rootDir);
+      await writeFile(
+        path.join(rootDir, "grader/output/transcription.md"),
+        [
+          "# Transcription",
+          "",
+          "## Source problem-statement transcription",
+          "",
+          "- **01.2** Figure 2 represents different models of the atom. Which model represents the plum pudding model? Options A-D shown in Figure 2. [1 mark]",
+          "- **01.3** Which model resulted from Chadwick’s experimental work? Options shown as A, B, C, D in Figure 2. [1 mark]",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const validateTool = tools.validate_grader_artifacts;
+      requireFunctionTool(validateTool);
+
+      await expect(
+        validateTool.execute({ requireSourceFidelityAudit: false }),
+      ).resolves.toMatchObject({
+        status: "needs_fix",
+        error: expect.stringMatching(/diagram\/visual options/iu),
+      });
+    });
+  });
+
+  it("rejects source transcriptions that summarize formatted figure option labels", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const writeWorkspaceFileTool = tools.write_workspace_file;
+      requireFunctionTool(writeWorkspaceFileTool);
+
+      const result = await writeWorkspaceFileTool.execute({
+        filePath: "grader/output/transcription.md",
+        content: [
+          "# Transcription",
+          "",
+          "## Source problem-statement transcription",
+          "",
+          "- `Figure 2 represents different models of the atom.`",
+          "- `01.2 Which model represents the plum pudding model?` `[1 mark]` `Tick (✓) one box.`",
+          "- Options shown as `A`, `B`, `C`, `D` in Figure 2.",
+          "",
+        ].join("\n"),
+      });
+
+      expect(result).toMatchObject({
+        status: "written_invalid_source_transcription",
+        filePath: "grader/output/transcription.md",
+      });
+      expect(JSON.stringify(result)).toContain("diagram/visual options");
+    });
+  });
+
+  it("rejects source transcriptions that summarize displayed formulas as prose", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const writeWorkspaceFileTool = tools.write_workspace_file;
+      requireFunctionTool(writeWorkspaceFileTool);
+
+      const result = await writeWorkspaceFileTool.execute({
+        filePath: "grader/output/transcription.md",
+        content: [
+          "# Transcription",
+          "",
+          "## Source problem-statement transcription",
+          "",
+          "- `07.3 Propane reacts with oxygen to produce carbon dioxide and water.`",
+          "- `The displayed formula equation for the reaction is:`",
+          "- displayed formula shown for `C3H8 + 5 O2 → 3 CO2 + 4 H2O`",
+          "",
+        ].join("\n"),
+      });
+
+      expect(result).toMatchObject({
+        status: "written_invalid_source_transcription",
+        filePath: "grader/output/transcription.md",
+      });
+      expect(JSON.stringify(result)).toContain("displayed formula");
+    });
+  });
+
+  it("rejects source transcriptions that inflate command words from the source reference", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeValidSheetArtifacts(rootDir);
+      await writeFile(
+        path.join(rootDir, "grader/output/transcription.md"),
+        [
+          "# Transcription",
+          "",
+          "## Source problem-statement transcription",
+          "",
+          "- **03.3** Figure 4 shows the results. Describe and explain the results. [4 marks]",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+      await writeFile(
+        path.join(rootDir, "grader/output/question-paper-reference.md"),
+        [
+          "## Page 11",
+          "",
+          "0 3 . 3 Figure 4 shows the results.",
+          "",
+          "Explain the results.",
+          "[4 marks]",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const validateTool = tools.validate_grader_artifacts;
+      requireFunctionTool(validateTool);
+
+      await expect(
+        validateTool.execute({ requireSourceFidelityAudit: false }),
+      ).resolves.toMatchObject({
+        status: "needs_fix",
+        error: expect.stringMatching(/rewrites source command words/iu),
+      });
+    });
+  });
+
+  it("rejects internally inconsistent grader sheet plans", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeValidSheetArtifacts(rootDir);
+      await writeSourceProblemStatementTranscription(rootDir);
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        [
+          "# Sheet plan",
+          "",
+          "Mode: **handwritten-grading**",
+          "",
+          "Total answer-bearing leaves = `2`",
+          "Total source marks = `3`",
+          "",
+          "### Question 1 — total 2 marks",
+          "- `q1` -> source **01.1** -> `lines` -> 1 mark",
+          "- `q2` -> source **01.2** -> `lines` -> 1 mark",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+      await writeSourceFidelityAudit(rootDir);
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const validateTool = tools.validate_grader_artifacts;
+      requireFunctionTool(validateTool);
+
+      await expect(
+        validateTool.execute({ requireSourceFidelityAudit: false }),
+      ).resolves.toMatchObject({
+        status: "needs_fix",
+        error: expect.stringMatching(/Total source marks is 3/iu),
+      });
+    });
+  });
+
+  it("blocks non-publish work after grader artifacts exist", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeValidSheetArtifacts(rootDir);
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const generateTextTool = tools.generate_text;
+      requireFunctionTool(generateTextTool);
+
+      const result = await generateTextTool.execute({
+        promptPath: "missing/prompt.md",
+        outputPath: "grader/output/late-polish.md",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_publish_required",
+        blockedTool: "generate_text",
+      });
+      expect(JSON.stringify(result)).toContain("validate_grader_artifacts");
+      expect(JSON.stringify(result)).toContain("publish_sheet");
+    });
+  });
+
+  it("writes JSON artifacts with structured escaping", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+      });
+
+      const writeJsonTool = tools.write_json_workspace_file;
+      requireFunctionTool(writeJsonTool);
+
+      await expect(
+        writeJsonTool.execute({
+          filePath: "grader/output/sheet.json",
+          jsonText: JSON.stringify({
+            schemaVersion: 1,
+            sheet: {
+              theory: "Use display math: \\(x + 1\\)",
+            },
+          }),
+        }),
+      ).resolves.toMatchObject({
+        status: "written",
+        filePath: "grader/output/sheet.json",
+      });
+
+      const written = await readFile(
+        path.join(rootDir, "grader/output/sheet.json"),
+        { encoding: "utf8" },
+      );
+      expect(JSON.parse(written)).toMatchObject({
+        sheet: {
+          theory: "Use display math: \\(x + 1\\)",
+        },
+      });
+    });
+  });
+
+  it("repairs common raw LaTeX backslashes in JSON artifacts", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+      });
+
+      const writeJsonTool = tools.write_json_workspace_file;
+      requireFunctionTool(writeJsonTool);
+
+      await expect(
+        writeJsonTool.execute({
+          filePath: "grader/output/sheet.json",
+          jsonText: String.raw`{"schemaVersion":1,"sheet":{"theory":"Use display math: \(\frac{39 \times 93.1}{100}\)"}}`,
+        }),
+      ).resolves.toMatchObject({
+        status: "written",
+        filePath: "grader/output/sheet.json",
+        repairedCommonRawLatexBackslashes: true,
+      });
+
+      const written = await readFile(
+        path.join(rootDir, "grader/output/sheet.json"),
+        { encoding: "utf8" },
+      );
+      expect(JSON.parse(written)).toMatchObject({
+        sheet: {
+          theory: String.raw`Use display math: \(\frac{39 \times 93.1}{100}\)`,
+        },
+      });
+    });
+  });
+
+  it("derives grader run summary from a valid sheet write", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const report = buildSingleImageQuestionReport(
+        "grader/output/assets/q1-figure1.png",
+      );
+      (report as { review: { message: string } }).review.message =
+        "Good apparatus response.";
+
+      const writeJsonTool = tools.write_json_workspace_file;
+      requireFunctionTool(writeJsonTool);
+
+      const result = await writeJsonTool.execute({
+        filePath: "grader/output/sheet.json",
+        jsonText: JSON.stringify(report),
+      });
+
+      expect(result).toMatchObject({
+        status: "written",
+        filePath: "grader/output/sheet.json",
+        derivedRunSummary: {
+          path: "grader/output/run-summary.json",
+        },
+      });
+      expect(JSON.stringify(result)).toContain("validate_grader_artifacts");
+
+      const summary = JSON.parse(
+        await readFile(path.join(rootDir, "grader/output/run-summary.json"), {
+          encoding: "utf8",
+        }),
+      ) as {
+        totals: { awardedMarks: number; maxMarks: number };
+        sheet: { filePath: string };
+        presentation: { summaryMarkdown: string };
+      };
+      expect(summary.totals).toEqual({ awardedMarks: 1, maxMarks: 1 });
+      expect(summary.sheet.filePath).toBe("grader/output/sheet.json");
+      expect(summary.presentation.summaryMarkdown).toBe(
+        "Good apparatus response.",
+      );
+    });
+  });
+
+  it("flags figure/table placement mistakes as soon as sheet JSON is written", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const writeJsonTool = tools.write_json_workspace_file;
+      requireFunctionTool(writeJsonTool);
+
+      const result = await writeJsonTool.execute({
+        filePath: "grader/output/sheet.json",
+        jsonText: JSON.stringify({
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Chemistry",
+            level: "GCSE",
+            title: "Atomic structure",
+            subtitle: "Uploaded paper",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q1",
+                label: "Question 1",
+                theory:
+                  "Figure 1 and Figure 2 are used in this question.\n\n[![Figure 1](grader/output/assets/q01-figure1.png)](grader/output/assets/q01-figure1.png)",
+                questions: [
+                  {
+                    id: "q01_1",
+                    type: "lines",
+                    displayNumber: "01.1",
+                    badgeLabel: "1",
+                    marks: 1,
+                    prompt: "Which group had not been discovered?",
+                    lines: 1,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q01_1: "Noble gases",
+          },
+          review: {
+            score: {
+              got: 1,
+              total: 1,
+            },
+            label: "1/1",
+            message: "Correct.",
+            note: "",
+            questions: {
+              q01_1: {
+                status: "correct",
+                score: {
+                  got: 1,
+                  total: 1,
+                },
+                note: "",
+              },
+            },
+          },
+        }),
+      });
+
+      expect(result).toMatchObject({
+        status: "written_needs_publish_repair",
+        filePath: "grader/output/sheet.json",
+      });
+      expect(result).toMatchObject({
+        issues: expect.arrayContaining([
+          expect.stringContaining('section "Q1" theory'),
+        ]),
+      });
+      expect(JSON.stringify(result)).toContain("exact question or group prompt");
+    });
+  });
+
+  it("flags missing visible source figures as soon as sheet JSON is written", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const writeJsonTool = tools.write_json_workspace_file;
+      requireFunctionTool(writeJsonTool);
+
+      const result = await writeJsonTool.execute({
+        filePath: "grader/output/sheet.json",
+        jsonText: JSON.stringify({
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Chemistry",
+            level: "GCSE",
+            title: "Atomic structure",
+            subtitle: "Uploaded paper",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q1",
+                label: "Question 1",
+                questions: [
+                  {
+                    id: "q01_1",
+                    type: "lines",
+                    displayNumber: "01.1",
+                    badgeLabel: "1",
+                    marks: 1,
+                    prompt:
+                      "Figure 1 shows part of Mendeleev's version of the periodic table.\n\nWhich group had not been discovered when this version was published?",
+                    lines: 1,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q01_1: "Noble gases",
+          },
+          review: {
+            score: {
+              got: 1,
+              total: 1,
+            },
+            label: "1/1",
+            message: "Correct.",
+            note: "",
+            questions: {
+              q01_1: {
+                status: "correct",
+                score: {
+                  got: 1,
+                  total: 1,
+                },
+                note: "",
+              },
+            },
+          },
+        }),
+      });
+
+      expect(result).toMatchObject({
+        status: "written_needs_publish_repair",
+        filePath: "grader/output/sheet.json",
+      });
+      expect(result).toMatchObject({
+        issues: expect.arrayContaining([
+          expect.stringContaining("does not link a visible worksheet crop"),
+        ]),
+      });
+      expect(JSON.stringify(result)).toContain("grader/output/assets");
+    });
+  });
+
+  it("rejects empty grader JSON artifacts", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+      });
+
+      const writeJsonTool = tools.write_json_workspace_file;
+      requireFunctionTool(writeJsonTool);
+
+      await expect(
+        writeJsonTool.execute({
+          filePath: "grader/output/sheet.json",
+          jsonText: "{}",
+        }),
+      ).resolves.toMatchObject({
+        status: "invalid_json",
+        filePath: "grader/output/sheet.json",
+      });
+    });
+  });
+
+  it("blocks crop validation before a long handwritten sheet plan exists", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeLongHandwrittenTranscription(rootDir);
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const validateCropTool = tools.validate_crop_with_fresh_agent;
+      requireFunctionTool(validateCropTool);
+
+      const result = await validateCropTool.execute({
+        cropPath: "grader/output/assets/figure-1.png",
+        sourceLabel: "Figure 1",
+        questionContext: "Use Figure 1.",
+        expectedContent: "the source figure",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_sheet_plan_required",
+        blockedTool: "validate_crop_with_fresh_agent",
+      });
+      expect(JSON.stringify(result)).toContain("sheet-plan.md");
+      expect(JSON.stringify(result)).toContain("score_answers_with_fresh_agent");
+    });
+  });
+
+  it("blocks bounded scoring before a long handwritten sheet plan exists", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeLongHandwrittenTranscription(rootDir);
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const scoreAnswersTool = tools.score_answers_with_fresh_agent;
+      requireFunctionTool(scoreAnswersTool);
+
+      const result = await scoreAnswersTool.execute({
+        scope: "Question 1",
+        worksheetIds: ["q1"],
+        sourceMarkdown: "Question 1 source.",
+        markSchemeMarkdown: "Question 1 mark scheme.",
+        studentAnswersMarkdown: "Question 1 student answers.",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_sheet_plan_required",
+        blockedTool: "score_answers_with_fresh_agent",
+      });
+      expect(JSON.stringify(result)).toContain("sheet-plan.md");
+    });
+  });
+
+  it("blocks bounded scoring when the source transcription is missing", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        [
+          "# Sheet plan",
+          "",
+          "Mode: **handwritten-grading**",
+          "",
+          "Total answer-bearing leaves included: **13**",
+          "Total source marks: **13**",
+          "",
+          "### Question 1 — total 13 marks",
+          ...Array.from({ length: 13 }, (_, index) => {
+            const label = `01.${(index + 1).toString()}`;
+            return `- \`q${index + 1}\` -> source **${label}** -> \`lines\` -> 1 mark`;
+          }),
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const scoreAnswersTool = tools.score_answers_with_fresh_agent;
+      requireFunctionTool(scoreAnswersTool);
+
+      const result = await scoreAnswersTool.execute({
+        scope: "Question 1",
+        worksheetIds: ["q1"],
+        sourceMarkdown: "Question 1 source.",
+        markSchemeMarkdown: "Question 1 mark scheme.",
+        studentAnswersMarkdown: "Question 1 student answers.",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_source_transcription_required",
+        blockedTool: "score_answers_with_fresh_agent",
+      });
+      expect(JSON.stringify(result)).toContain("transcription.md");
+    });
+  });
+
+  it("allows reading raw OCR before the source transcription is written", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/transcription-raw.md"),
+        [
+          "# Raw student work transcription",
+          "",
+          "- Mode: handwritten-grading",
+          ...Array.from({ length: 13 }, (_, index) => {
+            const label = `01.${(index + 1).toString()}`;
+            return `- **${label}** Student answer ${label}.`;
+          }),
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const readWorkspaceFileTool = tools.read_workspace_file;
+      requireFunctionTool(readWorkspaceFileTool);
+
+      const result = await readWorkspaceFileTool.execute({
+        filePath: "grader/output/transcription-raw.md",
+      });
+
+      expect(String(result)).toContain("Student answer 01.1");
+    });
+  });
+
+  it("blocks crop validation when only the long student extract exists", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/student-extract.md"),
+        [
+          "Start Time: 14:49",
+          "Combined Science Trilogy Higher 2021",
+          ...Array.from({ length: 13 }, (_, index) => {
+            const label = `1.${index + 1}`;
+            return `${label} Student answer ${index + 1}`;
+          }),
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const validateCropTool = tools.validate_crop_with_fresh_agent;
+      requireFunctionTool(validateCropTool);
+
+      const result = await validateCropTool.execute({
+        cropPath: "grader/output/assets/figure-1.png",
+        sourceLabel: "Figure 1",
+        questionContext: "Use Figure 1.",
+        expectedContent: "the source figure",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_sheet_plan_required",
+        blockedTool: "validate_crop_with_fresh_agent",
+      });
+    });
+  });
+
+  it("blocks crop validation when only the long raw student extract exists", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/raw-student-extract.md"),
+        [
+          "Start Time: 14:49",
+          "Combined Science Trilogy Higher 2021",
+          ...Array.from({ length: 13 }, (_, index) => {
+            const label = `1.${index + 1}`;
+            return `${label} Student answer ${index + 1}`;
+          }),
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const validateCropTool = tools.validate_crop_with_fresh_agent;
+      requireFunctionTool(validateCropTool);
+
+      const result = await validateCropTool.execute({
+        cropPath: "grader/output/assets/figure-1.png",
+        sourceLabel: "Figure 1",
+        questionContext: "Use Figure 1.",
+        expectedContent: "the source figure",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_sheet_plan_required",
+        blockedTool: "validate_crop_with_fresh_agent",
+      });
+    });
+  });
+
+  it("blocks crop validation when extract_text wrote a long raw transcript", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/transcription-raw.md"),
+        [
+          "Start Time: 14:44 End Time: 15:44",
+          "Combined Science Trilogy Higher 2021",
+          ...Array.from({ length: 13 }, (_, index) => {
+            const label = `1.${index + 1}`;
+            return `${label} Student answer ${index + 1}`;
+          }),
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const validateCropTool = tools.validate_crop_with_fresh_agent;
+      requireFunctionTool(validateCropTool);
+
+      const result = await validateCropTool.execute({
+        cropPath: "grader/output/assets/figure-1.png",
+        sourceLabel: "Figure 1",
+        questionContext: "Use Figure 1.",
+        expectedContent: "the source figure",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_sheet_plan_required",
+        blockedTool: "validate_crop_with_fresh_agent",
+      });
+    });
+  });
+
+  it("blocks crop validation when the long raw student transcript exists", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/student-transcription-raw.md"),
+        [
+          "Start Time: 14:44 End Time: 15:44",
+          "Combined Science Trilogy Higher 2021",
+          ...Array.from({ length: 13 }, (_, index) => {
+            const label = `1.${index + 1}`;
+            return `${label} Student answer ${index + 1}`;
+          }),
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const validateCropTool = tools.validate_crop_with_fresh_agent;
+      requireFunctionTool(validateCropTool);
+
+      const result = await validateCropTool.execute({
+        cropPath: "grader/output/assets/figure-1.png",
+        sourceLabel: "Figure 1",
+        questionContext: "Use Figure 1.",
+        expectedContent: "the source figure",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_sheet_plan_required",
+        blockedTool: "validate_crop_with_fresh_agent",
+      });
+    });
+  });
+
+  it("blocks long handwritten artifact writes before bounded scoring", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeLongHandwrittenTranscription(rootDir);
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        "# Sheet plan\n\n- scoring batch: Question 1\n",
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const writeWorkspaceFileTool = tools.write_workspace_file;
+      requireFunctionTool(writeWorkspaceFileTool);
+
+      const result = await writeWorkspaceFileTool.execute({
+        filePath: "grader/output/crop-validation.md",
+        content: "# Crop validation\n",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_bounded_scoring_required",
+        blockedTool: "write_workspace_file",
+      });
+      expect(JSON.stringify(result)).toContain("score_answers_with_fresh_agent");
+    });
+  });
+
+  it("keeps source-reference sheet-plan omissions blocking after the write result", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeLongHandwrittenTranscription(rootDir);
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/qp-reference.md"),
+        [
+          "# Question paper reference",
+          "",
+          "0 1 . 13 Use Table 4 to answer the question.",
+          "",
+          "Table 4",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        [
+          "# Sheet plan",
+          "",
+          "Mode: `handwritten-grading`",
+          "",
+          "Total answer-bearing leaves included: 13",
+          "Total source marks: 13",
+          "",
+          "## Question 1 (13 marks)",
+          ...Array.from({ length: 13 }, (_, index) => {
+            const label = `01.${(index + 1).toString()}`;
+            return `- \`q${index + 1}\` -> source **${label}** -> \`lines\` -> 1 mark`;
+          }),
+          "",
+          "Batch Question 1 - 13 marks",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const grepTool = tools.grep_workspace_files;
+      requireFunctionTool(grepTool);
+
+      const result = await grepTool.execute({
+        pattern: "01.13",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_sheet_plan_invalid",
+        blockedTool: "grep_workspace_files",
+      });
+      expect(JSON.stringify(result)).toContain("Table 4");
+    });
+  });
+
+  it("rejects compact source transcription as soon as it is written", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const writeWorkspaceFileTool = tools.write_workspace_file;
+      requireFunctionTool(writeWorkspaceFileTool);
+
+      const result = await writeWorkspaceFileTool.execute({
+        filePath: "grader/output/transcription.md",
+        content: [
+          "# Transcription",
+          "",
+          "## Upload inventory and mode",
+          "- Mode: handwritten-grading",
+          "",
+          "## Student answer transcription",
+          "- **01.1** Student answer.",
+          "",
+          "## Source problem-statement transcription",
+          "Compact source audit for the answered items only.",
+          "- **01.1** Options: A, B, C, D shown as diagram choices. [1 mark]",
+          "- Figure 1 is planned as crop `grader/output/assets/q01-figure1.png`.",
+          "",
+        ].join("\n"),
+      });
+
+      expect(result).toMatchObject({
+        status: "written_invalid_source_transcription",
+        filePath: "grader/output/transcription.md",
+      });
+      expect(JSON.stringify(result)).toContain("compact audit");
+      expect(JSON.stringify(result)).toContain("diagram/visual options");
+      expect(JSON.stringify(result)).toContain("workflow or source-summary");
+    });
+  });
+
+  it("rejects visual-omitting sheet plans as soon as they are written", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeLongHandwrittenTranscription(rootDir);
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const writeWorkspaceFileTool = tools.write_workspace_file;
+      requireFunctionTool(writeWorkspaceFileTool);
+
+      const result = await writeWorkspaceFileTool.execute({
+        filePath: "grader/output/sheet-plan.md",
+        content: [
+          "# Sheet plan",
+          "",
+          "Mode: **handwritten-grading**",
+          "",
+          "Total answer-bearing leaves included: **13**",
+          "Total source marks: **13**",
+          "",
+          "### Question 1 — total 13 marks",
+          "- `q1` -> source **01.1 Figure 1** -> `lines` -> 1 mark",
+          ...Array.from({ length: 12 }, (_, index) => {
+            const label = `01.${(index + 2).toString()}`;
+            return `- \`q${index + 2}\` -> source **${label}** -> \`lines\` -> 1 mark`;
+          }),
+          "",
+          "Figure 1 is named but no crop is needed because marking is possible without reproducing the figure.",
+          "",
+        ].join("\n"),
+      });
+
+      expect(result).toMatchObject({
+        status: "written_invalid_sheet_plan",
+        filePath: "grader/output/sheet-plan.md",
+      });
+      expect(JSON.stringify(result)).toContain("plans to omit");
+    });
+  });
+
+  it("allows sheet-plan no-crop notes for questions that do not name a visual", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeSourceProblemStatementTranscription(
+        rootDir,
+        [
+          "# Transcription",
+          "",
+          "## Upload inventory and mode",
+          "- Mode: handwritten-grading",
+          "",
+          "## Student answer transcription",
+          "- **01.1** Student answer.",
+          "",
+          "## Source problem-statement transcription",
+          ...Array.from({ length: 13 }, (_, index) => {
+            const label = `01.${(index + 1).toString()}`;
+            const prompt =
+              index === 0
+                ? "Figure 1 shows the source diagram. State the answer."
+                : `Source prompt ${label}.`;
+            return `- **${label}** ${prompt} [1 mark]`;
+          }),
+          "",
+        ].join("\n"),
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const writeWorkspaceFileTool = tools.write_workspace_file;
+      requireFunctionTool(writeWorkspaceFileTool);
+
+      await expect(
+        writeWorkspaceFileTool.execute({
+          filePath: "grader/output/sheet-plan.md",
+          content: [
+            "# Sheet plan",
+            "",
+            "Mode: **handwritten-grading**",
+            "",
+            "Total answer-bearing leaves included: **13**",
+            "Total source marks: **13**",
+            "",
+            "### Question 1 — total 13 marks",
+            ...Array.from({ length: 13 }, (_, index) => {
+              const label = `01.${(index + 1).toString()}`;
+              const visualSuffix = index === 0 ? " Figure 1" : "";
+              return `- \`q${index + 1}\` -> source **${label}${visualSuffix}** -> \`lines\` -> 1 mark`;
+            }),
+            "",
+            "## Visual/table handling decisions",
+            "- Figure 1 -> `grader/output/assets/q1-figure-1.png`.",
+            "- Question 2 has no named source figure or table, so no crop is required.",
+            "",
+          ].join("\n"),
+        }),
+      ).resolves.toMatchObject({
+        status: "written",
+        filePath: "grader/output/sheet-plan.md",
+      });
+    });
+  });
+
+  it("rejects sheet plans that omit source-referenced figures before scoring", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeLongHandwrittenTranscription(rootDir);
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/qp-reference.md"),
+        [
+          "## Page 2",
+          "",
+          "0 1 . 1 Figure 1 shows part of Mendeleev's version of the periodic table.",
+          "",
+          "Figure 1",
+          "",
+          "Which group of elements had not been discovered when Mendeleev's version of the periodic table was published?",
+          "[1 mark]",
+          "",
+          "0 1 . 2 Figure 2 represents different models of the atom.",
+          "",
+          "Figure 2",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const writeWorkspaceFileTool = tools.write_workspace_file;
+      requireFunctionTool(writeWorkspaceFileTool);
+
+      const result = await writeWorkspaceFileTool.execute({
+        filePath: "grader/output/sheet-plan.md",
+        content: [
+          "# Sheet plan",
+          "",
+          "Mode: **handwritten-grading**",
+          "",
+          "Total answer-bearing leaves included: **13**",
+          "Total source marks: **13**",
+          "",
+          "### Question 1 — total 13 marks",
+          "- `q1` -> source **01.1** -> `lines` -> 1 mark",
+          "- `q2` -> source **01.2** -> `mcq` -> 1 mark",
+          ...Array.from({ length: 11 }, (_, index) => {
+            const label = `01.${(index + 3).toString()}`;
+            return `- \`q${index + 3}\` -> source **${label}** -> \`lines\` -> 1 mark`;
+          }),
+          "",
+          "Visual handling:",
+          "- Figure 2 -> `grader/output/assets/q1-figure-2.png`.",
+          "",
+        ].join("\n"),
+      });
+
+      expect(result).toMatchObject({
+        status: "written_invalid_sheet_plan",
+        filePath: "grader/output/sheet-plan.md",
+      });
+      expect(JSON.stringify(result)).toContain("omits Figure 1");
+    });
+  });
+
+  it("blocks bounded scoring when the long handwritten sheet plan has mark drift", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeLongHandwrittenTranscription(rootDir);
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        [
+          "# Sheet plan",
+          "",
+          "Mode: **handwritten-grading**",
+          "",
+          "Total answer-bearing leaves = `2`",
+          "Total source marks = `3`",
+          "",
+          "### Question 1 — total 2 marks",
+          "- `q1` -> source **01.1** -> `lines` -> 1 mark",
+          "- `q2` -> source **01.2** -> `lines` -> 1 mark",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const scoreAnswersTool = tools.score_answers_with_fresh_agent;
+      requireFunctionTool(scoreAnswersTool);
+
+      const result = await scoreAnswersTool.execute({
+        scope: "Question 1",
+        worksheetIds: ["q1", "q2"],
+        sourceMarkdown: "Question 1 source.",
+        markSchemeMarkdown: "Question 1 mark scheme.",
+        studentAnswersMarkdown: "Question 1 student answers.",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_sheet_plan_invalid",
+        blockedTool: "score_answers_with_fresh_agent",
+      });
+      expect(JSON.stringify(result)).toContain("Total source marks is 3");
+    });
+  });
+
+  it("blocks bounded scoring when the long handwritten sheet plan records an unresolved self-check failure", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeLongHandwrittenTranscription(rootDir);
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        [
+          "# Sheet plan",
+          "",
+          "Mode: **handwritten-grading**",
+          "",
+          "### Question 1 (2 marks)",
+          "- `q1` — 01.1 — marks 1 — type `lines`",
+          "- `q2` — 01.2 — marks 1 — type `lines`",
+          "",
+          "## Planned scoring batches",
+          "1. Batch A — Questions 01.1 to 01.2 — worksheet ids: `q1` to `q2` — 1 mark",
+          "",
+          "## Answer-bearing leaf count self-check",
+          "- Total answer-bearing leaves listed: 1",
+          "",
+          "## Marks self-check",
+          "- Total source marks = 2? -> incorrect initial mental sum, rechecked below",
+          "",
+          "## Correction to self-check",
+          "This plan therefore records a self-check failure that must be corrected before publication.",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const scoreAnswersTool = tools.score_answers_with_fresh_agent;
+      requireFunctionTool(scoreAnswersTool);
+
+      const result = await scoreAnswersTool.execute({
+        scope: "Question 1",
+        worksheetIds: ["q1", "q2"],
+        sourceMarkdown: "Question 1 source.",
+        markSchemeMarkdown: "Question 1 mark scheme.",
+        studentAnswersMarkdown: "Question 1 student answers.",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_sheet_plan_invalid",
+        blockedTool: "score_answers_with_fresh_agent",
+      });
+      expect(JSON.stringify(result)).toContain("self-check failure");
+    });
+  });
+
+  it("blocks bounded scoring when the long handwritten sheet plan omits named visual crops", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/transcription.md"),
+        [
+          "# Transcription",
+          "",
+          "## Upload inventory and mode",
+          "- Mode: handwritten-grading",
+          "",
+          "## Student answer transcription",
+          "- **01.1** Student answer.",
+          "",
+          "## Source problem-statement transcription",
+          ...Array.from({ length: 13 }, (_, index) => {
+            const label = `01.${(index + 1).toString()}`;
+            const prompt =
+              index === 0
+                ? "Figure 1 shows the source diagram. State the answer."
+                : `Source prompt ${label}.`;
+            return `- **${label}** ${prompt} [1 mark]`;
+          }),
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        [
+          "# Sheet plan",
+          "",
+          "Mode: **handwritten-grading**",
+          "",
+          "Total answer-bearing leaves included: **13**",
+          "Total source marks: **13**",
+          "",
+          "### Question 1 — total 13 marks",
+          ...Array.from({ length: 13 }, (_, index) => {
+            const label = `01.${(index + 1).toString()}`;
+            return `- \`q${index + 1}\` -> source **${label}** -> \`lines\` -> 1 mark`;
+          }),
+          "",
+          "## Visual/table handling decisions",
+          "- 01.1 refers to Figure 1, but no crop is planned because grading is possible without reproducing the diagram.",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const scoreAnswersTool = tools.score_answers_with_fresh_agent;
+      requireFunctionTool(scoreAnswersTool);
+
+      const result = await scoreAnswersTool.execute({
+        scope: "Question 1",
+        worksheetIds: ["q1"],
+        sourceMarkdown: "Question 1 source.",
+        markSchemeMarkdown: "Question 1 mark scheme.",
+        studentAnswersMarkdown: "Question 1 student answers.",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_sheet_plan_invalid",
+        blockedTool: "score_answers_with_fresh_agent",
+      });
+      expect(JSON.stringify(result)).toContain("plans to omit");
+    });
+  });
+
+  it("blocks bounded scoring when the source transcription is only a compact audit", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/transcription.md"),
+        [
+          "# Transcription",
+          "",
+          "## Upload inventory and mode",
+          "- Mode: handwritten-grading",
+          "",
+          "## Student answer transcription",
+          "- **01.1** Student answer.",
+          "",
+          "## Source problem-statement transcription",
+          "Compact audit of source paper prompts actually needed for grading.",
+          ...Array.from({ length: 13 }, (_, index) => {
+            const label = `01.${(index + 1).toString()}`;
+            return `- **${label}** Source prompt ${label}. [1 mark]`;
+          }),
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        [
+          "# Sheet plan",
+          "",
+          "Mode: **handwritten-grading**",
+          "",
+          "Total answer-bearing leaves included: **13**",
+          "Total source marks: **13**",
+          "",
+          "### Question 1 — total 13 marks",
+          ...Array.from({ length: 13 }, (_, index) => {
+            const label = `01.${(index + 1).toString()}`;
+            return `- \`q${index + 1}\` -> source **${label}** -> \`lines\` -> 1 mark`;
+          }),
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const scoreAnswersTool = tools.score_answers_with_fresh_agent;
+      requireFunctionTool(scoreAnswersTool);
+
+      const result = await scoreAnswersTool.execute({
+        scope: "Question 1",
+        worksheetIds: ["q1"],
+        sourceMarkdown: "Question 1 source.",
+        markSchemeMarkdown: "Question 1 mark scheme.",
+        studentAnswersMarkdown: "Question 1 student answers.",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_source_transcription_invalid",
+        blockedTool: "score_answers_with_fresh_agent",
+      });
+      expect(JSON.stringify(result)).toContain("compact audit");
+    });
+  });
+
+  it("blocks bounded scoring when source transcription keeps only visibly answered items", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/transcription.md"),
+        [
+          "# Transcription",
+          "",
+          "## Upload inventory and mode",
+          "- Mode: handwritten-grading",
+          "",
+          "## Student answer transcription",
+          "- **01.1** Student answer.",
+          "",
+          "## Source problem-statement transcription",
+          "Only the source items visibly answered in the student submission are listed below, in source order.",
+          ...Array.from({ length: 13 }, (_, index) => {
+            const label = `01.${(index + 1).toString()}`;
+            return `- **${label}** Source prompt ${label}. [1 mark]`;
+          }),
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        [
+          "# Sheet plan",
+          "",
+          "Mode: **handwritten-grading**",
+          "",
+          "Total answer-bearing leaves included: **13**",
+          "Total source marks: **13**",
+          "",
+          "### Question 1 — total 13 marks",
+          ...Array.from({ length: 13 }, (_, index) => {
+            const label = `01.${(index + 1).toString()}`;
+            return `- \`q${index + 1}\` -> source **${label}** -> \`lines\` -> 1 mark`;
+          }),
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const scoreAnswersTool = tools.score_answers_with_fresh_agent;
+      requireFunctionTool(scoreAnswersTool);
+
+      const result = await scoreAnswersTool.execute({
+        scope: "Question 1",
+        worksheetIds: ["q1"],
+        sourceMarkdown: "Question 1 source.",
+        markSchemeMarkdown: "Question 1 mark scheme.",
+        studentAnswersMarkdown: "Question 1 student answers.",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_source_transcription_invalid",
+        blockedTool: "score_answers_with_fresh_agent",
+      });
+      expect(JSON.stringify(result)).toContain("visible-answered-only");
+    });
+  });
+
+  it("blocks bounded scoring when the supplied source excerpt summarizes visual options", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeLongHandwrittenTranscription(rootDir);
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        "# Sheet plan\n\n- scoring batch: Question 1\n",
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const scoreAnswersTool = tools.score_answers_with_fresh_agent;
+      requireFunctionTool(scoreAnswersTool);
+
+      const result = await scoreAnswersTool.execute({
+        scope: "Question 1",
+        worksheetIds: ["q1"],
+        sourceMarkdown:
+          "Question 1.3: Which model represents the plum pudding model? Options A B C D shown in Figure 2.",
+        markSchemeMarkdown: "Question 1 mark scheme.",
+        studentAnswersMarkdown: "Question 1 student answers.",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_source_excerpt_invalid",
+        blockedTool: "score_answers_with_fresh_agent",
+      });
+      expect(JSON.stringify(result)).toContain("diagram/visual options");
+    });
+  });
+
+  it("blocks bounded scoring when the supplied source excerpt contains source-paper bridge wording", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeLongHandwrittenTranscription(rootDir);
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        "# Sheet plan\n\n- scoring batch: Question 1\n",
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const scoreAnswersTool = tools.score_answers_with_fresh_agent;
+      requireFunctionTool(scoreAnswersTool);
+
+      const result = await scoreAnswersTool.execute({
+        scope: "Question 1",
+        worksheetIds: ["q1"],
+        sourceMarkdown:
+          "Question 1.3: Figure 2 is shown in the source paper.",
+        markSchemeMarkdown: "Question 1 mark scheme.",
+        studentAnswersMarkdown: "Question 1 student answers.",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_source_excerpt_invalid",
+        blockedTool: "score_answers_with_fresh_agent",
+      });
+      expect(JSON.stringify(result)).toContain("source paper");
+    });
+  });
+
+  it("detects real handwritten transcripts with mode only in the sheet plan", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/transcription.md"),
+        [
+          "# Transcription",
+          "",
+          "## Upload inventory and roles",
+          "- `grader/uploads/image.jpg` — student handwritten answers, notebook page 1",
+          "",
+          "## Student work transcription",
+          "- **1.1** Student answer.",
+          "",
+          "## Source problem-statement transcription",
+          ...Array.from({ length: 13 }, (_, index) => {
+            const label = `0${Math.floor(index / 4) + 1}.${(index % 4) + 1}`;
+            return `- **${label}** Source prompt ${label}. [1]`;
+          }),
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        "# Sheet plan\n\nMode: `handwritten-grading`\n\nOverall expected total: 70 marks\n",
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const validateCropTool = tools.validate_crop_with_fresh_agent;
+      requireFunctionTool(validateCropTool);
+
+      const result = await validateCropTool.execute({
+        cropPath: "grader/output/assets/figure-1.png",
+        sourceLabel: "Figure 1",
+        questionContext: "Use Figure 1.",
+        expectedContent: "the source figure",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_bounded_scoring_required",
+        blockedTool: "validate_crop_with_fresh_agent",
+      });
+    });
+  });
+
+  it("blocks crop-validation immediately after bounded scoring until JSON exists", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeLongHandwrittenTranscription(rootDir);
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        "# Sheet plan\n\n- scoring batch: Question 1\n",
+        { encoding: "utf8" },
+      );
+      await writeScoreAnswersResult(rootDir);
+      await writeScoreAnswersAgentLog(rootDir);
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const writeWorkspaceFileTool = tools.write_workspace_file;
+      requireFunctionTool(writeWorkspaceFileTool);
+
+      const result = await writeWorkspaceFileTool.execute({
+        filePath: "grader/output/crop-validation.md",
+        content: "# Crop validation\n",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_artifact_assembly_required",
+        blockedTool: "write_workspace_file",
+      });
+      expect(JSON.stringify(result)).toContain("sheet.json");
+      expect(JSON.stringify(result)).toContain("teacher-review");
+
+      const writeJsonTool = tools.write_json_workspace_file;
+      requireFunctionTool(writeJsonTool);
+
+      await expect(
+        writeJsonTool.execute({
+          filePath: "grader/output/sheet.json",
+          jsonText: '{"schemaVersion":1,"sheet":{"id":"s","subject":"Science","level":"GCSE","title":"T","subtitle":"S","color":"#000000","accent":"#000000","light":"#ffffff","border":"#cccccc","sections":[]},"answers":{},"review":{"score":{"got":0,"total":0},"label":"0/0","message":"Ready.","note":"","questions":{}}}',
+        }),
+      ).resolves.toMatchObject({
+        status: "written",
+        filePath: "grader/output/sheet.json",
+      });
+    });
+  });
+
+  it("allows focused artifact reads after bounded scoring while JSON is pending", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeLongHandwrittenTranscription(rootDir);
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        "# Sheet plan\n\n- scoring batch: Question 1\n",
+        { encoding: "utf8" },
+      );
+      await writeScoreAnswersResult(rootDir);
+      await writeScoreAnswersAgentLog(rootDir);
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const readWorkspaceFileTool = tools.read_workspace_file;
+      requireFunctionTool(readWorkspaceFileTool);
+
+      const sheetPlanResult = await readWorkspaceFileTool.execute({
+        filePath: "grader/output/sheet-plan.md",
+      });
+      expect(sheetPlanResult).toContain("# Sheet plan");
+
+      const scoringResult = await readWorkspaceFileTool.execute({
+        filePath: "grader/output/scoring/Question-1.json",
+      });
+      expect(scoringResult).toContain('"scope":"Question 1"');
+
+      const listWorkspaceDirTool = tools.list_workspace_dir;
+      requireFunctionTool(listWorkspaceDirTool);
+
+      await expect(
+        listWorkspaceDirTool.execute({ directoryPath: "grader/output" }),
+      ).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ path: "grader/output/sheet-plan.md" }),
+        ]),
+      );
+
+      const grepWorkspaceFilesTool = tools.grep_workspace_files;
+      requireFunctionTool(grepWorkspaceFilesTool);
+
+      await expect(
+        grepWorkspaceFilesTool.execute({ pattern: "Question" }),
+      ).resolves.toMatchObject({
+        status: "blocked_artifact_assembly_required",
+        blockedTool: "grep_workspace_files",
+      });
+    });
+  });
+
+  it("allows additional scoring-helper calls while assembly is pending", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeLongHandwrittenTranscription(rootDir);
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        "# Sheet plan\n\n- scoring batch: Question 1\n- scoring batch: Question 2\n",
+        { encoding: "utf8" },
+      );
+      await writeScoreAnswersResult(rootDir);
+      await writeScoreAnswersAgentLog(rootDir);
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const scoreAnswersTool = tools.score_answers_with_fresh_agent;
+      requireFunctionTool(scoreAnswersTool);
+
+      await expect(
+        scoreAnswersTool.execute({
+          scope: "Question 2",
+          worksheetIds: ["q02_1"],
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  it("blocks crop validation after bounded scoring until JSON exists", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeLongHandwrittenTranscription(rootDir);
+      await mkdir(path.join(rootDir, "grader/output/assets"), {
+        recursive: true,
+      });
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        "# Sheet plan\n\n- scoring batch: Question 1\n",
+        { encoding: "utf8" },
+      );
+      await writeScoreAnswersResult(rootDir);
+      await writeTestPng({
+        filePath: path.join(rootDir, "grader/output/assets/figure-1.png"),
+        width: 20,
+        height: 20,
+      });
+      await writeScoreAnswersAgentLog(rootDir);
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const validateCropTool = tools.validate_crop_with_fresh_agent;
+      requireFunctionTool(validateCropTool);
+
+      const result = await validateCropTool.execute({
+        cropPath: "grader/output/assets/figure-1.png",
+        sourceLabel: "Figure 1",
+        questionContext: "Use Figure 1.",
+        expectedContent: "the source figure",
+        duplicatedTextToExclude: "Figure 1 caption",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_artifact_assembly_required",
+        blockedTool: "validate_crop_with_fresh_agent",
+      });
+      expect(JSON.stringify(result)).toContain("validate_grader_artifacts");
+    });
+  });
+
+  it("allows bounded source-visual prep after scoring before JSON exists", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeLongHandwrittenTranscription(rootDir);
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        "# Sheet plan\n\n- scoring batch: Question 1\n",
+        { encoding: "utf8" },
+      );
+      await writeScoreAnswersResult(rootDir);
+      await writeScoreAnswersAgentLog(rootDir);
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const extractImagesTool = tools.extract_pdf_images;
+      requireFunctionTool(extractImagesTool);
+      await expect(
+        extractImagesTool.execute({
+          pdfPath: "grader/uploads/missing.pdf",
+          outputDir: "grader/output/pdf-images",
+          extractFiles: true,
+        }),
+      ).rejects.toThrow();
+
+      const renderPagesTool = tools.pdf_to_images;
+      requireFunctionTool(renderPagesTool);
+      await expect(
+        renderPagesTool.execute({
+          pdfPath: "grader/uploads/missing.pdf",
+          outputDir: "grader/output/rendered-pages",
+          pageNumbers: [2, 3, 10],
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  it("still blocks broad PDF rendering after scoring before JSON exists", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeLongHandwrittenTranscription(rootDir);
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        "# Sheet plan\n\n- scoring batch: Question 1\n",
+        { encoding: "utf8" },
+      );
+      await writeScoreAnswersResult(rootDir);
+      await writeScoreAnswersAgentLog(rootDir);
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const renderPagesTool = tools.pdf_to_images;
+      requireFunctionTool(renderPagesTool);
+      const result = await renderPagesTool.execute({
+        pdfPath: "grader/uploads/missing.pdf",
+        outputDir: "grader/output/rendered-pages",
+        pageNumbers: Array.from({ length: 13 }, (_, index) => index + 1),
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_artifact_assembly_required",
+        blockedTool: "pdf_to_images",
+      });
+    });
+  });
+
+  it("blocks crop-validation notes after scoring and crop review until JSON exists", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeLongHandwrittenTranscription(rootDir);
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        "# Sheet plan\n\n- scoring batch: Question 1\n",
+        { encoding: "utf8" },
+      );
+      await writeScoreAnswersResult(rootDir);
+      await writeScoreAnswersAgentLog(rootDir);
+      await appendFile(
+        path.join(rootDir, "logs/agent/agent.log"),
+        "tool=validate_crop_with_fresh_agent crop review\n",
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const writeWorkspaceFileTool = tools.write_workspace_file;
+      requireFunctionTool(writeWorkspaceFileTool);
+
+      const result = await writeWorkspaceFileTool.execute({
+        filePath: "grader/output/crop-validation.md",
+        content: "# Crop validation\n",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_artifact_assembly_required",
+        blockedTool: "write_workspace_file",
+      });
+      expect(JSON.stringify(result)).toContain("sheet.json");
+      expect(JSON.stringify(result)).toContain("teacher-review");
+    });
+  });
+
+  it("blocks more polishing after bounded scoring and crop validation finish", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeLongHandwrittenTranscription(rootDir);
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        "# Sheet plan\n\n- scoring batch: Question 1\n",
+        { encoding: "utf8" },
+      );
+      await writeScoreAnswersResult(rootDir);
+      await writeFile(
+        path.join(rootDir, "grader/output/crop-validation.md"),
+        "# Crop validation\n\n- pass/fail: pass\n",
+        { encoding: "utf8" },
+      );
+      await writeScoreAnswersAgentLog(rootDir);
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const writeWorkspaceFileTool = tools.write_workspace_file;
+      requireFunctionTool(writeWorkspaceFileTool);
+
+      const result = await writeWorkspaceFileTool.execute({
+        filePath: "grader/output/late-polish.md",
+        content: "# Late polish\n",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_artifact_assembly_required",
+        blockedTool: "write_workspace_file",
+      });
+      expect(JSON.stringify(result)).toContain("write_json_workspace_file");
+      expect(JSON.stringify(result)).toContain("teacher-review");
+
+      const writeJsonTool = tools.write_json_workspace_file;
+      requireFunctionTool(writeJsonTool);
+
+      await expect(
+        writeJsonTool.execute({
+          filePath: "grader/output/run-summary.json",
+          jsonText: '{"summary":"ready"}',
+        }),
+      ).resolves.toMatchObject({
+        status: "written",
+        filePath: "grader/output/run-summary.json",
+      });
+    });
+  });
+
+  it("rejects unnumbered root groups with rooted children outside canonical section labels", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "Atomic structure",
+        awardedMarks: 2,
+        maxMarks: 2,
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Chemistry",
+            level: "GCSE",
+            title: "Atomic structure",
+            subtitle: "Uploaded work",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "atomic-structure",
+                label: "Atomic structure",
+                questions: [
+                  {
+                    id: "q1-group",
+                    type: "group",
+                    prompt: "Question 1 tests atomic structure.",
+                    questions: [
+                      {
+                        id: "q1-1",
+                        type: "lines",
+                        displayNumber: "01.1",
+                        badgeLabel: "1",
+                        marks: 1,
+                        prompt: "Name the group.",
+                        lines: 1,
+                      },
+                      {
+                        id: "q1-2",
+                        type: "lines",
+                        displayNumber: "01.2",
+                        badgeLabel: "2",
+                        marks: 1,
+                        prompt: "Pick the model.",
+                        lines: 1,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            "q1-1": "Noble gases",
+            "q1-2": "B",
+          },
+          review: {
+            mode: "graded",
+            score: { got: 2, total: 2 },
+            label: "2/2",
+            message: "Both answers are correct.",
+            note: "",
+            questions: {
+              "q1-1": {
+                status: "correct",
+                score: { got: 1, total: 1 },
+                note: "",
+              },
+              "q1-2": {
+                status: "correct",
+                score: { got: 1, total: 1 },
+                note: "",
+              },
+            },
+          },
+        },
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /no displayNumber while its children use root question 1/iu,
+      );
+    });
+  });
+
+  it("rejects decimal source labels without short badge labels outside canonical section labels", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "Atomic structure",
+        awardedMarks: 1,
+        maxMarks: 1,
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Chemistry",
+            level: "GCSE",
+            title: "Atomic structure",
+            subtitle: "Uploaded work",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "atomic-structure",
+                label: "Atomic structure",
+                questions: [
+                  {
+                    id: "q1-1",
+                    type: "lines",
+                    displayNumber: "01.1",
+                    marks: 1,
+                    prompt: "Name the group.",
+                    lines: 1,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            "q1-1": "Noble gases",
+          },
+          review: {
+            mode: "graded",
+            score: { got: 1, total: 1 },
+            label: "1/1",
+            message: "The answer is correct.",
+            note: "",
+            questions: {
+              "q1-1": {
+                status: "correct",
+                score: { got: 1, total: 1 },
+                note: "",
+              },
+            },
+          },
+        },
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /does not set badgeLabel "1"/iu,
+      );
+    });
+  });
+
+  it("rejects full source labels in badgeLabel without displayNumber", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "Atomic structure",
+        awardedMarks: 1,
+        maxMarks: 1,
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Chemistry",
+            level: "GCSE",
+            title: "Atomic structure",
+            subtitle: "Uploaded work",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "atomic-structure",
+                label: "Atomic structure",
+                questions: [
+                  {
+                    id: "q1-1",
+                    type: "lines",
+                    badgeLabel: "01.1",
+                    marks: 1,
+                    prompt: "Name the group.",
+                    lines: 1,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            "q1-1": "Noble gases",
+          },
+          review: {
+            mode: "graded",
+            score: { got: 1, total: 1 },
+            label: "1/1",
+            message: "The answer is correct.",
+            note: "",
+            questions: {
+              "q1-1": {
+                status: "correct",
+                score: { got: 1, total: 1 },
+                note: "",
+              },
+            },
+          },
+        },
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /badgeLabel "01\.1" as a full source label/iu,
+      );
+    });
+  });
+
+  it("rejects section-root display numbers that do not match the section label", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "GCSE Chemistry worksheet",
+        awardedMarks: 1,
+        maxMarks: 1,
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Chemistry",
+            level: "GCSE",
+            title: "GCSE Chemistry worksheet",
+            subtitle: "Uploaded paper",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q1",
+                label: "Question 1",
+                questions: [
+                  {
+                    id: "q2",
+                    type: "lines",
+                    displayNumber: "2",
+                    marks: 1,
+                    prompt: "State one property.",
+                    lines: 1,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q2: "Property",
+          },
+          review: {
+            score: { got: 1, total: 1 },
+            label: "1/1",
+            message: "Correct.",
+            note: "",
+            questions: {
+              q2: {
+                status: "correct",
+                score: { got: 1, total: 1 },
+                note: "",
+              },
+            },
+          },
+        },
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /labelled Question 1.*displayNumber "2"/iu,
+      );
+    });
+  });
+
+  it("rejects duplicate visible display numbers inside a section", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "GCSE Chemistry worksheet",
+        awardedMarks: 2,
+        maxMarks: 2,
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Chemistry",
+            level: "GCSE",
+            title: "GCSE Chemistry worksheet",
+            subtitle: "Uploaded paper",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q1",
+                label: "Question 1",
+                questions: [
+                  {
+                    id: "q01_1a",
+                    type: "lines",
+                    displayNumber: "01.1",
+                    badgeLabel: "1",
+                    marks: 1,
+                    prompt: "First prompt.",
+                    lines: 1,
+                  },
+                  {
+                    id: "q01_1b",
+                    type: "lines",
+                    displayNumber: "01.1",
+                    badgeLabel: "1",
+                    marks: 1,
+                    prompt: "Second prompt.",
+                    lines: 1,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q01_1a: "First",
+            q01_1b: "Second",
+          },
+          review: {
+            score: { got: 2, total: 2 },
+            label: "2/2",
+            message: "Correct.",
+            note: "",
+            questions: {
+              q01_1a: {
+                status: "correct",
+                score: { got: 1, total: 1 },
+                note: "",
+              },
+              q01_1b: {
+                status: "correct",
+                score: { got: 1, total: 1 },
+                note: "",
+              },
+            },
+          },
+        },
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /reuses displayNumber "01\.1"/iu,
+      );
+    });
+  });
+
+  it("rejects long handwritten grading reports that skip bounded scoring", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "GCSE Chemistry grading report",
+        awardedMarks: 20,
+        maxMarks: 31,
+        footer: "Uploaded answer booklet",
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Chemistry",
+            level: "GCSE",
+            title: "GCSE Chemistry grading report",
+            subtitle: "Uploaded work",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "q1",
+                label: "Question 1",
+                questions: [
+                  {
+                    id: "q1",
+                    type: "lines",
+                    displayNumber: "1",
+                    marks: 31,
+                    prompt: "State and explain the chemistry answers shown.",
+                    lines: 4,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q1: "Long handwritten answer.",
+          },
+          review: {
+            score: {
+              got: 20,
+              total: 31,
+            },
+            label: "20/31",
+            message: "Several correct ideas, with gaps in method detail.",
+            note: "Review the marked omissions.",
+            questions: {
+              q1: {
+                status: "incorrect",
+                score: {
+                  got: 20,
+                  total: 31,
+                },
+                note: "Some mark points are missing.",
+              },
+            },
+          },
+        },
+      });
+      await writeFile(
+        path.join(rootDir, "request.json"),
+        JSON.stringify(
+          {
+            createdAt: new Date(0).toISOString(),
+            sourceText:
+              "Please grade my handwritten work against the uploaded chemistry paper and mark scheme.",
+            input: {},
+            attachments: [
+              {
+                id: "student-page",
+                contentType: "image/png",
+                sizeBytes: 100,
+                filename: "student-page.png",
+              },
+              {
+                id: "source-paper",
+                contentType: "application/pdf",
+                sizeBytes: 1000,
+                filename: "source-paper.pdf",
+              },
+            ],
+          },
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+      await writeSourceProblemStatementTranscription(
+        rootDir,
+        [
+          "## Source problem-statement transcription",
+          "",
+          "**Question 1** State and explain the chemistry answers shown.",
+          "",
+        ].join("\n"),
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /score_answers_with_fresh_agent/iu,
+      );
+    });
+  });
+
+  it("rejects handwritten grading reports with many answer leaves that skip bounded scoring", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const questions = Array.from({ length: 13 }, (_, index) => {
+        const questionNumber = index + 1;
+        return {
+          id: `q${questionNumber.toString()}`,
+          type: "lines" as const,
+          displayNumber: questionNumber.toString(),
+          marks: 1,
+          prompt: `Answer source question ${questionNumber.toString()}.`,
+          lines: 1,
+        };
+      });
+      const answers = Object.fromEntries(
+        questions.map((question) => [question.id, "Student answer."]),
+      );
+      const reviews = Object.fromEntries(
+        questions.map((question) => [
+          question.id,
+          {
+            status: "correct",
+            score: { got: 1, total: 1 },
+            note: "",
+          },
+        ]),
+      );
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "GCSE Chemistry grading report",
+        awardedMarks: 13,
+        maxMarks: 13,
+        footer: "Uploaded answer booklet",
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Chemistry",
+            level: "GCSE",
+            title: "GCSE Chemistry grading report",
+            subtitle: "Uploaded work",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "questions-1-13",
+                label: "Questions 1-13",
+                questions,
+              },
+            ],
+          },
+          answers,
+          review: {
+            score: {
+              got: 13,
+              total: 13,
+            },
+            label: "13/13",
+            message: "The visible answers are correct.",
+            note: "",
+            questions: reviews,
+          },
+        },
+      });
+      await writeFile(
+        path.join(rootDir, "request.json"),
+        JSON.stringify(
+          {
+            createdAt: new Date(0).toISOString(),
+            sourceText:
+              "Please grade my handwritten work against the uploaded chemistry paper and mark scheme.",
+            input: {},
+            attachments: [
+              {
+                id: "student-page",
+                contentType: "image/png",
+                sizeBytes: 100,
+                filename: "student-page.png",
+              },
+              {
+                id: "source-paper",
+                contentType: "application/pdf",
+                sizeBytes: 1000,
+                filename: "source-paper.pdf",
+              },
+            ],
+          },
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+      await writeSourceProblemStatementTranscription(
+        rootDir,
+        [
+          "## Source problem-statement transcription",
+          "",
+          ...questions.map(
+            (question) =>
+              `**Question ${question.displayNumber}** ${question.prompt}`,
+          ),
+          "",
+        ].join("\n"),
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /more than 12 answer leaves/iu,
+      );
+    });
+  });
+
   it("normalizes worksheet aggregate scores from per-question scores before publishing", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =
@@ -666,7 +4237,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
       delete sheet.sheet.sections[0].label;
       sheet.sheet.sections[0].questions[0] = {
         id: "q1",
-        type: "lines",
+        type: "calc",
         marks: 1,
         prompt: "Explain the answer.",
       };
@@ -729,6 +4300,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
       expect(normalizedSheet.sheet.sections[0].id).toBe("section-1");
       expect(normalizedSheet.sheet.sections[0].label).toBe("Section A");
       expect(normalizedSheet.sheet.sections[0].type).toBeUndefined();
+      expect(normalizedSheet.sheet.sections[0].questions[0].type).toBe("lines");
       expect(normalizedSheet.sheet.sections[0].questions[0].lines).toBe(4);
       expect(normalizedSheet.review.mode).toBe("graded");
       expect(normalizedSummary.year).toBe("2024");
@@ -738,6 +4310,111 @@ describe("Spark agent tool: publish_sheet guards", () => {
           "grader/output/run-summary.json",
         ]),
       );
+    });
+  });
+
+  it("normalizes MCQ answer labels/text and downgrades invented open-answer MCQs", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeValidSheetArtifacts(rootDir);
+      const sheetPath = path.join(rootDir, "grader/output/sheet.json");
+      const summaryPath = path.join(rootDir, "grader/output/run-summary.json");
+      const sheet = JSON.parse(await readFile(sheetPath, { encoding: "utf8" }));
+      sheet.sheet.sections[0].questions = [
+        {
+          id: "q1",
+          type: "mcq",
+          marks: 1,
+          prompt: "Which model represents the plum pudding model? Tick one box.",
+          displayMode: "labels_only",
+          options: [
+            { id: "a", label: "A", text: "" },
+            { id: "b", label: "B", text: "" },
+          ],
+        },
+        {
+          id: "q2",
+          type: "mcq",
+          marks: 1,
+          prompt:
+            "Which group of elements had not been discovered when this version was published?",
+          displayMode: "labels_only",
+          options: [
+            { id: "group1", label: "A", text: "" },
+            { id: "group2", label: "B", text: "" },
+          ],
+        },
+        {
+          id: "q3",
+          type: "mcq",
+          marks: 1,
+          prompt:
+            "Give the colour change when nitric acid is added. Tick one box.",
+          displayMode: "full_options",
+          options: [
+            { id: "green-red", label: "A", text: "Green to red" },
+            { id: "red-purple", label: "B", text: "Red to purple" },
+          ],
+        },
+      ];
+      sheet.answers = {
+        q1: "B",
+        q2: "Noble gases",
+        q3: "Green to red",
+      };
+      sheet.review.score = { got: 3, total: 3 };
+      sheet.review.label = "3/3";
+      sheet.review.questions = {
+        q1: { status: "correct", score: { got: 1, total: 1 }, note: "" },
+        q2: { status: "correct", score: { got: 1, total: 1 }, note: "" },
+        q3: { status: "correct", score: { got: 1, total: 1 }, note: "" },
+      };
+      await writeFile(sheetPath, JSON.stringify(sheet, null, 2).concat("\n"), {
+        encoding: "utf8",
+      });
+      const summary = JSON.parse(
+        await readFile(summaryPath, { encoding: "utf8" }),
+      );
+      summary.totals = { awardedMarks: 3, maxMarks: 3 };
+      await writeFile(
+        summaryPath,
+        JSON.stringify(summary, null, 2).concat("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).resolves.toMatchObject({
+        status: "published",
+        awardedMarks: 3,
+        maxMarks: 3,
+      });
+      const normalizedSheet = JSON.parse(
+        await readFile(sheetPath, { encoding: "utf8" }),
+      );
+      expect(normalizedSheet.answers.q1).toBe("b");
+      expect(normalizedSheet.answers.q2).toBe("Noble gases");
+      expect(normalizedSheet.answers.q3).toBe("green-red");
+      expect(normalizedSheet.sheet.sections[0].questions[1].type).toBe("lines");
+      expect(normalizedSheet.sheet.sections[0].questions[1].options).toBeUndefined();
     });
   });
 
@@ -780,7 +4457,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
                 {
                   id: "q01_1",
                   type: "lines",
-                  displayNumber: "01.1",
+                  displayNumber: "a",
                   marks: 2,
                   prompt: "Explain why pressure on the heart helps.",
                   answer: "It pushes blood.",
@@ -1413,7 +5090,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
       requireFunctionTool(publishSheetTool);
 
       await expect(publishSheetTool.execute({})).rejects.toThrow(
-        /source transcription mentions Figure 3.*worksheet does not link an image/iu,
+        /source references mention Figure 3.*worksheet does not link an image/iu,
       );
     });
   });
@@ -1505,6 +5182,155 @@ describe("Spark agent tool: publish_sheet guards", () => {
       await expect(publishSheetTool.execute({})).rejects.toThrow(
         /source-fidelity-audit\.md is missing/iu,
       );
+    });
+  });
+
+  it("rejects manually written source-fidelity audits after failed audit tool calls", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "Competition paper",
+        awardedMarks: 0,
+        maxMarks: 1,
+        sourceFidelityAudit: false,
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Maths",
+            level: "Junior",
+            title: "Competition paper",
+            subtitle: "Uploaded paper",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q1",
+                label: "Question 1",
+                questions: [
+                  {
+                    id: "q1",
+                    type: "lines",
+                    displayNumber: "1",
+                    marks: 1,
+                    prompt: "What is 2 + 2?",
+                    lines: 1,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q1: "",
+          },
+          review: buildAwaitingAnswersReview(1, ["q1"]),
+        },
+      });
+      await writeFile(
+        path.join(rootDir, "request.json"),
+        JSON.stringify(
+          {
+            createdAt: new Date(0).toISOString(),
+            sourceText:
+              "Render this question paper as a source-faithful worksheet. No student answers were provided; leave answers blank.",
+            input: {},
+            attachments: [],
+          },
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+      await writeSourceProblemStatementTranscription(
+        rootDir,
+        "## Source problem-statement transcription\n\n**Question 1** What is 2 + 2?\n",
+      );
+      await writeFile(
+        path.join(rootDir, "grader/output/source-fidelity-audit.md"),
+        [
+          "# Source fidelity audit",
+          "",
+          "- source-fidelity audit: full worksheet",
+          "- fresh-context subagent checked: yes",
+          "- pass/fail: pass",
+          "- visible source items represented: yes",
+          "- verbatim wording preserved: yes",
+          "- numbering and badges correct: yes",
+          "- figures/tables/layouts preserved: not_applicable",
+          "- answer evidence aligned: yes",
+          "- blocking issues: none",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+      await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
+      await appendFile(
+        path.join(rootDir, "logs/agent/agent.log"),
+        "2026-04-13T10:00:00.000Z [agent:test] tool_call_completed: turn=1 index=1 tool=validate_source_fidelity_with_fresh_agent callId=call_source_fidelity status=error durationMs=1\n",
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /no successful validate_source_fidelity_with_fresh_agent call/iu,
+      );
+    });
+  });
+
+  it("blocks agents from manually writing source-fidelity audit artifacts", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const writeWorkspaceFileTool = tools.write_workspace_file;
+      requireFunctionTool(writeWorkspaceFileTool);
+
+      await expect(
+        writeWorkspaceFileTool.execute({
+          filePath: "grader/output/source-fidelity-audit.md",
+          content: "- pass/fail: pass\n",
+        }),
+      ).resolves.toMatchObject({
+        status: "blocked_tool_owned_artifact",
+        blockedTool: "write_workspace_file",
+      });
     });
   });
 
@@ -1611,6 +5437,339 @@ describe("Spark agent tool: publish_sheet guards", () => {
       await expect(publishSheetTool.execute({})).rejects.toThrow(
         /source-fidelity-audit\.md does not record a passing/iu,
       );
+    });
+  });
+
+  it("rejects source-fidelity audits with none-except blockers", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "Competition paper",
+        awardedMarks: 0,
+        maxMarks: 1,
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Maths",
+            level: "Junior",
+            title: "Competition paper",
+            subtitle: "Uploaded paper",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q1",
+                label: "Question 1",
+                questions: [
+                  {
+                    id: "q1",
+                    type: "lines",
+                    displayNumber: "1",
+                    marks: 1,
+                    prompt: "What is 2 + 2?",
+                    lines: 1,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q1: "",
+          },
+          review: buildAwaitingAnswersReview(1, ["q1"]),
+        },
+      });
+      await writeFile(
+        path.join(rootDir, "request.json"),
+        JSON.stringify(
+          {
+            createdAt: new Date(0).toISOString(),
+            sourceText:
+              "Render this question paper as a source-faithful worksheet. No student answers were provided; leave answers blank.",
+            input: {},
+            attachments: [],
+          },
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+      await writeSourceProblemStatementTranscription(
+        rootDir,
+        "## Source problem-statement transcription\n\n**Question 1** What is 2 + 2?\n",
+      );
+      await writeSourceFidelityAudit(
+        rootDir,
+        [
+          "# Source fidelity audit",
+          "",
+          "- source-fidelity audit: full worksheet",
+          "- fresh-context subagent checked: yes",
+          "- pass/fail: pass",
+          "- visible source items represented: yes",
+          "- verbatim wording preserved: yes",
+          "- numbering and badges correct: yes",
+          "- figures/tables/layouts preserved: yes",
+          "- answer evidence aligned: yes",
+          "- blocking issues: none except Question 2 is omitted",
+          "",
+        ].join("\n"),
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /source-fidelity-audit\.md does not record a passing/iu,
+      );
+    });
+  });
+
+  it("rejects aggregate source-fidelity audits with later blocking scopes", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "Competition paper",
+        awardedMarks: 0,
+        maxMarks: 1,
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Maths",
+            level: "Junior",
+            title: "Competition paper",
+            subtitle: "Uploaded paper",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q1",
+                label: "Question 1",
+                questions: [
+                  {
+                    id: "q1",
+                    type: "lines",
+                    displayNumber: "1",
+                    marks: 1,
+                    prompt: "What is 2 + 2?",
+                    lines: 1,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q1: "",
+          },
+          review: buildAwaitingAnswersReview(1, ["q1"]),
+        },
+      });
+      await writeFile(
+        path.join(rootDir, "request.json"),
+        JSON.stringify(
+          {
+            createdAt: new Date(0).toISOString(),
+            sourceText:
+              "Render this question paper as a source-faithful worksheet. No student answers were provided; leave answers blank.",
+            input: {},
+            attachments: [],
+          },
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+      await writeSourceProblemStatementTranscription(
+        rootDir,
+        "## Source problem-statement transcription\n\n**Question 1** What is 2 + 2?\n",
+      );
+      await writeSourceFidelityAudit(
+        rootDir,
+        [
+          "# Source fidelity audit",
+          "",
+          "- source-fidelity audit: Question 1",
+          "- fresh-context subagent checked: yes",
+          "- pass/fail: pass",
+          "- visible source items represented: yes",
+          "- verbatim wording preserved: yes",
+          "- numbering and badges correct: yes",
+          "- figures/tables/layouts preserved: yes",
+          "- answer evidence aligned: yes",
+          "- blocking issues: none",
+          "",
+          "---",
+          "",
+          "- source-fidelity audit: Question 2",
+          "- fresh-context subagent checked: yes",
+          "- pass/fail: pass",
+          "- visible source items represented: yes",
+          "- verbatim wording preserved: yes",
+          "- numbering and badges correct: yes",
+          "- figures/tables/layouts preserved: yes",
+          "- answer evidence aligned: yes",
+          "- blocking issues: Question 2 Figure 1 is missing",
+          "",
+        ].join("\n"),
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /source-fidelity-audit\.md does not record a passing/iu,
+      );
+    });
+  });
+
+  it("requires source paths for source-fidelity audit when qp-reference exists", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/transcription.md"),
+        "## Source problem-statement transcription\n\n**Question 1** What is 2 + 2?\n",
+        { encoding: "utf8" },
+      );
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        "# Sheet plan\n\nQuestion 1 source-faithful transfer.\n",
+        { encoding: "utf8" },
+      );
+      await writeFile(
+        path.join(rootDir, "grader/output/qp-reference.md"),
+        "## Page 1\n\nQuestion 1 What is 2 + 2?\n",
+        { encoding: "utf8" },
+      );
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet.json"),
+        JSON.stringify({ schemaVersion: 1 }, null, 2).concat("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const auditTool = tools.validate_source_fidelity_with_fresh_agent;
+      requireFunctionTool(auditTool);
+
+      await expect(
+        auditTool.execute({
+          sourceScope: "Question 1",
+          sourcePaths: [],
+          transcriptionPath: "grader/output/transcription.md",
+          sheetPlanPath: "grader/output/sheet-plan.md",
+          sheetPath: "grader/output/sheet.json",
+        }),
+      ).rejects.toThrow(/requires sourcePaths/iu);
+    });
+  });
+
+  it("requires source paths for source-fidelity audit even without extracted reference files", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/transcription.md"),
+        "## Source problem-statement transcription\n\n**Question 1** What is 2 + 2?\n",
+        { encoding: "utf8" },
+      );
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        "# Sheet plan\n\nQuestion 1 source-faithful transfer.\n",
+        { encoding: "utf8" },
+      );
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet.json"),
+        JSON.stringify({ schemaVersion: 1 }, null, 2).concat("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const auditTool = tools.validate_source_fidelity_with_fresh_agent;
+      requireFunctionTool(auditTool);
+
+      await expect(
+        auditTool.execute({
+          sourceScope: "Question 1",
+          sourcePaths: [],
+          transcriptionPath: "grader/output/transcription.md",
+          sheetPlanPath: "grader/output/sheet-plan.md",
+          sheetPath: "grader/output/sheet.json",
+        }),
+      ).rejects.toThrow(/requires sourcePaths/iu);
     });
   });
 
@@ -1938,6 +6097,269 @@ describe("Spark agent tool: publish_sheet guards", () => {
 
       await expect(publishSheetTool.execute({})).rejects.toThrow(
         /references a visual|source transcription mentions Figure 1/iu,
+      );
+    });
+  });
+
+  it("uses extracted source references to catch omitted named figures", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "GCSE Science grading report",
+        awardedMarks: 1,
+        maxMarks: 1,
+        footer: "AQA 8464/C/1H",
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Science",
+            level: "GCSE",
+            title: "GCSE Science grading report",
+            subtitle: "Uploaded work",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q1",
+                label: "Question 1",
+                questions: [
+                  {
+                    id: "q01_1",
+                    type: "lines",
+                    displayNumber: "01.1",
+                    badgeLabel: "1",
+                    marks: 1,
+                    prompt:
+                      "Which group of elements had not been discovered when Mendeleev's version of the periodic table was published?",
+                    lines: 1,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q01_1: "Noble gases",
+          },
+          review: {
+            score: { got: 1, total: 1 },
+            label: "1/1",
+            message: "Correct.",
+            note: "",
+            questions: {
+              q01_1: {
+                status: "correct",
+                score: { got: 1, total: 1 },
+                note: "",
+              },
+            },
+          },
+        },
+      });
+      await writeFile(
+        path.join(rootDir, "request.json"),
+        JSON.stringify(
+          {
+            createdAt: new Date(0).toISOString(),
+            sourceText:
+              "Please grade my handwritten work against the uploaded paper.",
+            input: {},
+            attachments: [
+              {
+                id: "student-page",
+                contentType: "image/png",
+                sizeBytes: 100,
+                filename: "student-page.png",
+              },
+              {
+                id: "source-paper",
+                contentType: "application/pdf",
+                sizeBytes: 1000,
+                filename: "source-paper.pdf",
+              },
+            ],
+          },
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+      await writeSourceProblemStatementTranscription(
+        rootDir,
+        [
+          "## Source problem-statement transcription",
+          "",
+          "**01.1** Which group of elements had not been discovered when Mendeleev's version of the periodic table was published?",
+          "",
+        ].join("\n"),
+      );
+      await writeFile(
+        path.join(rootDir, "grader/output/qp-reference.md"),
+        [
+          "## Page 2",
+          "",
+          "0 1 . 1 Figure 1 shows part of Mendeleev's version of the periodic table.",
+          "",
+          "Figure 1",
+          "",
+          "Which group of elements had not been discovered when Mendeleev's version of the periodic table was published?",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /source references mention Figure 1/iu,
+      );
+    });
+  });
+
+  it("rejects figure labels satisfied by a nearby image for a different figure", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "GCSE Science grading report",
+        awardedMarks: 1,
+        maxMarks: 1,
+        footer: "AQA 8464/C/1H",
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Science",
+            level: "GCSE",
+            title: "GCSE Science grading report",
+            subtitle: "Uploaded work",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q1",
+                label: "Question 1",
+                questions: [
+                  {
+                    id: "q01_1",
+                    type: "lines",
+                    displayNumber: "01.1",
+                    badgeLabel: "1",
+                    marks: 1,
+                    prompt:
+                      "Figure 1 shows the apparatus.\n\n[![Figure 2](grader/output/assets/figure-2.png)](grader/output/assets/figure-2.png)\n\nState the result.",
+                    lines: 1,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q01_1: "Result",
+          },
+          review: {
+            score: { got: 1, total: 1 },
+            label: "1/1",
+            message: "Correct.",
+            note: "",
+            questions: {
+              q01_1: {
+                status: "correct",
+                score: { got: 1, total: 1 },
+                note: "",
+              },
+            },
+          },
+        },
+      });
+      await writeFile(
+        path.join(rootDir, "request.json"),
+        JSON.stringify(
+          {
+            createdAt: new Date(0).toISOString(),
+            sourceText:
+              "Please grade my handwritten work against the uploaded paper.",
+            input: {},
+            attachments: [
+              {
+                id: "student-page",
+                contentType: "image/png",
+                sizeBytes: 100,
+                filename: "student-page.png",
+              },
+              {
+                id: "source-paper",
+                contentType: "application/pdf",
+                sizeBytes: 1000,
+                filename: "source-paper.pdf",
+              },
+            ],
+          },
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+      await writeSourceProblemStatementTranscription(
+        rootDir,
+        [
+          "## Source problem-statement transcription",
+          "",
+          "**01.1** Figure 1 shows the apparatus.",
+          "",
+        ].join("\n"),
+      );
+      await writeValidatedCropAsset({
+        rootDir,
+        assetPath: "grader/output/assets/figure-2.png",
+        sourceLabel: "Figure 2",
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /Figure 1.*does not link an image near that figure label/iu,
       );
     });
   });
@@ -3794,7 +8216,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
                   {
                     id: "q02_6",
                     type: "lines",
-                    displayNumber: "1",
+                    displayNumber: "2.6",
+                    badgeLabel: "6",
                     marks: 1,
                     prompt: `Complete **Figure 3**.\n\n[![Figure 3](${assetPath})](${assetPath})`,
                     lines: 2,
@@ -4254,7 +8677,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
                   {
                     id: "q02_6",
                     type: "lines",
-                    displayNumber: "1",
+                    displayNumber: "2.6",
+                    badgeLabel: "6",
                     marks: 1,
                     prompt: `Complete **Figure 3**.\n\n[![Figure 3](${assetPath})](${assetPath})`,
                     lines: 2,
@@ -4263,7 +8687,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
                   {
                     id: "q02_7",
                     type: "lines",
-                    displayNumber: "2",
+                    displayNumber: "2.7",
+                    badgeLabel: "7",
                     marks: 1,
                     prompt:
                       "Predict the blood flow.\n\nUse [Figure 3](#figure-3).",
@@ -4331,7 +8756,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
       const publishSheetTool = tools.publish_sheet;
       requireFunctionTool(publishSheetTool);
 
-      await expect(publishSheetTool.execute({})).resolves.toMatchObject({
+      const result = await publishSheetTool.execute({});
+      expect(result).toMatchObject({
         status: "published",
         awardedMarks: 2,
         maxMarks: 2,
@@ -4530,6 +8956,52 @@ describe("Spark agent tool: publish_sheet guards", () => {
     });
   });
 
+  it("rejects linked scratch pdf image inventory paths", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const assetPath = "grader/output/pdf-images/embedded-image-001.png";
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "GCSE Science worksheet",
+        awardedMarks: 1,
+        maxMarks: 1,
+        report: buildSingleImageQuestionReport(assetPath),
+      });
+      await mkdir(path.dirname(path.join(rootDir, assetPath)), {
+        recursive: true,
+      });
+      await writeTestPng({
+        filePath: path.join(rootDir, assetPath),
+        width: 20,
+        height: 20,
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /failed publish guards.*outside grader\/output\/assets/iu,
+      );
+    });
+  });
+
   it("accepts fresh-context crop validation that says required content is not clipped", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =
@@ -4604,7 +9076,16 @@ describe("Spark agent tool: publish_sheet guards", () => {
       });
       await writeFile(
         path.join(rootDir, "grader/output/crop-validation.md"),
-        "- `grader/output/assets/figure-1.png` — Figure 1 — fresh-context subagent checked: yes — reviewer-visible text: Figure 1 — **PASS** — all required labels are visible and not clipped.\n",
+        [
+          "- crop path: grader/output/assets/figure-1.png",
+          "  - source label: Figure 1",
+          "  - fresh-context subagent checked: yes",
+          "  - reviewer-visible text: Figure 1",
+          "  - pass/fail: pass",
+          "  - all question-relevant content visible: yes",
+          "  - edge clipping/content touching an edge present: no",
+          "",
+        ].join("\n"),
         { encoding: "utf8" },
       );
       await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
@@ -4948,6 +9429,79 @@ describe("Spark agent tool: publish_sheet guards", () => {
     });
   });
 
+  it("rejects crop validation records without explicit pass fields", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const assetPath = "grader/output/assets/figure-1.png";
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "Science worksheet",
+        awardedMarks: 1,
+        maxMarks: 1,
+        report: buildSingleImageQuestionReport(assetPath),
+      });
+      await mkdir(path.join(rootDir, "grader/output/assets"), {
+        recursive: true,
+      });
+      await writeTestPng({
+        filePath: path.join(rootDir, assetPath),
+        width: 24,
+        height: 24,
+      });
+      await writeFile(
+        path.join(rootDir, "grader/output/crop-validation.md"),
+        [
+          "# Crop validation",
+          "",
+          `## ${assetPath}`,
+          `- crop path: ${assetPath}`,
+          "- source question/figure/table label: Figure 1",
+          "- fresh-context subagent checked: yes",
+          "- reviewer-visible text transcribed from the crop: none",
+          "- all question-relevant content visible: yes",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+      await writeSourceProblemStatementTranscription(rootDir);
+      await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
+      await appendFile(
+        path.join(rootDir, "logs/agent/agent.log"),
+        "tool=validate_crop_with_fresh_agent crop validation\n",
+        { encoding: "utf8" },
+      );
+      await writeFreshCropReviewToolCall({
+        rootDir,
+        assetPath,
+        sourceLabel: "Figure 1",
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /explicit pass\/fail: pass/iu,
+      );
+    });
+  });
+
   it("rejects crop validation records with explicit visible:no fields", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =
@@ -5090,7 +9644,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
     });
   });
 
-  it("allows passing crop validation records with minor duplicate/context notes", async () => {
+  it("rejects passing crop validation records with positive risk fields", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =
         await import("../src/agent/sparkAgentRunner");
@@ -5162,11 +9716,9 @@ describe("Spark agent tool: publish_sheet guards", () => {
       const publishSheetTool = tools.publish_sheet;
       requireFunctionTool(publishSheetTool);
 
-      await expect(publishSheetTool.execute({})).resolves.toMatchObject({
-        status: "published",
-        awardedMarks: 1,
-        maxMarks: 1,
-      });
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /failed publish guards.*crop-validation\.md/iu,
+      );
     });
   });
 
@@ -5244,6 +9796,83 @@ describe("Spark agent tool: publish_sheet guards", () => {
       await expect(publishSheetTool.execute({})).resolves.toMatchObject({
         status: "published",
       });
+    });
+  });
+
+  it("rejects duplicate-only failed crop records when risk is present", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const assetPath = "grader/output/assets/figure-1.png";
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "Science worksheet",
+        awardedMarks: 1,
+        maxMarks: 1,
+        report: buildSingleImageQuestionReport(assetPath),
+      });
+      await mkdir(path.join(rootDir, "grader/output/assets"), {
+        recursive: true,
+      });
+      await writeTestPng({
+        filePath: path.join(rootDir, assetPath),
+        width: 20,
+        height: 20,
+      });
+      await writeFile(
+        path.join(rootDir, "grader/output/crop-validation.md"),
+        [
+          "# Crop validation",
+          "",
+          `- crop path: ${assetPath}`,
+          "  - source label: Figure 1",
+          "  - fresh-context subagent checked: yes",
+          "  - reviewer-visible text: Figure 1; Required label",
+          "  - pass/fail: fail",
+          "  - all question-relevant content visible: yes",
+          "  - duplicated caption/question/table text excluded: no",
+          "  - unrelated neighbouring content present: yes",
+          "  - edge clipping or content touching edge present: no",
+          "  - page border, separator line, answer line, or neighbouring-question fragment present: no",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+      await writeSourceProblemStatementTranscription(rootDir);
+      await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
+      await appendFile(
+        path.join(rootDir, "logs/agent/agent.log"),
+        "tool=validate_crop_with_fresh_agent crop validation\n",
+        { encoding: "utf8" },
+      );
+      await writeFreshCropReviewToolCall({
+        rootDir,
+        assetPath,
+        sourceLabel: "Figure 1",
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /failed publish guards.*crop-validation\.md/iu,
+      );
     });
   });
 
@@ -5422,6 +10051,69 @@ describe("Spark agent tool: publish_sheet guards", () => {
       await expect(publishSheetTool.execute({})).rejects.toThrow(
         /failed publish guards.*changed with crop_image after grader\/output\/crop-validation\.md/iu,
       );
+    });
+  });
+
+  it("adds a white border when crop_image writes a worksheet asset from source-edge bounds", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const sourcePath = "grader/output/pdf-images/source-figure.png";
+      const outputPath = "grader/output/assets/source-figure.png";
+      await mkdir(path.dirname(path.join(rootDir, sourcePath)), {
+        recursive: true,
+      });
+      await writeTestPng({
+        filePath: path.join(rootDir, sourcePath),
+        width: 20,
+        height: 10,
+        topEdgeLine: true,
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const cropImageTool = tools.crop_image;
+      requireFunctionTool(cropImageTool);
+
+      await expect(
+        cropImageTool.execute({
+          sourcePath,
+          outputPath,
+          bboxPixels: {
+            left: 0,
+            top: 0,
+            right: 20,
+            bottom: 10,
+          },
+        }),
+      ).resolves.toMatchObject({
+        status: "written",
+        paddingPx: 36,
+        outputPadding: {
+          top: 36,
+          right: 36,
+          bottom: 36,
+          left: 36,
+        },
+      });
+
+      const outputPng = PNG.sync.read(await readFile(path.join(rootDir, outputPath)));
+      expect(outputPng.width).toBe(92);
+      expect(outputPng.height).toBe(82);
     });
   });
 
@@ -5715,7 +10407,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
     });
   });
 
-  it("rejects linked crop images with content touching the crop edge", async () => {
+  it("adds publish padding when normalizing linked crop images", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =
         await import("../src/agent/sparkAgentRunner");
@@ -5779,8 +10471,12 @@ describe("Spark agent tool: publish_sheet guards", () => {
           },
         },
       });
-      await mkdir(path.join(rootDir, "grader/output/assets"), {
-        recursive: true,
+      await writeValidatedCropAsset({
+        rootDir,
+        assetPath: "grader/output/assets/figure-1.png",
+        sourceLabel: "Figure 1",
+        width: 20,
+        height: 20,
       });
       await writeTestPng({
         filePath: path.join(rootDir, "grader/output/assets/figure-1.png"),
@@ -5788,17 +10484,6 @@ describe("Spark agent tool: publish_sheet guards", () => {
         height: 20,
         topEdgeLine: true,
       });
-      await writeFile(
-        path.join(rootDir, "grader/output/crop-validation.md"),
-        "- `grader/output/assets/figure-1.png` — Figure 1 — fresh-context subagent checked: yes — reviewer-visible text: Figure 1 — **PASS** — all required labels are visible and not clipped.\n",
-        { encoding: "utf8" },
-      );
-      await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
-      await appendFile(
-        path.join(rootDir, "logs/agent/agent.log"),
-        "tool=spawn_agent crop validation\n",
-        { encoding: "utf8" },
-      );
 
       const tools = buildSparkAgentTools({
         workspace: {
@@ -5818,9 +10503,16 @@ describe("Spark agent tool: publish_sheet guards", () => {
       const publishSheetTool = tools.publish_sheet;
       requireFunctionTool(publishSheetTool);
 
-      await expect(publishSheetTool.execute({})).rejects.toThrow(
-        /content touching the top.*edge/iu,
-      );
+      await expect(publishSheetTool.execute({})).resolves.toMatchObject({
+        status: "published",
+        awardedMarks: 1,
+        maxMarks: 1,
+      });
+      await expect(
+        readFile(path.join(rootDir, "grader/output/sheet.json"), {
+          encoding: "utf8",
+        }),
+      ).resolves.toContain("grader/output/assets/figure-1.jpg");
     });
   });
 
@@ -6377,6 +11069,354 @@ describe("Spark agent tool: publish_sheet guards", () => {
     });
   });
 
+  it("rejects figure labels used as group display numbers above numeric children", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "GCSE Chemistry worksheet",
+        awardedMarks: 2,
+        maxMarks: 2,
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Chemistry",
+            level: "GCSE",
+            title: "GCSE Chemistry worksheet",
+            subtitle: "Uploaded paper",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q1",
+                label: "Question 1",
+                questions: [
+                  {
+                    id: "q01_fig2",
+                    type: "group",
+                    displayNumber: "Figure 2",
+                    marks: 2,
+                    prompt:
+                      "Figure 2 represents different models of the atom.",
+                    questions: [
+                      {
+                        id: "q01_2",
+                        type: "lines",
+                        displayNumber: "01.2",
+                        badgeLabel: "2",
+                        marks: 1,
+                        prompt: "Which model represents plum pudding?",
+                        lines: 1,
+                      },
+                      {
+                        id: "q01_3",
+                        type: "lines",
+                        displayNumber: "01.3",
+                        badgeLabel: "3",
+                        marks: 1,
+                        prompt:
+                          "Which model resulted from Chadwick’s experimental work?",
+                        lines: 1,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q01_2: "B",
+            q01_3: "A",
+          },
+          review: {
+            score: {
+              got: 2,
+              total: 2,
+            },
+            label: "2/2",
+            message: "Correct.",
+            note: "",
+            questions: {
+              q01_2: {
+                status: "correct",
+                score: {
+                  got: 1,
+                  total: 1,
+                },
+                note: "",
+              },
+              q01_3: {
+                status: "correct",
+                score: {
+                  got: 1,
+                  total: 1,
+                },
+                note: "",
+              },
+            },
+          },
+        },
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /displayNumber "Figure 2".*children use root question 1/iu,
+      );
+    });
+  });
+
+  it("rejects unnumbered root groups with numbered children inside a matching question section", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "GCSE Chemistry worksheet",
+        awardedMarks: 2,
+        maxMarks: 2,
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Chemistry",
+            level: "GCSE",
+            title: "GCSE Chemistry worksheet",
+            subtitle: "Uploaded paper",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q1",
+                label: "Question 1",
+                questions: [
+                  {
+                    id: "q01",
+                    type: "group",
+                    marks: 2,
+                    prompt: "Atomic structure and the periodic table.",
+                    questions: [
+                      {
+                        id: "q01_1",
+                        type: "lines",
+                        displayNumber: "01.1",
+                        badgeLabel: "1",
+                        marks: 1,
+                        prompt: "Which group had not been discovered?",
+                        lines: 1,
+                      },
+                      {
+                        id: "q01_2",
+                        type: "lines",
+                        displayNumber: "01.2",
+                        badgeLabel: "2",
+                        marks: 1,
+                        prompt: "Which model represents plum pudding?",
+                        lines: 1,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q01_1: "Noble gases",
+            q01_2: "B",
+          },
+          review: {
+            score: {
+              got: 2,
+              total: 2,
+            },
+            label: "2/2",
+            message: "Correct.",
+            note: "",
+            questions: {
+              q01_1: {
+                status: "correct",
+                score: {
+                  got: 1,
+                  total: 1,
+                },
+                note: "",
+              },
+              q01_2: {
+                status: "correct",
+                score: {
+                  got: 1,
+                  total: 1,
+                },
+                note: "",
+              },
+            },
+          },
+        },
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /has no displayNumber while its children use root question/iu,
+      );
+    });
+  });
+
+  it("rejects unnumbered root groups with bracketed children inside a matching question section", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "GCSE Chemistry worksheet",
+        awardedMarks: 2,
+        maxMarks: 2,
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Chemistry",
+            level: "GCSE",
+            title: "GCSE Chemistry worksheet",
+            subtitle: "Uploaded paper",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q1",
+                label: "Question 1",
+                questions: [
+                  {
+                    id: "q1",
+                    type: "group",
+                    marks: 2,
+                    prompt: "A shared root stem.",
+                    questions: [
+                      {
+                        id: "q1a",
+                        type: "lines",
+                        displayNumber: "1(a)",
+                        badgeLabel: "a",
+                        marks: 1,
+                        prompt: "State one result.",
+                        lines: 1,
+                      },
+                      {
+                        id: "q1b",
+                        type: "lines",
+                        displayNumber: "1(b)",
+                        badgeLabel: "b",
+                        marks: 1,
+                        prompt: "State another result.",
+                        lines: 1,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q1a: "First",
+            q1b: "Second",
+          },
+          review: {
+            score: {
+              got: 2,
+              total: 2,
+            },
+            label: "2/2",
+            message: "Correct.",
+            note: "",
+            questions: {
+              q1a: {
+                status: "correct",
+                score: {
+                  got: 1,
+                  total: 1,
+                },
+                note: "",
+              },
+              q1b: {
+                status: "correct",
+                score: {
+                  got: 1,
+                  total: 1,
+                },
+                note: "",
+              },
+            },
+          },
+        },
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /has no displayNumber while its children use root question/iu,
+      );
+    });
+  });
+
   it("allows decimal subparts in a question section when badges are short", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =
@@ -6449,6 +11489,132 @@ describe("Spark agent tool: publish_sheet guards", () => {
                 note: "",
               },
               q01_2: {
+                status: "correct",
+                score: {
+                  got: 1,
+                  total: 1,
+                },
+                note: "",
+              },
+            },
+          },
+        },
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).resolves.toMatchObject({
+        status: "published",
+        awardedMarks: 2,
+      });
+    });
+  });
+
+  it("allows first-level groups for nested bracket subparts in a question section", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "GCSE Chemistry worksheet",
+        awardedMarks: 2,
+        maxMarks: 2,
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Chemistry",
+            level: "GCSE",
+            title: "GCSE Chemistry worksheet",
+            subtitle: "Uploaded paper",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q2",
+                label: "Question 2",
+                questions: [
+                  {
+                    id: "q2a",
+                    type: "group",
+                    displayNumber: "a",
+                    marks: 1,
+                    prompt: "For the first system:",
+                    questions: [
+                      {
+                        id: "q2ai",
+                        type: "lines",
+                        displayNumber: "2(a)(i)",
+                        badgeLabel: "i",
+                        marks: 1,
+                        prompt: "State one item.",
+                        lines: 1,
+                      },
+                    ],
+                  },
+                  {
+                    id: "q2b",
+                    type: "group",
+                    displayNumber: "b",
+                    marks: 1,
+                    prompt: "For the second system:",
+                    questions: [
+                      {
+                        id: "q2bi",
+                        type: "lines",
+                        displayNumber: "2(b)(i)",
+                        badgeLabel: "i",
+                        marks: 1,
+                        prompt: "State another item.",
+                        lines: 1,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q2ai: "First",
+            q2bi: "Second",
+          },
+          review: {
+            score: {
+              got: 2,
+              total: 2,
+            },
+            label: "2/2",
+            message: "Correct.",
+            note: "",
+            questions: {
+              q2ai: {
+                status: "correct",
+                score: {
+                  got: 1,
+                  total: 1,
+                },
+                note: "",
+              },
+              q2bi: {
                 status: "correct",
                 score: {
                   got: 1,

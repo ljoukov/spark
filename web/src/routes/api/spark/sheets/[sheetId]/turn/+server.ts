@@ -30,6 +30,7 @@ import { getGraderRun, getWorkspaceTextFile } from '$lib/server/grader/repo';
 import { rewritePaperSheetDataAssetTargets } from '$lib/server/grader/sheetAssets';
 import { detectSparkAttachmentContentType } from '$lib/server/spark/attachmentContentType';
 import { SPARK_ATTACHMENT_UNSUPPORTED_MESSAGE } from '$lib/spark/attachments';
+import { CLOSE_GAP_NO_IMMEDIATE_MODEL_ANSWER_RULES } from '$lib/server/tutorSessions/closeGapRules';
 import {
 	appendTutorReviewMessage,
 	buildInitialTutorReviewState,
@@ -525,9 +526,7 @@ function buildCloseGapSystemPrompt(options: {
 		'This is a normal chat turn, not a multi-question worksheet review workflow.',
 		'Help the student repair the gap by writing the missing reasoning themselves.',
 		'Use one concise cue or guiding question at a time. Do not call it a stepping stone.',
-		'Do not reveal the model answer, mark scheme, official solution, or final corrected answer by default.',
-		'If the student directly asks for the answer, first try a targeted cue unless they have already made a reasonable attempt or the answer is needed to unblock them.',
-		'If you reveal a final/model answer later, make it brief and explain why it follows from the student\'s own work.',
+		...CLOSE_GAP_NO_IMMEDIATE_MODEL_ANSWER_RULES,
 		'Start by acknowledging the most sensible part of the latest attempt before naming the exact remaining gap.',
 		'Keep the reply student-facing, specific, and short.',
 		'Set status to "resolved" only when the latest student response closes the gap for this selected question. Otherwise set status to "open".',

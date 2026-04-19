@@ -29,7 +29,7 @@ Use this workflow for high-fidelity PDF transcription with diagrams.
 
 ## Page Discovery
 
-- Convert the full PDF to page images with 'pdf_to_images' before per-problem extraction.
+- Render needed PDF pages with 'pdf_to_images' before per-problem extraction. Always pass explicit 1-based 'pageNumbers'; if every page is genuinely needed, enumerate the full range after reading the page count.
 - If 'extract_pdf_images' is available, run it once for the relevant page range before manual diagram cropping. It is a deterministic first pass for embedded raster figures/maps/photos/charts, but it does not locate vector diagrams or on-page coordinates, and extracted images may omit labels drawn separately on the page.
 - If 'extract_pdf_reference_text' is available:
   - Extract once into 'output/reference/pdf-text.md'.
@@ -54,7 +54,7 @@ Use this workflow for high-fidelity PDF transcription with diagrams.
 When the same diagram crop fails for the same reason after a manual correction, treat that as a wrong-path signal and switch strategy instead of continuing hand-tuned crop boxes in the main agent.
 If one manual crop-and-view correction for the same target is still clipped, noisy, or uncertain, call 'propose_crop_bbox_with_fresh_agent' when available, 'extract_pdf_images' for embedded raster candidates, or 'extract_pdf_diagrams' for that source page and target label, before spending more turns on hand-tuned crop boxes.
 
-For each target visual, keep an explicit image-cutting step count. Do not exceed 8 image-cutting steps for one target visual without calling 'review_run_progress_with_fresh_agent' and switching strategy or reporting the blocker.
+For each target visual, keep an explicit image-cutting step count. Do not exceed 4 image-cutting steps for one target visual without calling 'review_run_progress_with_fresh_agent' and switching strategy or reporting the blocker.
 
 - Attempt pattern:
   - 'crop_image' with 'bboxPixels' from the original page image or selected complete bad crop

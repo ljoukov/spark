@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { buildSparkGraderAgentPrompt } from "../src/agent/graderAgentPrompt";
-import { resolveSparkAgentSubagentSelection } from "../src/agent/sparkAgentRunner";
+import {
+  buildSparkAgentSystemPrompt,
+  resolveSparkAgentSubagentSelection,
+} from "../src/agent/sparkAgentRunner";
 import {
   resolveSparkAgentSkills,
   SPARK_GRADER_SKILL_IDS,
@@ -38,15 +41,22 @@ describe("grader agent prompt", () => {
     const subagents = resolveSparkAgentSubagentSelection();
 
     expect(prompt).toContain("Use bounded subagents only");
-    expect(prompt).toContain(
-      "direct `view_image` is intentionally not available",
-    );
+    expect(prompt).toContain("Use `view_image` when it is exposed");
     expect(prompt).toContain("validate_crop_with_fresh_agent");
+    expect(prompt).toContain("Do not ask the reviewer to require inferred answers");
+    expect(prompt).toContain("correct `expectedContent` and revalidate once");
     expect(prompt).toContain("review_run_progress_with_fresh_agent");
+    expect(prompt).toContain("score_answers_with_fresh_agent");
+    expect(prompt).toContain("returns per-question results inline");
+    expect(prompt).toContain("do not spend turns rereading every scoring file");
+    expect(prompt).toContain("validate_grader_artifacts");
     expect(prompt).toContain("pre-publish source-fidelity audits");
     expect(prompt).toContain("Split long material by source page or root question");
     expect(task).toContain("validate_crop_with_fresh_agent");
+    expect(task).toContain("printed/visible visual labels");
+    expect(task).toContain("correct `expectedContent` and revalidate once");
     expect(task).toContain("review_run_progress_with_fresh_agent");
+    expect(task).toContain("score_answers_with_fresh_agent");
     expect(task).not.toContain("exactly 1 subagent per problem");
     expect(subagents).toMatchObject({
       promptPattern: "codex",
@@ -58,28 +68,53 @@ describe("grader agent prompt", () => {
     expect(JSON.stringify(subagents)).toContain(
       "Final figure/image crop validation must use the dedicated validate_crop_with_fresh_agent tool",
     );
+    expect(JSON.stringify(subagents)).toContain(
+      "score_answers_with_fresh_agent",
+    );
   });
 
   it("keeps publish/output requirements in the grader harness", () => {
     const prompt = buildSparkGraderAgentPrompt();
 
     expect(prompt).toContain(
-      "Once transcription, official/source references, and the sheet plan exist, stop broad reference reading",
+      "Once transcription, official/source references, and the sheet plan exist, stop broad reference reading/searching",
     );
+    expect(prompt).toContain("do not search for schema examples");
+    expect(prompt).toContain("Do not score the whole paper in one long hidden reasoning pass");
+    expect(prompt).toContain("do not reread every scoring file");
+    expect(prompt).toContain("modelAnswer");
+    expect(prompt).toContain("including `teacher-review` when returned");
+    expect(prompt).toContain("Preserve returned scores/statuses");
+    expect(prompt).toContain("omit optional model-answer/reference enrichment");
+    expect(prompt).toContain("the next non-repair tool call must be");
     expect(prompt).toContain(
-      "before the first publish attempt, verify that both files exist",
+      'validate_grader_artifacts({"requireSourceFidelityAudit": false})',
     );
     expect(prompt).toContain('"totals": { "awardedMarks": number');
     expect(prompt).toContain('"filePath": "grader/output/sheet.json"');
     expect(prompt).toContain("full graded report wrapper");
     expect(prompt).toContain("`schemaVersion`, `sheet`, `answers`, `review`");
     expect(prompt).toContain("Do not use `generate_json`");
+    expect(prompt).toContain("validate_grader_artifacts");
     expect(prompt).toContain("publish_sheet({})");
     expect(prompt).toContain("stable Apple-style sheet palette");
     expect(prompt).toContain("presentation.summaryMarkdown");
     expect(prompt).toContain("one compact sentence or two short fragments");
     expect(prompt).toContain("official grade/prize/medal/percentile outcome");
     expect(prompt).toContain('generic lead-ins such as "This sheet"');
+  });
+
+  it("keeps lesson JSON pipeline instructions out of grader-mode system prompts", () => {
+    const prompt = buildSparkAgentSystemPrompt({
+      includePdfTranscriptionSkill: true,
+      mode: "grader",
+    });
+
+    expect(prompt).toContain("Grader / worksheet publishing pipeline");
+    expect(prompt).toContain("Do not use generate_json for grader/output/sheet.json");
+    expect(prompt).not.toContain("Lesson creation pipeline");
+    expect(prompt).not.toContain("Use generate_json({ sourcePath");
+    expect(prompt).not.toContain("validate_json({ schemaPath");
   });
 
   it("preserves high-risk grading workflow rules in skills", () => {
@@ -109,10 +144,28 @@ describe("grader agent prompt", () => {
     expect(skills).toContain("Do not publish linked crop assets");
     expect(skills).toContain("question-relevant content");
     expect(skills).toContain("expectedContent");
+    expect(skills).toContain(
+      "Do not include inferred answers, hidden context, mark-scheme facts, or unprinted labels",
+    );
+    expect(skills).toContain("fix `expectedContent` and rerun validation once");
     expect(skills).toContain("duplicatedTextToExclude");
-    expect(skills).toContain("image-cutting-step N/8");
+    expect(skills).toContain("image-cutting-step N/4");
+    expect(skills).toContain("reached the 4-step cap");
+    expect(skills).not.toContain("reached the 8-step cap");
+    expect(skills).not.toContain("intentionally unavailable");
     expect(skills).toContain("extract_pdf_images");
     expect(skills).toContain("review_run_progress_with_fresh_agent");
+    expect(skills).toContain("score_answers_with_fresh_agent");
+    expect(skills).toContain("returns per-question results inline");
+    expect(skills).toContain("modelAnswer");
+    expect(skills).toContain("including `teacher-review` when returned");
+    expect(skills).toContain("reread every scoring file");
+    expect(skills).toContain("validate_grader_artifacts");
+    expect(skills).toContain("Do not search for schema examples");
+    expect(skills).toContain("never wrap those leaves in an unnumbered parent group");
+    expect(skills).not.toContain(
+      "create an explicit parent `group` entry for the root question",
+    );
     expect(skills).toContain("## Fresh Source-Fidelity Audit");
     expect(skills).toContain("Do not drop a visible prompt or partial response");
     expect(skills).toContain("Do not treat a learner's broad focus wording");

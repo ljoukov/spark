@@ -17,6 +17,52 @@ async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
 }
 
 describe("Spark agent workspace file tools", () => {
+  it("blocks repeated unbounded reads of large generated references", async () => {
+    await withTempDir(async (rootDir) => {
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "grader/output/qp-reference.md"),
+        Array.from(
+          { length: 900 },
+          (_, index) =>
+            `0 1 . ${(index + 1).toString()} Figure 1 source line ${index + 1}`,
+        ).join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+      const readTool = tools.read_workspace_file;
+      requireFunctionTool(readTool);
+
+      await expect(
+        readTool.execute({ filePath: "grader/output/qp-reference.md" }),
+      ).resolves.toContain("compact line-numbered outline");
+      await expect(
+        readTool.execute({ filePath: "grader/output/qp-reference.md" }),
+      ).rejects.toThrow(/repeated unbounded read blocked/iu);
+      await expect(
+        readTool.execute({
+          filePath: "grader/output/qp-reference.md",
+          startLine: 68,
+          lineCount: 2,
+        }),
+      ).resolves.toContain("source line 68\n0 1 . 69");
+    });
+  });
+
   it("accepts common line-range suffixes on read_workspace_file paths", async () => {
     await withTempDir(async (rootDir) => {
       await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
@@ -74,6 +120,11 @@ describe("Spark agent workspace file tools", () => {
           filePath: "grader/output/ref.md:line=14&count=2",
         }),
       ).resolves.toContain("line 14\nline 15");
+      const startCountResult = await readTool.execute({
+        filePath: "grader/output/ref.md:start=18,count=2",
+      });
+      expect(startCountResult).toContain("line 18\nline 19");
+      expect(startCountResult).not.toContain("line 1\nline 2");
 
       const grepTool = tools.grep_workspace_files;
       requireFunctionTool(grepTool);

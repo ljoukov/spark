@@ -71,6 +71,7 @@ import {
   normalizeTutorMarkdown,
   visitPaperSheetQuestions,
   type CodeProblem,
+  type PaperSheetQuestionEntry,
   type PaperSheetQuestion,
   type QuizDefinition,
   type Session,
@@ -410,6 +411,9 @@ const AGENT_INLINE_ATTACHMENT_MAX_BYTES = 8 * 1024 * 1024;
 const ATTACHMENT_DOWNLOAD_CONCURRENCY = 6;
 const DEFAULT_PDF_PAGE_IMAGE_SCALE = 4.75;
 const DEFAULT_PDF_PAGE_IMAGE_MAX_DIMENSION = 4000;
+const PDF_PAGE_NUMBERS_PREFERRED_THRESHOLD = 12;
+const PDF_PAGE_NUMBERS_REQUIRED_THRESHOLD =
+  PDF_PAGE_NUMBERS_PREFERRED_THRESHOLD;
 const GRADER_PRE_PUBLISH_IMAGE_EDIT_BUDGET = 80;
 const GRADER_PRE_PUBLISH_CROP_ATTEMPTS_PER_OUTPUT_BUDGET = 6;
 const WEB_FETCH_TIMEOUT_MS = 20_000;
@@ -956,6 +960,7 @@ function normalizeRawPaperSheetShapeForPublish(value: unknown): {
   const nextSheet: Record<string, unknown> = { ...sheet };
   const review = asJsonObject(root.review);
   const nextReview = review ? { ...review } : null;
+  const questionById = new Map<string, Record<string, unknown>>();
 
   if (
     nextReview &&
@@ -979,6 +984,42 @@ function normalizeRawPaperSheetShapeForPublish(value: unknown): {
       return entry;
     }
     const nextQuestion: Record<string, unknown> = { ...question };
+    if (typeof nextQuestion.id === "string") {
+      questionById.set(nextQuestion.id, nextQuestion);
+    }
+    if (
+      nextQuestion.type === "calc" &&
+      (typeof nextQuestion.inputLabel !== "string" ||
+        nextQuestion.inputLabel.trim().length === 0 ||
+        typeof nextQuestion.unit !== "string")
+    ) {
+      nextQuestion.type = "lines";
+      nextQuestion.lines = 4;
+      delete nextQuestion.inputLabel;
+      delete nextQuestion.unit;
+      delete nextQuestion.hint;
+      changed = true;
+    } else if (
+      nextQuestion.type === "fill" &&
+      Array.isArray(nextQuestion.segments)
+    ) {
+      nextQuestion.type = "cloze";
+      changed = true;
+    } else if (
+      nextQuestion.type === "fill" &&
+      Array.isArray(nextQuestion.blanks) &&
+      typeof nextQuestion.after !== "string"
+    ) {
+      nextQuestion.after = "";
+      changed = true;
+    }
+    if (nextQuestion.type === "mcq") {
+      const displayMode = normalizeRawPaperSheetMcqDisplayMode(nextQuestion);
+      if (nextQuestion.displayMode !== displayMode) {
+        nextQuestion.displayMode = displayMode;
+        changed = true;
+      }
+    }
     if (
       nextQuestion.type === "lines" &&
       typeof nextQuestion.lines !== "number"
@@ -992,6 +1033,92 @@ function normalizeRawPaperSheetShapeForPublish(value: unknown): {
       );
     }
     return nextQuestion;
+  };
+
+  const normalizeMcqAnswerToken = (answer: string): string => {
+    return answer
+      .normalize("NFKD")
+      .replace(/\\(?:text|mathrm|operatorname)\s*\{([^{}]*)\}/giu, "$1")
+      .replace(/[{}$]/gu, "")
+      .replace(/−/gu, "-")
+      .replace(/\s+/gu, "")
+      .replace(/[^0-9A-Za-z+\-()]/gu, "")
+      .toLowerCase();
+  };
+
+  const promptLooksLikePrintedChoiceQuestion = (prompt: unknown): boolean => {
+    if (typeof prompt !== "string") {
+      return false;
+    }
+    return /\b(?:tick|select|choose)\b[^.\n]{0,80}\bbox\b|\btick\s*\([^)]*\)\s*one\s*box\b|\btick\s+one\s+box\b/iu.test(
+      prompt,
+    );
+  };
+
+  const normalizeMcqAnswers = (): void => {
+    const answers = asJsonObject(
+      rootSheet ? nextRoot.answers : nextSheet.answers,
+    );
+    if (!answers) {
+      return;
+    }
+
+    for (const [questionId, rawAnswer] of Object.entries(answers)) {
+      if (typeof rawAnswer !== "string") {
+        continue;
+      }
+      if (rawAnswer.trim().length === 0) {
+        continue;
+      }
+      const question = questionById.get(questionId);
+      if (!question || question.type !== "mcq") {
+        continue;
+      }
+      if (!Array.isArray(question.options)) {
+        continue;
+      }
+
+      const options = question.options
+        .map((option) => asJsonObject(option))
+        .filter((option): option is Record<string, unknown> => option !== null);
+      const candidate = normalizeMcqAnswerToken(rawAnswer);
+      const matchedOption = options.find((option) => {
+        for (const fieldName of ["id", "label", "text"] as const) {
+          const value = option[fieldName];
+          if (
+            typeof value === "string" &&
+            normalizeMcqAnswerToken(value) === candidate
+          ) {
+            return true;
+          }
+        }
+        return false;
+      });
+      const matchedId = matchedOption?.id;
+      if (typeof matchedId === "string" && matchedId.length > 0) {
+        if (answers[questionId] !== matchedId) {
+          answers[questionId] = matchedId;
+          changed = true;
+        }
+        continue;
+      }
+
+      const allOptionTextBlank = options.every((option) => {
+        return (
+          typeof option.text !== "string" || option.text.trim().length === 0
+        );
+      });
+      if (
+        allOptionTextBlank ||
+        !promptLooksLikePrintedChoiceQuestion(question.prompt)
+      ) {
+        question.type = "lines";
+        question.lines = 4;
+        delete question.options;
+        delete question.displayMode;
+        changed = true;
+      }
+    }
   };
 
   nextSheet.sections = sheet.sections.map((section, index) => {
@@ -1033,6 +1160,7 @@ function normalizeRawPaperSheetShapeForPublish(value: unknown): {
     }
     return nextSection;
   });
+  normalizeMcqAnswers();
 
   if (!changed) {
     return { value, changed: false };
@@ -1051,6 +1179,85 @@ function normalizeRawPaperSheetShapeForPublish(value: unknown): {
   }
 
   return { value: nextSheet, changed: true };
+}
+
+function normalizeRawPaperSheetMcqDisplayMode(
+  question: Record<string, unknown>,
+): "full_options" | "labels_only" {
+  if (question.displayMode === "full_options") {
+    return "full_options";
+  }
+  if (question.displayMode === "labels_only") {
+    return "labels_only";
+  }
+
+  const rawMode =
+    typeof question.displayMode === "string"
+      ? question.displayMode.trim().toLowerCase()
+      : "";
+  if (
+    rawMode === "labels" ||
+    rawMode === "label" ||
+    rawMode === "label_only" ||
+    rawMode === "labels-only"
+  ) {
+    return "labels_only";
+  }
+  if (
+    rawMode === "full" ||
+    rawMode === "full-options" ||
+    rawMode === "full options"
+  ) {
+    return "full_options";
+  }
+
+  const options = Array.isArray(question.options)
+    ? question.options
+        .map((option) => asJsonObject(option))
+        .filter((option): option is Record<string, unknown> => option !== null)
+    : [];
+  if (options.length === 0) {
+    return "full_options";
+  }
+
+  const prompt =
+    typeof question.prompt === "string" ? question.prompt.trim() : "";
+  const labels = options.map((option) => {
+    const label = typeof option.label === "string" ? option.label.trim() : "";
+    if (label.length > 0) {
+      return label;
+    }
+    return typeof option.id === "string" ? option.id.trim() : "";
+  });
+  const texts = options.map((option) =>
+    typeof option.text === "string" ? option.text.trim() : "",
+  );
+  const everyTextIsPlaceholder = texts.every((text, index) => {
+    if (text.length === 0) {
+      return true;
+    }
+    const label = labels[index] ?? "";
+    if (label.length === 0) {
+      return false;
+    }
+    const escapedLabel = escapeRegExpLiteral(label);
+    return new RegExp(
+      `^(?:option|model|diagram|figure)?\\s*${escapedLabel}$`,
+      "iu",
+    ).test(text);
+  });
+  if (everyTextIsPlaceholder) {
+    return "labels_only";
+  }
+
+  const hasVisualPrompt =
+    prompt.length > 0 && VISUAL_CONTEXT_PROMPT_PATTERN.test(prompt);
+  const everyOptionHasLabel = labels.every((label) => label.length > 0);
+  if (hasVisualPrompt && everyOptionHasLabel) {
+    return "labels_only";
+  }
+
+  return "full_options";
 }
 
 async function normalizeRawGraderQuestionReviewsForPublish(options: {
@@ -1466,6 +1673,57 @@ function sanitizeToolTraceValue(options: {
   return options.value;
 }
 
+const COMMON_RAW_LATEX_COMMAND_PATTERN =
+  /^(?:alpha|angle|approx|array|begin|beta|boxed|cdot|cdots|circ|cong|cos|Delta|delta|dfrac|div|end|equiv|frac|gamma|ge|geq|hline|infty|int|lambda|land|left|leftarrow|le|leq|lim|ln|log|lor|mathit|mathbf|mathrm|mp|mu|nabla|neg|neq|not|operatorname|over|parallel|perp|phantom|pi|pm|qquad|quad|rightarrow|right|sigma|sim|sin|sqrt|sum|tan|text|textbf|tfrac|therefore|theta|times|to|triangle|underbrace|underline|vline|xrightarrow)/u;
+
+function repairCommonRawLatexJsonBackslashes(jsonText: string): string {
+  let changed = false;
+  let output = "";
+  for (let index = 0; index < jsonText.length; index += 1) {
+    const character = jsonText[index];
+    if (character !== "\\") {
+      output += character;
+      continue;
+    }
+
+    const next = jsonText[index + 1];
+    if (next === undefined) {
+      output += "\\\\";
+      changed = true;
+      continue;
+    }
+    if (next === "\\") {
+      output += "\\\\";
+      index += 1;
+      continue;
+    }
+
+    const tail = jsonText.slice(index + 1);
+    if (
+      next === "(" ||
+      next === ")" ||
+      next === "[" ||
+      next === "]" ||
+      COMMON_RAW_LATEX_COMMAND_PATTERN.test(tail) ||
+      (next === "u" && !/^u[0-9a-fA-F]{4}/u.test(tail))
+    ) {
+      output += "\\\\";
+      changed = true;
+      continue;
+    }
+
+    if (`"\\/bfnrtu`.includes(next)) {
+      output += "\\";
+      continue;
+    }
+
+    output += "\\\\";
+    changed = true;
+  }
+
+  return changed ? output : jsonText;
+}
+
 function formatToolLogSnippet(value: unknown): string {
   const capped = capUtf8Text(
     serializeTraceValue(value),
@@ -1862,13 +2120,17 @@ function parseOptionalPositiveInt(value: unknown): number | undefined {
   if (value === null || value === undefined) {
     return undefined;
   }
-  if (typeof value !== "number") {
+  const parsedValue =
+    typeof value === "string" && /^\d+$/u.test(value.trim())
+      ? Number.parseInt(value.trim(), 10)
+      : value;
+  if (typeof parsedValue !== "number") {
     return undefined;
   }
-  if (!Number.isInteger(value) || value < 1) {
+  if (!Number.isInteger(parsedValue) || parsedValue < 1) {
     return undefined;
   }
-  return value;
+  return parsedValue;
 }
 
 function renderWorkspaceFileReadResult(input: {
@@ -1918,7 +2180,7 @@ function renderWorkspaceFileReadResult(input: {
       return [
         `[read_workspace_file] ${input.filePath}`,
         `large generated output/reference file already returned a compact outline in this run (repeat #${input.largeOutlineReadCount.toString()})`,
-        "content omitted=true; do not call this file unbounded again; use grep_workspace_files with specific question/page labels, then read_workspace_file with startLine/lineCount for exact sections",
+        `content omitted=true; do not call this file unbounded again; use grep_workspace_files with specific question/page labels, then read_workspace_file with startLine/lineCount for exact sections; example: read_workspace_file({"filePath":"${input.filePath}","startLine":68,"lineCount":80})`,
       ].join("; ");
     }
     return renderLargeGeneratedWorkspaceFileOutline({
@@ -1946,7 +2208,7 @@ function renderWorkspaceFileReadResult(input: {
   ];
   if (contentTruncated || rangeTruncated) {
     notices.push(
-      "truncated=true; use grep_workspace_files to locate headings/question labels, then read_workspace_file with startLine/lineCount for exact sections; use maxChars only when a larger bounded preview is necessary",
+      `truncated=true; use grep_workspace_files to locate headings/question labels, then read_workspace_file with startLine/lineCount for exact sections; use maxChars only when a larger bounded preview is necessary; example: read_workspace_file({"filePath":"${input.filePath}","startLine":${startLine.toString()},"lineCount":${lineCount.toString()}})`,
     );
   }
   return `${notices.join("; ")}\n\n${truncatedContent}`;
@@ -2098,7 +2360,7 @@ function renderLargeGeneratedWorkspaceFileOutline(input: {
     `[read_workspace_file] ${input.filePath}`,
     `large generated output/reference file: ${input.lines.length.toString()} lines, ${input.contentChars.toString()} chars`,
     `showing compact line-numbered outline (${outlineLines.length.toString()} entries, max ${READ_WORKSPACE_FILE_LARGE_OUTLINE_MAX_LINES.toString()})`,
-    "truncated=true; use grep_workspace_files for specific labels or read_workspace_file with startLine/lineCount for exact source-paper or mark-scheme sections",
+    `truncated=true; use grep_workspace_files for specific labels or read_workspace_file with startLine/lineCount for exact source-paper or mark-scheme sections; example: read_workspace_file({"filePath":"${input.filePath}","startLine":68,"lineCount":80})`,
   ];
   return `${notices.join("; ")}\n\n${outlineLines.join("\n")}`;
 }
@@ -2184,6 +2446,70 @@ const GraderRunSummarySchema = z
   }));
 
 type GraderRunSummary = z.infer<typeof GraderRunSummarySchema>;
+
+function summarizeFirstActionableReviewIssue(
+  report: SparkGraderWorksheetReport,
+): string | null {
+  for (const review of Object.values(report.review.questions)) {
+    const note = review.note.trim();
+    if (review.status !== "correct" && note.length > 0) {
+      const [firstSentence] = note.split(/(?<=[.!?])\s+/u);
+      const summary = firstSentence?.trim();
+      if (
+        summary &&
+        !/\b\d{1,3}\s*\/\s*\d{1,3}\b/u.test(summary) &&
+        !USER_VISIBLE_PROCESS_METADATA_PATTERN.test(summary)
+      ) {
+        return summary;
+      }
+    }
+  }
+  return null;
+}
+
+function buildDerivedGraderRunSummary(options: {
+  report: SparkGraderWorksheetReport;
+  sheetPath: string;
+}): GraderRunSummary {
+  const { report } = options;
+  const reviewMessage = report.review.message.trim();
+  const reviewMessageIsUsable =
+    reviewMessage.length > 0 &&
+    !SCORE_ONLY_REVIEW_MESSAGE_PATTERN.test(reviewMessage) &&
+    !/\b\d{1,3}\s*\/\s*\d{1,3}\b/u.test(reviewMessage) &&
+    !USER_VISIBLE_PROCESS_METADATA_PATTERN.test(reviewMessage);
+  const summaryMarkdown =
+    (reviewMessageIsUsable ? reviewMessage : null) ??
+    summarizeFirstActionableReviewIssue(report) ??
+    "Review the response-needed notes and add clearer working where asked.";
+  const references = report.references;
+  return {
+    ...(references?.paperUrl ? { paperUrl: references.paperUrl } : {}),
+    ...(references?.paperStoragePath
+      ? { paperStoragePath: references.paperStoragePath }
+      : {}),
+    ...(references?.markSchemeUrl
+      ? { markSchemeUrl: references.markSchemeUrl }
+      : {}),
+    ...(references?.markSchemeStoragePath
+      ? { markSchemeStoragePath: references.markSchemeStoragePath }
+      : {}),
+    presentation: {
+      title: report.sheet.title,
+      subtitle: report.sheet.subtitle,
+      summaryMarkdown,
+      footer: "Question paper and mark scheme supplied.",
+    },
+    totals: {
+      awardedMarks: report.review.score.got,
+      maxMarks: report.review.score.total,
+    },
+    sheet: {
+      title: report.sheet.title,
+      filePath: options.sheetPath,
+    },
+  };
+}
 
 type PublishedGraderSheetArtifacts = {
   summaryPath: string;
@@ -2390,7 +2716,7 @@ export function resolveSparkAgentSubagentSelection(): AgentSubagentToolSelection
     maxAgents: 6,
     instructions: [
       "Grader subagent policy: when this workspace contains grader/task.md, keep intake, upload inventory, workspace file reading, transcription, final grading synthesis, and worksheet assembly on the main grader agent. The main grader has the required tools and must own the final outputs.",
-      "In grader runs, spawn_agent may be used only for bounded sidecar work that keeps context clean: official-source lookup/verification when request.json allows online official references, or visual localization/proposal work for ambiguous source images. Do not delegate the final scoring or sheet JSON.",
+      "In grader runs, spawn_agent may be used only for bounded sidecar work that keeps context clean: official-source lookup/verification when request.json allows online official references, or visual localization/proposal work for ambiguous source images. For long handwritten papers, use the dedicated score_answers_with_fresh_agent tool for bounded root-question scoring instead of generic spawn_agent. Do not delegate sheet JSON assembly.",
       "If the main grader is worried it is on the wrong path, it should use the dedicated review_run_progress_with_fresh_agent tool rather than generic spawn_agent.",
       "Final figure/image crop validation must use the dedicated validate_crop_with_fresh_agent tool with exactly one final crop, crop path, and question context per validation call.",
       "If you are tempted to ask a subagent to read brief.md, request.json, grader/task.md, grader/uploads/index.json, transcription files, or reference text, do not spawn; read those files yourself.",
@@ -2500,6 +2826,25 @@ function resolveWorkspaceRelativePath(
     throw new Error(`Path "${absolutePath}" is outside workspace.`);
   }
   return relative.replace(/\\/gu, "/");
+}
+
+async function countWorkspaceJsonFiles(
+  workspaceDir: string,
+  targetDir: string,
+): Promise<number> {
+  try {
+    const entries = await readdir(resolveWorkspacePath(workspaceDir, targetDir), {
+      withFileTypes: true,
+    });
+    return entries.filter((entry) => {
+      return entry.isFile() && /\.json$/iu.test(entry.name);
+    }).length;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return 0;
+    }
+    throw error;
+  }
 }
 
 function isUserUploadPath(userId: string, storagePath: string): boolean {
@@ -2870,10 +3215,95 @@ function formatZodIssueSummary(
   maxIssues = 10,
 ): string {
   const summary = error.issues
+    .flatMap((issue) => flattenZodIssueForSummary(issue))
     .slice(0, maxIssues)
-    .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
     .join("; ");
   return summary.length > 0 ? summary : "unknown schema issue";
+}
+
+function flattenZodIssueForSummary(
+  issue: z.ZodIssue,
+  parentPath: readonly (string | number)[] = [],
+): string[] {
+  const issuePath = [...parentPath, ...issue.path];
+  if (issue.code === "invalid_union") {
+    const nestedIssueGroups = (issue as { errors?: unknown }).errors;
+    if (Array.isArray(nestedIssueGroups)) {
+      const nestedSummaries: string[] = [];
+      for (const nestedIssues of nestedIssueGroups) {
+        if (!Array.isArray(nestedIssues)) {
+          continue;
+        }
+        for (const nestedIssue of nestedIssues) {
+          if (!isZodIssueLike(nestedIssue)) {
+            continue;
+          }
+          nestedSummaries.push(
+            ...flattenZodIssueForSummary(nestedIssue, issuePath),
+          );
+        }
+      }
+      if (nestedSummaries.length > 0) {
+        return nestedSummaries;
+      }
+    }
+  }
+  return [`${issuePath.join(".") || "(root)"}: ${issue.message}`];
+}
+
+function isZodIssueLike(value: unknown): value is z.ZodIssue {
+  return (
+    isPlainRecord(value) &&
+    Array.isArray(value.path) &&
+    typeof value.message === "string"
+  );
+}
+
+function collectRawGraderWorksheetShapeIssues(
+  value: unknown,
+  pathParts: readonly string[] = [],
+): string[] {
+  const issues: string[] = [];
+  if (Array.isArray(value)) {
+    for (const [index, item] of value.entries()) {
+      issues.push(
+        ...collectRawGraderWorksheetShapeIssues(item, [
+          ...pathParts,
+          index.toString(),
+        ]),
+      );
+    }
+    return issues;
+  }
+  if (!isPlainRecord(value)) {
+    return issues;
+  }
+
+  if (value.type === "calc") {
+    const id =
+      typeof value.id === "string" && value.id.trim().length > 0
+        ? value.id.trim()
+        : pathParts.join(".") || "(unknown calc question)";
+    if (
+      typeof value.inputLabel !== "string" ||
+      value.inputLabel.trim().length === 0 ||
+      typeof value.unit !== "string"
+    ) {
+      issues.push(
+        `calc question "${id}" is missing required inputLabel/unit fields; use type "lines" for handwritten calculation or worked-method leaves unless the source is a single answer blank`,
+      );
+    }
+  }
+
+  for (const [key, nestedValue] of Object.entries(value)) {
+    issues.push(
+      ...collectRawGraderWorksheetShapeIssues(nestedValue, [
+        ...pathParts,
+        key,
+      ]),
+    );
+  }
+  return issues;
 }
 
 const SYNTHETIC_QUESTION_SECTION_ID_PATTERN = /^s\d+$/iu;
@@ -2896,12 +3326,8 @@ const VISUAL_CONTEXT_PROMPT_PATTERN =
   /\b(?:figure|fig\.?|diagram|photo(?:graph)?|graph|chart|map)\b|\bimage\s+(?:shows?|below|above|labelled|labeled|of)\b|\b(?:shown|labelled|labeled)\s+in\s+the\s+image\b/iu;
 const SOURCE_PDF_VISUAL_REFERENCE_PATTERN =
   /\b(?:linked|original|source|uploaded|official)(?:\s+(?:linked|original|source|uploaded|official))*\s+(?:PDF|paper|question\s+paper|document)\b|\b(?:PDF|paper|question\s+paper|document)\s+(?:link|reference)\b|\blink\s+to\s+(?:the\s+)?(?:linked|original|source|uploaded|official)(?:\s+(?:PDF|paper|question\s+paper|document))?\b/iu;
-const ABOVE_VISUAL_REFERENCE_PATTERN =
-  /\b(?:Figure|Fig\.?|Diagram)\s+\d+(?:\.\d+)*[A-Za-z]?\b[^.?!\n]{0,120}\babove\b|\babove\b[^.?!\n]{0,120}\b(?:Figure|Fig\.?|Diagram)\s+\d+(?:\.\d+)*[A-Za-z]?\b/iu;
 const ANCHORED_VISUAL_REFERENCE_PATTERN =
   /\[(?:Figure|Fig\.?|Diagram)\s+\d+(?:\.\d+)*[A-Za-z]?\]\(#(?:figure|fig|diagram)-[^)\s]+\)/iu;
-const ABOVE_TABLE_REFERENCE_PATTERN =
-  /\bTable\s+\d+(?:\.\d+)*[A-Za-z]?\b[^.?!\n]{0,120}\babove\b|\babove\b[^.?!\n]{0,120}\bTable\s+\d+(?:\.\d+)*[A-Za-z]?\b/iu;
 const ANCHORED_TABLE_REFERENCE_PATTERN =
   /\[Table\s+\d+(?:\.\d+)*[A-Za-z]?\]\(#table-[^)\s]+\)/iu;
 const MARKDOWN_TABLE_PATTERN = /^\s*\|?(?:\s*:?-{3,}:?\s*\|){2,}\s*$/mu;
@@ -2933,8 +3359,10 @@ const STANDALONE_OPTION_LABEL_LINE_PATTERN =
 const SPAWN_AGENT_TOOL_PATTERN = /\btool=spawn_agent\b/u;
 const FRESH_CROP_REVIEW_TOOL_PATTERN =
   /\btool=validate_crop_with_fresh_agent\b/u;
-const SOURCE_FIDELITY_REVIEW_TOOL_PATTERN =
-  /\btool=validate_source_fidelity_with_fresh_agent\b/u;
+const SOURCE_FIDELITY_REVIEW_TOOL_SUCCESS_PATTERN =
+  /\btool_call_completed:.*\btool=validate_source_fidelity_with_fresh_agent\b.*\bstatus=ok\b/u;
+const SCORE_ANSWERS_REVIEW_TOOL_PATTERN =
+  /\btool=score_answers_with_fresh_agent\b/u;
 const CROP_VALIDATION_SUBAGENT_PATTERN = /\b(?:fresh-context\s+)?subagent\b/iu;
 const CROP_VALIDATION_PASS_PATTERN =
   /\b(?:pass(?:ed)?|validated|complete|all\s+(?:required\s+)?(?:content|information)|visible|not\s+clipped|included)\b/iu;
@@ -2944,6 +3372,8 @@ const CROP_VALIDATION_UNRESOLVED_PATTERN =
   /(?:\b(?:fail(?:ed)?|unresolved|still|not\s+(?:visible|fixed|resolved|included|safe)|unsafe|overbroad|noisy|full\s+page|whole\s+page|broad\s+page|page\s+context|image-edit\s+budget)\b|(?:^|[;,\n-]\s*)(?:pass\/fail|visible|included|complete|safe|(?:all\s+)?question[-\s]?relevant\s+(?:content|information)\s+(?:visible|included|complete|safe)|(?:required|important)\s+(?:content|information)\s+(?:visible|included|complete|safe)|(?:content|information)\s+(?:visible|included|complete|safe))\s*:\s*(?:no|fail|failed)\b)/iu;
 const CROP_VALIDATION_NEGATIVE_FIELD_PATTERN =
   /^\s*(?:[-*]\s*)?(?:pass\/fail|all\s+question[-\s]?relevant\s+content\s+visible|all\s+question[-\s]?relevant\s+information\s+visible|required\s+content\s+visible|required\s+information\s+visible|important\s+content\s+visible|important\s+information\s+visible)\s*:\s*(?:no|fail|failed)\b/iu;
+const CROP_VALIDATION_PASS_FAIL_PASS_FIELD_PATTERN =
+  /^\s*(?:[-*]\s*)?pass\/fail\s*:\s*pass\b/iu;
 const CROP_VALIDATION_PASS_FAIL_FAIL_FIELD_PATTERN =
   /^\s*(?:[-*]\s*)?pass\/fail\s*:\s*(?:fail|failed)\b/iu;
 const CROP_VALIDATION_VISIBLE_CONTENT_YES_FIELD_PATTERN =
@@ -2952,6 +3382,8 @@ const CROP_VALIDATION_DUPLICATE_NOT_EXCLUDED_FIELD_PATTERN =
   /^\s*(?:[-*]\s*)?duplicated\s+caption\/question\/table\s+text\s+excluded\s*:\s*no\b/iu;
 const CROP_VALIDATION_NEGATED_RISK_FIELD_PATTERN =
   /^\s*(?:[-*]\s*)?(?=[^:\n]*(?:unrelated|non[-\s]?target|edge\s+clipping|edge\s+touching|touching\s+(?:an\s+)?edge|page\s+borders?|separator\s+lines?|answer\s+lines?|neighbou?r(?:ing)?[-\s]?question))[^:\n]+:\s*(?:no|none|not[_\s-]?applicable|n\/a|false|absent)\b/iu;
+const CROP_VALIDATION_POSITIVE_RISK_FIELD_PATTERN =
+  /^\s*(?:[-*]\s*)?(?=[^:\n]*(?:unrelated|non[-\s]?target|edge\s+clipping|edge\s+touching|touching\s+(?:an\s+)?edge|page\s+borders?|separator\s+lines?|answer\s+lines?|neighbou?r(?:ing)?[-\s]?question))[^:\n]+:\s*(?:yes|true|present|included|visible)\b/iu;
 const CROP_VALIDATION_ASSET_SUBAGENT_CHECK_PATTERN =
   /\bfresh-context\s+subagent\s+checked\s*:\s*yes\b|\bsubagent\s+checked\s*:\s*yes\b|\bfresh-context\s+subagent\b.*\b(?:pass(?:ed)?|checked|validated|confirmed)\b/iu;
 const CROP_VALIDATION_VISIBLE_TEXT_PATTERN =
@@ -2963,9 +3395,23 @@ const SOURCE_FIDELITY_PASS_PATTERN =
 const SOURCE_FIDELITY_BLOCKING_PATTERN =
   /\bpass\/fail\s*:\s*(?:fail|failed)\b|\b(?:visible\s+source\s+items\s+represented|verbatim\s+wording\s+preserved|numbering\s+and\s+badges\s+correct|figures\/tables\/layouts\s+preserved|answer\s+evidence\s+aligned)\s*:\s*no\b/iu;
 const SOURCE_FIDELITY_BLOCKING_ISSUES_FIELD_PATTERN =
-  /(?:^|\n)\s*(?:[-*]\s*)?blocking\s+issues\s*:\s*([^\n]*)/iu;
+  /(?:^|\n)\s*(?:[-*]\s*)?blocking\s+issues\s*:\s*([^\n]*)/giu;
 const SOURCE_FIDELITY_NO_BLOCKING_ISSUES_PATTERN =
-  /^(?:none|n\/a|not_applicable|no)\b/iu;
+  /^(?:none|n\/a|not[_\s-]?applicable|no(?:\s+blocking\s+issues?)?)[.!;]*$/iu;
+const SOURCE_TRANSCRIPTION_INCOMPLETE_PLACEHOLDER_PATTERN =
+  /\b(?:full\s+source\s+wording\s+[^.\n]{0,80}not\s+yet|not\s+yet\s+(?:copied|transcribed|included|complete)|source\s+wording\s+(?:missing|incomplete)|(?:todo|tbd)\b)/iu;
+const SOURCE_TRANSCRIPTION_SUMMARY_ONLY_PATTERN =
+  /\bcompact\s+(?:source\s+)?audit\b|\bsource\s+paper\s+prompts?\s+actually\s+needed\s+for\s+grading\b|\bsource\s+items?\s+actually\s+needed\s+for\s+grading\b|\bonly\s+(?:the\s+)?source\s+items?\s+(?:visibly\s+)?answered\b|\bsource\s+items?\s+(?:visibly\s+)?answered\s+in\s+the\s+student\s+submission\b/iu;
+const SOURCE_TRANSCRIPTION_VISUAL_SUMMARY_PATTERN =
+  /\boptions?\s*(?::|shown\s+as)\s*(?:[*_`]+)?[A-H](?:[*_`]+)?(?:(?:\s*,\s*|\s+)(?:[*_`]+)?[A-H](?:[*_`]+)?){2,}\s+(?:shown\s+as\s+)?(?:diagram|visual|image)\s+(?:choices|labels)\b|\boptions?\s*(?::|shown\s+as|\s+)\s*(?:(?:[*_`]+)?[A-H](?:[*_`]+)?(?:(?:\s*,\s*|\s+)(?:[*_`]+)?[A-H](?:[*_`]+)?){2,}|[A-H]\s*[-–]\s*[A-H])\s+(?:shown\s+)?in\s+(?:Figure|Fig\.?|Diagram)\s+\d+\b|\boptions?\s+shown\s+(?:as|in)\b[^.\n]{0,120}\b(?:Figure|Fig\.?|Diagram)\s+\d+(?:\.\d+)*\b|\boptions?\s+shown\s+in\s+(?:Figure|Fig\.?|Diagram)\s+\d+(?:\.\d+)*\s+with\s+labels?\s+(?:[*_`]+)?[A-H](?:(?:\s*,\s*|\s+)(?:[*_`]+)?[A-H](?:[*_`]+)?){2,}(?:[*_`]+)?|\boptions?\s+(?:are\s+)?(?:diagram|visual|image)\s+labels?\s+[A-H](?:(?:\s*,\s*|\s+)[A-H]){2,}\b|\boptions?\s+shown\s+as\s+(?:diagram|visual|image)\s+(?:choices|labels)\b|\bshown\s+as\s+(?:diagram|visual|image)\s+(?:choices|labels)\b/iu;
+const SOURCE_TRANSCRIPTION_FORMULA_SUMMARY_PATTERN =
+  /\b(?:displayed\s+formula(?:\s+equation)?|equation|formula)\s+shown\s+(?:for|as)\b|\b(?:formula|equation)\s+shown\s+for\b/iu;
+const SYNTHETIC_SOURCE_WORKFLOW_PHRASE_PATTERN =
+  /\b(?:planned\s+as\s+crop|crop\s+path|(?:Figure|Fig\.?|Diagram|Table)\s+\d+(?:\.\d+)*[A-Za-z]?\s+(?:is|are)\s+used\s+in\s+this\s+question)\b/iu;
+const SYNTHETIC_WORKSHEET_BRIDGE_PHRASE_PATTERN =
+  /\b(?:shown\s+in\s+the\s+source\s+(?:paper|pdf|file)|(?:Figure|Fig\.?|Diagram|Table)\s+\d+(?:\.\d+)*[A-Za-z]?\s+(?:is|are)\s+used\s+in\s+this\s+question)\b/iu;
+const SHEET_PLAN_VISUAL_OMISSION_PATTERN =
+  /\bno\s+(?:final\s+)?(?:linked\s+)?(?:crop|crops|image|images|visual|visuals)(?:\s+assets?)?\s+(?:is\s+|are\s+)?(?:planned|needed|required)\b|\bno\s+crop\s+(?:is\s+)?(?:planned|needed|required)\b|\bwithout\s+(?:reproducing|rendering|showing|including)\s+(?:the\s+)?(?:figure|figures|diagram|diagrams|graph|graphs|visual|visuals|table|tables)\b|\b(?:grading|grade|marking|mark\s+scheme)\b[^.\n]{0,160}\bwithout\s+(?:reproducing|rendering|showing|including)\b/iu;
 const CROP_VALIDATION_HISTORY_FIELD_PATTERN =
   /^\s*(?:[-*]\s*)?crop\s+fixes\s+made\s*:/iu;
 const OPTION_CROP_ASSET_PATTERN = /\boptions?\b/iu;
@@ -3004,6 +3450,18 @@ const PROBLEM_STATEMENT_TRANSCRIPTION_HEADING_PATTERN =
   /^#{1,}\s+(?:problem\s+statement|source\s+problem[-\s]statement|question\s+paper|source\s+paper|printed\s+paper|source\s+question)[^\n]*(?:transcription|text|questions?)/imu;
 const ANSWER_KEY_REFERENCE_PATTERN =
   /\b(?:answer\s+key|official\s+solution|correct\s+(?:answer|option|choice|response|value)\s+is|solutions?\s*:)\b/iu;
+const SHEET_PLAN_TOTAL_MARKS_PATTERN =
+  /^\s*[-*]?\s*Total\s+source\s+marks\s*(?::|=)\s*(?:[*_`]+)?\s*(\d{1,3})\s*(?:[*_`]+)?\??\s*(?:$|[-–—>])/imu;
+const SHEET_PLAN_TOTAL_LEAVES_PATTERN =
+  /^\s*[-*]?\s*Total\s+answer-bearing\s+leaves(?:\s+(?:included|listed))?\s*(?::|=)\s*(?:[*_`]+)?\s*(\d{1,3})\s*(?:[*_`]+)?\??\s*(?:$|[-–—>])/imu;
+const SHEET_PLAN_SECTION_TOTAL_MARKS_PATTERN =
+  /^#{2,6}\s+Question\b[^\n]*?(?:\btotal\s+|\()(\d{1,3})\s+marks?\b/gimu;
+const SHEET_PLAN_LEAF_MARKS_PATTERN =
+  /^\s*[-*]\s+.*?(?:(?:→|->)\s*(\d{1,3})\s+marks?\b|\bmarks?\s+(\d{1,3})\b).*$/gimu;
+const SHEET_PLAN_SCORING_BATCH_MARKS_PATTERN =
+  /^\s*(?:\d+[.)]\s*)?Batch\b[^\n]*?[-–—]\s*(\d{1,3})\s+marks?\s*$/gimu;
+const SHEET_PLAN_SELF_CHECK_FAILURE_PATTERN =
+  /\b(?:self-check\s+failure|mismatch\s+flags|must\s+be\s+corrected\s+before\s+publication|incorrect\s+initial\s+mental\s+sum)\b/iu;
 
 function containsMathGridAsProse(markdown: string): boolean {
   return (
@@ -3026,6 +3484,8 @@ const FAKE_OBJECTIVE_OPTION_TEXT_PATTERN =
   /^(?:option\s+[A-Z]|choice\s+[A-Z])$/iu;
 const WORKSHEET_CROP_ASSET_PATH_PATTERN =
   /^(?:grader\/(?:output\/)?assets\/|sheet\/(?:output\/)?assets\/)/u;
+const INTERMEDIATE_WORKSHEET_ASSET_BASENAME_PATTERN =
+  /(?:^|[-_])(?:raw|candidate|draft|tmp|temp)(?:[-_.]|$)/iu;
 const MARKDOWN_IMAGE_TARGET_PATTERN = /!\[[^\]]*\]\(<?([^)>\s]+)>?\)/gu;
 const MARKDOWN_IMAGE_OCCURRENCE_PATTERN = /!\[([^\]]*)\]\(<?([^)>\s]+)>?\)/gu;
 const AGENT_LOG_IMAGE_EDIT_STARTED_PATTERN =
@@ -3037,6 +3497,20 @@ const CROP_EDGE_TOUCH_RATIO_THRESHOLD = 0.001;
 const DEFAULT_CROP_IMAGE_MARGIN_PX = 36;
 const GRADER_WORKSHEET_ASSET_MAX_DIMENSION = 512;
 const GRADER_WORKSHEET_ASSET_JPEG_QUALITY = 82;
+
+function getBlockedIntermediateWorksheetAssetMessage(
+  outputPath: string,
+): string | null {
+  const normalizedOutputPath = outputPath.trim().replace(/\\/gu, "/");
+  if (!WORKSHEET_CROP_ASSET_PATH_PATTERN.test(normalizedOutputPath)) {
+    return null;
+  }
+  const basename = path.posix.basename(normalizedOutputPath);
+  if (!INTERMEDIATE_WORKSHEET_ASSET_BASENAME_PATTERN.test(basename)) {
+    return null;
+  }
+  return `Refusing to write intermediate worksheet asset "${outputPath}". In grader/sheet runs, crop_image outputPath under grader/output/assets or sheet/output/assets must be the final linked path from the sheet plan, not a raw/candidate/draft/temp path. Retry immediately with the planned final asset path, for example "grader/output/assets/q01-figure-1.png", and use that exact path in sheet.json.`;
+}
 
 type SparkGraderWorksheetContentSection = Extract<
   SparkGraderWorksheetReport["sheet"]["sections"][number],
@@ -3149,6 +3623,17 @@ function parseTwoLevelBracketDisplayNumber(
   };
 }
 
+function badgeLabelLooksLikeFullSourceNumber(label: string): boolean {
+  const trimmed = label.trim();
+  const normalized = normalizeSubpartLabel(trimmed);
+  return (
+    /^0\d+$/u.test(normalized) ||
+    DECIMAL_SUBPART_DISPLAY_NUMBER_PATTERN.test(trimmed) ||
+    ONE_LEVEL_BRACKET_DISPLAY_NUMBER_PATTERN.test(trimmed) ||
+    TWO_LEVEL_BRACKET_DISPLAY_NUMBER_PATTERN.test(trimmed)
+  );
+}
+
 function parseQuestionSectionRoot(label: string): string | null {
   const match = /^Question\s+0?(\d+)\b/iu.exec(label.trim());
   return match?.[1] ?? null;
@@ -3187,6 +3672,122 @@ function collectNamedReferences(text: string, pattern: RegExp): Set<string> {
   return references;
 }
 
+function formatFlexibleSourceDigitsPattern(value: string): string {
+  return value
+    .split("")
+    .map((digit) => escapeRegExpLiteral(digit))
+    .join(String.raw`\s*`);
+}
+
+function createExtractedSourceDisplayNumberPattern(
+  displayNumber: string,
+): RegExp | null {
+  const decimal = /^(\d+)\.(\d+)$/u.exec(displayNumber);
+  if (decimal?.[1] && decimal[2]) {
+    return new RegExp(
+      String.raw`\b0?\s*${formatFlexibleSourceDigitsPattern(decimal[1])}\s*\.\s*${formatFlexibleSourceDigitsPattern(decimal[2])}\b`,
+      "iu",
+    );
+  }
+
+  const bracket = /^(\d+)\(([^)]+)\)$/u.exec(displayNumber);
+  if (bracket?.[1] && bracket[2]) {
+    return new RegExp(
+      String.raw`\b0?\s*${formatFlexibleSourceDigitsPattern(bracket[1])}\s*\(?\s*${escapeRegExpLiteral(bracket[2])}\s*\)?\b`,
+      "iu",
+    );
+  }
+
+  const root = /^(\d+)$/u.exec(displayNumber);
+  if (root?.[1]) {
+    return new RegExp(
+      String.raw`\b0?\s*${formatFlexibleSourceDigitsPattern(root[1])}\b`,
+      "iu",
+    );
+  }
+
+  return null;
+}
+
+function collectReportDisplayNumbers(
+  report: SparkGraderWorksheetReport,
+): Set<string> {
+  const displayNumbers = new Set<string>();
+  const visitEntries = (
+    entries: readonly PaperSheetQuestionEntry[] | undefined,
+  ): void => {
+    for (const entry of entries ?? []) {
+      const normalized = normalizeDisplayNumberForComparison(
+        entry.displayNumber,
+      );
+      if (normalized !== null) {
+        displayNumbers.add(normalized);
+      }
+      if (entry.type === "group") {
+        visitEntries(entry.questions);
+      }
+    }
+  };
+
+  for (const section of report.sheet.sections) {
+    if (!("id" in section)) {
+      continue;
+    }
+    visitEntries(section.questions);
+  }
+
+  return displayNumbers;
+}
+
+function collectSourceReferenceLabelsNearDisplayNumbers(
+  sourceReferenceMarkdown: string,
+  displayNumbers: ReadonlySet<string>,
+  referencePattern: RegExp,
+): Set<string> {
+  const labels = new Set<string>();
+  if (sourceReferenceMarkdown.trim().length === 0 || displayNumbers.size === 0) {
+    return labels;
+  }
+
+  const displayPatterns = [...displayNumbers]
+    .map((displayNumber) =>
+      createExtractedSourceDisplayNumberPattern(displayNumber),
+    )
+    .filter((pattern): pattern is RegExp => pattern !== null);
+  if (displayPatterns.length === 0) {
+    return labels;
+  }
+
+  for (const match of sourceReferenceMarkdown.matchAll(referencePattern)) {
+    const label = match[1]?.trim().toLowerCase();
+    if (!label) {
+      continue;
+    }
+    const index = match.index ?? 0;
+    const nearby = sourceReferenceMarkdown.slice(
+      Math.max(0, index - 1200),
+      index + 1600,
+    );
+    if (displayPatterns.some((pattern) => pattern.test(nearby))) {
+      labels.add(label);
+    }
+  }
+
+  return labels;
+}
+
+function mergeNamedReferenceLabels(
+  ...labelSets: readonly ReadonlySet<string>[]
+): Set<string> {
+  const labels = new Set<string>();
+  for (const labelSet of labelSets) {
+    for (const label of labelSet) {
+      labels.add(label);
+    }
+  }
+  return labels;
+}
+
 function escapeRegExpLiteral(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
@@ -3203,6 +3804,344 @@ function stripQuestionPaperSuffix(value: string): string {
   return value.replace(/\s+questions?\s+paper\s*$/iu, "").trim();
 }
 
+function collectRegexIntegerMatches(text: string, pattern: RegExp): number[] {
+  return Array.from(text.matchAll(pattern))
+    .map((match) =>
+      Number.parseInt(
+        match.slice(1).find((value) => value !== undefined) ?? "",
+        10,
+      ),
+    )
+    .filter((value) => Number.isInteger(value));
+}
+
+function sumNumbers(values: readonly number[]): number {
+  return values.reduce((total, value) => total + value, 0);
+}
+
+function sheetPlanHasNamedVisualOmission(markdown: string): boolean {
+  for (const line of markdown.split(/\r?\n/gu)) {
+    const mentionsNamedVisual =
+      /\b(?:Figure|Fig\.?|Diagram|Table)\s+\d+(?:\.\d+)*[A-Za-z]?\b/iu.test(
+        line,
+      );
+    if (mentionsNamedVisual && SHEET_PLAN_VISUAL_OMISSION_PATTERN.test(line)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function collectSheetPlanConsistencyIssues(sheetPlanMarkdown: string): string[] {
+  const markdown = sheetPlanMarkdown.trim();
+  if (markdown.length === 0) {
+    return [];
+  }
+
+  const issues: string[] = [];
+  const totalMarks = Number.parseInt(
+    SHEET_PLAN_TOTAL_MARKS_PATTERN.exec(markdown)?.[1] ?? "",
+    10,
+  );
+  const totalLeaves = Number.parseInt(
+    SHEET_PLAN_TOTAL_LEAVES_PATTERN.exec(markdown)?.[1] ?? "",
+    10,
+  );
+  const sectionMarks = collectRegexIntegerMatches(
+    markdown,
+    SHEET_PLAN_SECTION_TOTAL_MARKS_PATTERN,
+  );
+  const leafMarks = collectRegexIntegerMatches(
+    markdown,
+    SHEET_PLAN_LEAF_MARKS_PATTERN,
+  );
+  const scoringBatchMarks = collectRegexIntegerMatches(
+    markdown,
+    SHEET_PLAN_SCORING_BATCH_MARKS_PATTERN,
+  );
+  const sectionMarksTotal = sumNumbers(sectionMarks);
+  const leafMarksTotal = sumNumbers(leafMarks);
+  const scoringBatchMarksTotal = sumNumbers(scoringBatchMarks);
+
+  if (SHEET_PLAN_SELF_CHECK_FAILURE_PATTERN.test(markdown)) {
+    issues.push(
+      "grader/output/sheet-plan.md records an arithmetic self-check failure or says the plan must be corrected before publication; rewrite the plan with resolved totals before bounded scoring or publish",
+    );
+  }
+
+  if (
+    Number.isInteger(totalMarks) &&
+    sectionMarks.length > 0 &&
+    totalMarks !== sectionMarksTotal
+  ) {
+    issues.push(
+      `grader/output/sheet-plan.md says Total source marks is ${totalMarks.toString()}, but question section totals sum to ${sectionMarksTotal.toString()}; fix the plan before bounded scoring or publish`,
+    );
+  }
+  if (
+    Number.isInteger(totalMarks) &&
+    leafMarks.length > 0 &&
+    totalMarks !== leafMarksTotal
+  ) {
+    issues.push(
+      `grader/output/sheet-plan.md says Total source marks is ${totalMarks.toString()}, but listed answer leaves sum to ${leafMarksTotal.toString()}; fix the plan before bounded scoring or publish`,
+    );
+  }
+  if (
+    sectionMarks.length > 0 &&
+    leafMarks.length > 0 &&
+    sectionMarksTotal !== leafMarksTotal
+  ) {
+    issues.push(
+      `grader/output/sheet-plan.md question section totals sum to ${sectionMarksTotal.toString()}, but listed answer leaves sum to ${leafMarksTotal.toString()}; fix the plan before bounded scoring or publish`,
+    );
+  }
+  if (
+    Number.isInteger(totalLeaves) &&
+    leafMarks.length > 0 &&
+    totalLeaves !== leafMarks.length
+  ) {
+    issues.push(
+      `grader/output/sheet-plan.md says Total answer-bearing leaves included is ${totalLeaves.toString()}, but lists ${leafMarks.length.toString()} answer leaves; fix the plan before bounded scoring or publish`,
+    );
+  }
+  if (
+    Number.isInteger(totalMarks) &&
+    scoringBatchMarks.length > 0 &&
+    totalMarks !== scoringBatchMarksTotal
+  ) {
+    issues.push(
+      `grader/output/sheet-plan.md says Total source marks is ${totalMarks.toString()}, but planned scoring batches sum to ${scoringBatchMarksTotal.toString()}; fix scoring batches before bounded scoring or publish`,
+    );
+  }
+  if (
+    sectionMarks.length > 0 &&
+    scoringBatchMarks.length > 0 &&
+    sectionMarksTotal !== scoringBatchMarksTotal
+  ) {
+    issues.push(
+      `grader/output/sheet-plan.md question section totals sum to ${sectionMarksTotal.toString()}, but planned scoring batches sum to ${scoringBatchMarksTotal.toString()}; fix scoring batches before bounded scoring or publish`,
+    );
+  }
+  if (sheetPlanHasNamedVisualOmission(markdown)) {
+    issues.push(
+      "grader/output/sheet-plan.md names a figure/diagram/graph but plans to omit the visible crop because grading is possible without it; plan a guarded grader/output/assets/... crop for every included named source visual before bounded scoring or publish",
+    );
+  }
+
+  return issues;
+}
+
+function collectSheetPlanDisplayNumbers(sheetPlanMarkdown: string): Set<string> {
+  const displayNumbers = new Set<string>();
+  for (const match of sheetPlanMarkdown.matchAll(/\b0?(\d{1,2})\.(\d{1,2})\b/gu)) {
+    if (match[1] && match[2]) {
+      displayNumbers.add(`${match[1]}.${match[2]}`);
+    }
+  }
+  for (const match of sheetPlanMarkdown.matchAll(/\b0?(\d{1,2})\(([^)\s]+)\)/gu)) {
+    if (match[1] && match[2]) {
+      displayNumbers.add(`${match[1]}(${match[2]})`);
+    }
+  }
+  return displayNumbers;
+}
+
+function sheetPlanHasRecordedArtifactAttempt(
+  text: string,
+  kind: "Figure" | "Table",
+  label: string,
+): boolean {
+  const escapedLabel = escapeRegExpLiteral(label);
+  const kindPattern =
+    kind === "Figure" ? String.raw`(?:Figure|Fig\.?|Diagram)` : "Table";
+  const labelPattern = new RegExp(
+    `\\b${kindPattern}\\s+${escapedLabel}\\b`,
+    "giu",
+  );
+  for (const match of text.matchAll(labelPattern)) {
+    const index = match.index ?? 0;
+    const nearby = text.slice(Math.max(0, index - 500), index + 1000);
+    if (/grader\/output\/assets\/[^\s)`'"]+/iu.test(nearby)) {
+      return true;
+    }
+    if (
+      kind === "Table" &&
+      (/\bmarkdown\b[^.\n]{0,80}\btable\b/iu.test(nearby) ||
+        /\btable\b[^.\n]{0,80}\bmarkdown\b/iu.test(nearby) ||
+        MARKDOWN_TABLE_PATTERN.test(nearby))
+    ) {
+      return true;
+    }
+    if (
+      /\b(?:failed|failure|could\s+not|cannot|unavailable|blocked)\b[^.\n]{0,120}\b(?:crop|render|extract|table)\b/iu.test(
+        nearby,
+      ) ||
+      /\b(?:crop|render|extract|table)\b[^.\n]{0,120}\b(?:failed|failure|could\s+not|cannot|unavailable|blocked)\b/iu.test(
+        nearby,
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function collectSheetPlanSourceReferenceIssues(options: {
+  sheetPlanMarkdown: string;
+  sourceReferenceMarkdown: string;
+}): string[] {
+  const sheetPlanMarkdown = options.sheetPlanMarkdown.trim();
+  const sourceReferenceMarkdown = options.sourceReferenceMarkdown.trim();
+  if (sheetPlanMarkdown.length === 0 || sourceReferenceMarkdown.length === 0) {
+    return [];
+  }
+
+  const displayNumbers = collectSheetPlanDisplayNumbers(sheetPlanMarkdown);
+  if (displayNumbers.size === 0) {
+    return [];
+  }
+
+  const issues: string[] = [];
+  const sourceFigureLabels = collectSourceReferenceLabelsNearDisplayNumbers(
+    sourceReferenceMarkdown,
+    displayNumbers,
+    NAMED_FIGURE_REFERENCE_PATTERN,
+  );
+  for (const label of sourceFigureLabels) {
+    if (!hasReferenceLabel(sheetPlanMarkdown, "Figure", label)) {
+      issues.push(
+        `grader/output/sheet-plan.md includes source leaves whose extracted source reference names Figure ${label}, but the plan omits Figure ${label}; add a visual placement with a guarded grader/output/assets/... crop path or a recorded failed render/crop attempt before bounded scoring`,
+      );
+      continue;
+    }
+    if (
+      !sheetPlanHasRecordedArtifactAttempt(sheetPlanMarkdown, "Figure", label)
+    ) {
+      issues.push(
+        `grader/output/sheet-plan.md mentions Figure ${label} but does not assign a guarded grader/output/assets/... crop path or a recorded failed render/crop attempt; do not defer or omit named source figures because grading is possible without them`,
+      );
+    }
+  }
+
+  const sourceTableLabels = collectSourceReferenceLabelsNearDisplayNumbers(
+    sourceReferenceMarkdown,
+    displayNumbers,
+    NAMED_TABLE_REFERENCE_PATTERN,
+  );
+  for (const label of sourceTableLabels) {
+    if (!hasReferenceLabel(sheetPlanMarkdown, "Table", label)) {
+      issues.push(
+        `grader/output/sheet-plan.md includes source leaves whose extracted source reference names Table ${label}, but the plan omits Table ${label}; add Markdown table handling or a recorded failed table/crop attempt before bounded scoring`,
+      );
+      continue;
+    }
+    if (!sheetPlanHasRecordedArtifactAttempt(sheetPlanMarkdown, "Table", label)) {
+      issues.push(
+        `grader/output/sheet-plan.md mentions Table ${label} but does not assign Markdown table handling, a guarded crop path, or a recorded failed table/crop attempt`,
+      );
+    }
+  }
+
+  return issues;
+}
+
+function collectSourceTranscriptionStemDriftIssues(options: {
+  sourceTranscriptMarkdown: string;
+  sourceReferenceMarkdown: string;
+}): string[] {
+  const issues: string[] = [];
+  const sourceReferenceMarkdown = options.sourceReferenceMarkdown.trim();
+  if (sourceReferenceMarkdown.length === 0) {
+    return issues;
+  }
+
+  const inflatedExplainPattern =
+    /\b0?(\d{1,2})\.(\d{1,2})\b[\s\S]{0,300}?\bdescribe\s+and\s+explain\b/giu;
+  for (const match of options.sourceTranscriptMarkdown.matchAll(
+    inflatedExplainPattern,
+  )) {
+    if (!match[1] || !match[2]) {
+      continue;
+    }
+    const sourceLabel = `${match[1]}.${match[2]}`;
+    const sourceLabelPattern = createExtractedSourceDisplayNumberPattern(
+      sourceLabel,
+    );
+    if (sourceLabelPattern === null) {
+      continue;
+    }
+    const sourceMatch = sourceLabelPattern.exec(sourceReferenceMarkdown);
+    if (sourceMatch === null) {
+      continue;
+    }
+    const sourceWindow = sourceReferenceMarkdown.slice(
+      sourceMatch.index,
+      sourceMatch.index + 1200,
+    );
+    if (
+      /\bexplain\b/iu.test(sourceWindow) &&
+      !/\bdescribe\s+and\s+explain\b/iu.test(sourceWindow)
+    ) {
+      issues.push(
+        `grader/output/transcription.md rewrites source command words for ${sourceLabel} as "Describe and explain"; preserve the printed source stem verbatim instead of adding command words`,
+      );
+    }
+  }
+
+  return issues;
+}
+
+function collectSourceTranscriptionIntegrityIssues(
+  sourceTranscriptMarkdown: string,
+  sourceReferenceMarkdown = "",
+): string[] {
+  const markdown = sourceTranscriptMarkdown.trim();
+  if (markdown.length === 0) {
+    return [];
+  }
+
+  const issues: string[] = [];
+  if (SOURCE_TRANSCRIPTION_INCOMPLETE_PLACEHOLDER_PATTERN.test(markdown)) {
+    issues.push(
+      "grader/output/transcription.md contains an incomplete source-transcription placeholder; replace placeholders with the printed source wording, table labels, figure labels, and displayed formulas before source-fidelity audit or publish",
+    );
+  }
+  if (SOURCE_TRANSCRIPTION_SUMMARY_ONLY_PATTERN.test(markdown)) {
+    issues.push(
+      "grader/output/transcription.md describes the source problem statements as a compact audit/needed-for-grading/visible-answered-only summary; replace it with verbatim printed source wording, shared root context, options, instructions, table labels, figure labels, and displayed formulas before bounded scoring or publish",
+    );
+  }
+  if (SOURCE_TRANSCRIPTION_VISUAL_SUMMARY_PATTERN.test(markdown)) {
+    issues.push(
+      "grader/output/transcription.md summarizes diagram/visual options as labels only; replace it with source-faithful wording plus the named figure/diagram label and plan a visible crop for those options before bounded scoring or publish",
+    );
+  }
+  if (SOURCE_TRANSCRIPTION_FORMULA_SUMMARY_PATTERN.test(markdown)) {
+    issues.push(
+      "grader/output/transcription.md summarizes a displayed formula/equation as prose; replace it with the printed displayed formula in Markdown/LaTeX or plan a visible crop before bounded scoring or publish",
+    );
+  }
+  if (SYNTHETIC_SOURCE_WORKFLOW_PHRASE_PATTERN.test(markdown)) {
+    issues.push(
+      "grader/output/transcription.md contains workflow or source-summary wording such as planned crop paths or invented figure/table bridge text; replace it with only the printed source wording, labels, tables, formulas, and minimal layout notes",
+    );
+  }
+  if (SYNTHETIC_WORKSHEET_BRIDGE_PHRASE_PATTERN.test(markdown)) {
+    issues.push(
+      "grader/output/transcription.md contains invented worksheet bridge wording such as items shown in the source paper; replace it with the printed source wording plus the named figure/table/formula label and a minimal layout note",
+    );
+  }
+  issues.push(
+    ...collectSourceTranscriptionStemDriftIssues({
+      sourceTranscriptMarkdown: markdown,
+      sourceReferenceMarkdown,
+    }),
+  );
+
+  return issues;
+}
+
 function metadataTextContains(container: string, part: string): boolean {
   const normalizedContainer = normalizeMetadataText(container);
   const normalizedPart = normalizeMetadataText(part);
@@ -3211,6 +4150,115 @@ function metadataTextContains(container: string, part: string): boolean {
     normalizedContainer.length > normalizedPart.length &&
     normalizedContainer.includes(normalizedPart)
   );
+}
+
+function collectGraderWorksheetEarlyAssemblyIssues(
+  report: SparkGraderWorksheetReport,
+): string[] {
+  const issues: string[] = [];
+  const readVisibleQuestionPromptText = (
+    entry: PaperSheetQuestionEntry,
+  ): string | undefined => {
+    switch (entry.type) {
+      case "group":
+      case "fill":
+      case "mcq":
+      case "lines":
+      case "calc":
+      case "match":
+      case "spelling":
+      case "flow":
+        return entry.prompt;
+      case "cloze":
+      case "answer_bank":
+        return entry.segments.join(" ");
+    }
+  };
+  const checkVisiblePromptText = (
+    ownerLabel: string,
+    text: string | undefined,
+  ): void => {
+    if (typeof text !== "string" || text.trim().length === 0) {
+      return;
+    }
+    if (
+      SYNTHETIC_SOURCE_WORKFLOW_PHRASE_PATTERN.test(text) ||
+      SYNTHETIC_WORKSHEET_BRIDGE_PHRASE_PATTERN.test(text)
+    ) {
+      issues.push(
+        `${ownerLabel} contains workflow or paraphrase wording such as source-paper placeholders, planned crop paths, or invented figure/table bridge text; copy the printed source wording and put the final crop/Markdown table directly at the source item`,
+      );
+    }
+  };
+  const visitQuestionEntries = (
+    entries: readonly PaperSheetQuestionEntry[] | undefined,
+    ancestorPromptText = "",
+  ): void => {
+    for (const entry of entries ?? []) {
+      const promptText = readVisibleQuestionPromptText(entry);
+      checkVisiblePromptText(`question "${entry.id}" prompt`, promptText);
+      const promptContext = [ancestorPromptText, promptText]
+        .filter((part): part is string => typeof part === "string")
+        .join("\n\n");
+      if (
+        typeof promptText === "string" &&
+        promptNeedsVisibleImage(promptContext)
+      ) {
+        issues.push(
+          `question "${entry.id}" references a visual but does not link a visible worksheet crop in its prompt or an enclosing group prompt; create and link the planned grader/output/assets/... crop before writing run-summary.json`,
+        );
+      }
+      if (
+        typeof promptText === "string" &&
+        promptNeedsVisibleTable(promptContext)
+      ) {
+        issues.push(
+          `question "${entry.id}" references a source table but does not include a visible Markdown table or linked crop in its prompt or an enclosing group prompt; render the source table before writing run-summary.json`,
+        );
+      }
+      if (
+        entry.badgeLabel !== undefined &&
+        badgeLabelLooksLikeFullSourceNumber(entry.badgeLabel)
+      ) {
+        issues.push(
+          `question "${entry.id}" uses badgeLabel "${entry.badgeLabel}" as a full source label; set displayNumber to the full source label and badgeLabel to only the short visible circle text`,
+        );
+      }
+      if (entry.type === "group") {
+        visitQuestionEntries(entry.questions, promptContext);
+      }
+    }
+  };
+
+  for (const section of report.sheet.sections) {
+    if (!("id" in section)) {
+      checkVisiblePromptText("text section", section.text);
+      continue;
+    }
+    for (const [fieldName, fieldValue] of [
+      ["theory", section.theory],
+      ["infoBox", section.infoBox?.text],
+    ] as const) {
+      checkVisiblePromptText(`section "${section.id}" ${fieldName}`, fieldValue);
+      if (typeof fieldValue !== "string" || fieldValue.trim().length === 0) {
+        continue;
+      }
+      if (
+        MARKDOWN_IMAGE_PATTERN.test(fieldValue) ||
+        collectNamedReferences(fieldValue, NAMED_FIGURE_REFERENCE_PATTERN)
+          .size > 0 ||
+        collectNamedReferences(fieldValue, NAMED_TABLE_REFERENCE_PATTERN).size >
+          0
+      ) {
+        issues.push(
+          `section "${section.id}" ${fieldName} contains a named figure/table or linked crop; move the exact source wording plus crop/table into the relevant group or question prompt before writing run-summary.json`,
+        );
+      }
+    }
+    visitQuestionEntries(section.questions);
+  }
+
+  return issues;
 }
 
 function hasReferenceLabel(
@@ -3223,6 +4271,25 @@ function hasReferenceLabel(
     kind === "Figure" ? String.raw`(?:Figure|Fig\.?|Diagram)` : "Table";
   const pattern = new RegExp(`\\b${kindPattern}\\s+${escapedLabel}\\b`, "iu");
   return pattern.test(text);
+}
+
+function markdownImageReferencesLabel(
+  altText: string,
+  target: string,
+  kind: "Figure" | "Table",
+  label: string,
+): boolean {
+  const escapedLabel = escapeRegExpLiteral(label).replace(
+    /\\\./gu,
+    String.raw`[._\-\s]*`,
+  );
+  const kindPattern =
+    kind === "Figure" ? String.raw`(?:figure|fig|diagram)` : "table";
+  const explicitLabelPattern = new RegExp(
+    `\\b${kindPattern}[._\\-\\s]*${escapedLabel}\\b`,
+    "iu",
+  );
+  return explicitLabelPattern.test(altText) || explicitLabelPattern.test(target);
 }
 
 function hasNearbyMarkdownImage(
@@ -3240,8 +4307,12 @@ function hasNearbyMarkdownImage(
   for (const match of text.matchAll(labelPattern)) {
     const index = match.index ?? 0;
     const nearby = text.slice(Math.max(0, index - 250), index + 700);
-    if (MARKDOWN_IMAGE_PATTERN.test(nearby)) {
-      return true;
+    for (const imageMatch of nearby.matchAll(MARKDOWN_IMAGE_OCCURRENCE_PATTERN)) {
+      const altText = imageMatch[1] ?? "";
+      const target = imageMatch[2] ?? "";
+      if (markdownImageReferencesLabel(altText, target, kind, label)) {
+        return true;
+      }
     }
   }
   return false;
@@ -3317,7 +4388,10 @@ function collectSpecificSourceReferenceOwners(
     .filter((block) => block.length > 0);
 
   for (const block of blocks) {
-    const ownerMatch = /^`?(0?\d+(?:\.\d+|\([^)]+\)))\b/u.exec(block);
+    const ownerMatch =
+      /(?:^|\n)\s*(?:[-*]\s*)?(?:\*\*)?`?(0?\d+(?:\.\d+|\([^)]+\)))`?(?:\*\*)?\b/u.exec(
+        block,
+      );
     const owner = normalizeDisplayNumberForComparison(ownerMatch?.[1]);
     if (!owner) {
       continue;
@@ -3361,9 +4435,6 @@ function promptNeedsVisibleImage(promptText: string): boolean {
   if (!VISUAL_CONTEXT_PROMPT_PATTERN.test(promptText)) {
     return false;
   }
-  if (ABOVE_VISUAL_REFERENCE_PATTERN.test(promptText)) {
-    return false;
-  }
   if (ANCHORED_VISUAL_REFERENCE_PATTERN.test(promptText)) {
     return false;
   }
@@ -3384,9 +4455,6 @@ function promptNeedsVisibleTable(promptText: string): boolean {
     !referencesNamedTable &&
     !TABLE_PROMPT_WITHOUT_TABLE_PATTERN.test(promptText)
   ) {
-    return false;
-  }
-  if (ABOVE_TABLE_REFERENCE_PATTERN.test(promptText)) {
     return false;
   }
   if (ANCHORED_TABLE_REFERENCE_PATTERN.test(promptText)) {
@@ -3609,14 +4677,33 @@ function sourceReferenceHasMarkdownTable(
   return false;
 }
 
+function hasExplicitPositiveCropValidationRecord(record: string): boolean {
+  const lines = record
+    .split(/\r?\n/gu)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  return (
+    lines.some((line) =>
+      CROP_VALIDATION_PASS_FAIL_PASS_FIELD_PATTERN.test(line),
+    ) &&
+    lines.some((line) =>
+      CROP_VALIDATION_VISIBLE_CONTENT_YES_FIELD_PATTERN.test(line),
+    ) &&
+    CROP_VALIDATION_VISIBLE_TEXT_PATTERN.test(record)
+  );
+}
+
 function hasPositiveCropValidationReport(markdown: string): boolean {
-  if (!CROP_VALIDATION_SUBAGENT_PATTERN.test(markdown)) {
-    return false;
-  }
-  if (!CROP_VALIDATION_PASS_PATTERN.test(markdown)) {
-    return false;
-  }
-  return CROP_VALIDATION_VISIBLE_TEXT_PATTERN.test(markdown);
+  const records = markdown
+    .split(/\n\s*\n/gu)
+    .map((record) => record.trim())
+    .filter((record) => record.length > 0);
+  return records.some(
+    (record) =>
+      CROP_VALIDATION_SUBAGENT_PATTERN.test(record) &&
+      (hasExplicitPositiveCropValidationRecord(record) ||
+        isBenignDuplicateOnlyFailedCropValidationRecord(record)),
+  );
 }
 
 function hasPositiveSourceFidelityAudit(markdown: string): boolean {
@@ -3629,13 +4716,14 @@ function hasPositiveSourceFidelityAudit(markdown: string): boolean {
   if (SOURCE_FIDELITY_BLOCKING_PATTERN.test(markdown)) {
     return false;
   }
-  const blockingIssuesMatch =
-    SOURCE_FIDELITY_BLOCKING_ISSUES_FIELD_PATTERN.exec(markdown);
-  if (!blockingIssuesMatch) {
+  const blockingIssuesMatches = Array.from(
+    markdown.matchAll(SOURCE_FIDELITY_BLOCKING_ISSUES_FIELD_PATTERN),
+  );
+  if (blockingIssuesMatches.length === 0) {
     return false;
   }
-  return SOURCE_FIDELITY_NO_BLOCKING_ISSUES_PATTERN.test(
-    blockingIssuesMatch[1]?.trim() ?? "",
+  return blockingIssuesMatches.every((match) =>
+    SOURCE_FIDELITY_NO_BLOCKING_ISSUES_PATTERN.test(match[1]?.trim() ?? ""),
   );
 }
 
@@ -3689,6 +4777,9 @@ function isBenignDuplicateOnlyFailedCropValidationRecord(
     }
     if (CROP_VALIDATION_NEGATED_RISK_FIELD_PATTERN.test(line)) {
       continue;
+    }
+    if (CROP_VALIDATION_POSITIVE_RISK_FIELD_PATTERN.test(line)) {
+      return false;
     }
     if (CROP_VALIDATION_NEGATIVE_FIELD_PATTERN.test(line)) {
       return false;
@@ -4382,11 +5473,12 @@ function collectCropValidationAssetIssues(options: {
     }
     if (
       !matchingRecords.some((record) =>
-        CROP_VALIDATION_PASS_PATTERN.test(record),
+        hasExplicitPositiveCropValidationRecord(record) ||
+        isBenignDuplicateOnlyFailedCropValidationRecord(record),
       )
     ) {
       issues.push(
-        `crop image "${assetPath}" is linked in the worksheet but crop-validation.md does not record a PASS/visible result for that final crop`,
+        `crop image "${assetPath}" is linked in the worksheet but crop-validation.md does not record explicit pass/fail: pass and all question-relevant content visible: yes fields for that final crop`,
       );
     }
     if (
@@ -4409,6 +5501,9 @@ function collectCropValidationAssetIssues(options: {
         }
         if (CROP_VALIDATION_NEGATED_RISK_FIELD_PATTERN.test(line)) {
           continue;
+        }
+        if (CROP_VALIDATION_POSITIVE_RISK_FIELD_PATTERN.test(line)) {
+          return true;
         }
         if (CROP_VALIDATION_NEGATIVE_FIELD_PATTERN.test(line)) {
           return true;
@@ -4706,9 +5801,20 @@ async function normalizeGraderWorksheetImageAssets(options: {
 
     const jpegBytes = await sharp(assetBytes)
       .rotate()
+      .extend({
+        top: DEFAULT_CROP_IMAGE_MARGIN_PX,
+        right: DEFAULT_CROP_IMAGE_MARGIN_PX,
+        bottom: DEFAULT_CROP_IMAGE_MARGIN_PX,
+        left: DEFAULT_CROP_IMAGE_MARGIN_PX,
+        background: { r: 255, g: 255, b: 255, alpha: 1 },
+      })
       .resize({
-        width: GRADER_WORKSHEET_ASSET_MAX_DIMENSION,
-        height: GRADER_WORKSHEET_ASSET_MAX_DIMENSION,
+        width:
+          GRADER_WORKSHEET_ASSET_MAX_DIMENSION -
+          DEFAULT_CROP_IMAGE_MARGIN_PX * 2,
+        height:
+          GRADER_WORKSHEET_ASSET_MAX_DIMENSION -
+          DEFAULT_CROP_IMAGE_MARGIN_PX * 2,
         fit: "inside",
         withoutEnlargement: true,
       })
@@ -4768,17 +5874,22 @@ function collectGraderWorksheetPublishIssues(
   report: SparkGraderWorksheetReport,
   options?: {
     sourceTranscriptMarkdown?: string;
+    sourceReferenceMarkdown?: string;
+    sheetPlanMarkdown?: string;
     cropValidationMarkdown?: string;
     sourceFidelityAuditMarkdown?: string;
     agentLogMarkdown?: string;
+    scoringBatchFileCount?: number;
     requestPayload?: SparkGraderRequestPayload | null;
     runSummary?: GraderRunSummary;
+    requireSourceFidelityAudit?: boolean;
   },
 ): string[] {
   const issues: string[] = [];
   let scoredQuestionMarks = 0;
   let scoredQuestionTotals = 0;
   const renderedSheetMarkdown = collectSheetMarkdown(report);
+  issues.push(...collectGraderWorksheetEarlyAssemblyIssues(report));
   const referenceMarkdown = [
     report.references?.problemMarkdown,
     report.references?.officialProblemMarkdown,
@@ -4804,6 +5915,8 @@ function collectGraderWorksheetPublishIssues(
     requestRequiresProblemStatementTranscription(options?.requestPayload);
   const sourceTranscriptMarkdown =
     options?.sourceTranscriptMarkdown?.trim() ?? "";
+  const sourceReferenceMarkdown =
+    options?.sourceReferenceMarkdown?.trim() ?? "";
   const needsSourceFidelityAudit =
     sourcePaperOnlyNoStudent ||
     compactHandwrittenGrading ||
@@ -4811,6 +5924,8 @@ function collectGraderWorksheetPublishIssues(
     PROBLEM_STATEMENT_TRANSCRIPTION_HEADING_PATTERN.test(
       sourceTranscriptMarkdown,
     );
+  const requireSourceFidelityAudit =
+    options?.requireSourceFidelityAudit ?? true;
   const sourceFigureOwnersByLabel = collectSpecificSourceReferenceOwners(
     sourceTranscriptMarkdown,
     NAMED_FIGURE_REFERENCE_PATTERN,
@@ -4819,8 +5934,13 @@ function collectGraderWorksheetPublishIssues(
     sourceTranscriptMarkdown,
     NAMED_TABLE_REFERENCE_PATTERN,
   );
+  const reportDisplayNumbers = collectReportDisplayNumbers(report);
   const contentSections = report.sheet.sections.filter(
     (section): section is SparkGraderWorksheetContentSection => "id" in section,
+  );
+  const answerLeafCount = contentSections.reduce(
+    (total, section) => total + countPaperSheetQuestions(section.questions),
+    0,
   );
   const runSummary = options?.runSummary;
 
@@ -4887,8 +6007,30 @@ function collectGraderWorksheetPublishIssues(
       "grader/output/transcription.md does not include a source problem-statement transcription section; include the printed root stems, interstitial context, subquestions, table labels, and figure labels so worksheet structure can be audited",
     );
   }
-
   if (needsSourceFidelityAudit) {
+    issues.push(
+      ...collectSourceTranscriptionIntegrityIssues(
+        sourceTranscriptMarkdown,
+        sourceReferenceMarkdown,
+      ),
+    );
+  }
+  issues.push(
+    ...collectSheetPlanConsistencyIssues(options?.sheetPlanMarkdown ?? ""),
+  );
+
+  if (
+    compactHandwrittenGrading &&
+    (answerLeafCount > 12 || report.review.score.total > 30)
+  ) {
+    if ((options?.scoringBatchFileCount ?? 0) === 0) {
+      issues.push(
+        "long handwritten-grading worksheet has more than 12 answer leaves or more than 30 marks but grader/output/scoring has no successful score_answers_with_fresh_agent result JSON; use the dedicated bounded scoring helper before final JSON/publish",
+      );
+    }
+  }
+
+  if (needsSourceFidelityAudit && requireSourceFidelityAudit) {
     const sourceFidelityAuditMarkdown =
       options?.sourceFidelityAuditMarkdown?.trim() ?? "";
     if (sourceFidelityAuditMarkdown.length === 0) {
@@ -4901,12 +6043,12 @@ function collectGraderWorksheetPublishIssues(
       );
     }
     if (
-      !SOURCE_FIDELITY_REVIEW_TOOL_PATTERN.test(
+      !SOURCE_FIDELITY_REVIEW_TOOL_SUCCESS_PATTERN.test(
         options?.agentLogMarkdown ?? "",
       )
     ) {
       issues.push(
-        "agent log has no validate_source_fidelity_with_fresh_agent call; use the dedicated fresh-context source-fidelity audit before publish",
+        "agent log has no successful validate_source_fidelity_with_fresh_agent call; use the dedicated fresh-context source-fidelity audit before publish",
       );
     }
   }
@@ -5053,6 +6195,48 @@ function collectGraderWorksheetPublishIssues(
 
     const sectionQuestionRoot = parseQuestionSectionRoot(section.label);
     const sectionQuestionEntries = section.questions ?? [];
+    const displayOwners = new Map<string, string>();
+    const checkSectionDisplayNumber = (
+      entryId: string,
+      displayNumber: string | undefined,
+    ): void => {
+      if (displayNumber === undefined) {
+        return;
+      }
+      const normalizedDisplayNumber =
+        normalizeDisplayNumberForComparison(displayNumber);
+      if (normalizedDisplayNumber === null) {
+        return;
+      }
+      const existingOwner = displayOwners.get(normalizedDisplayNumber);
+      if (existingOwner !== undefined && existingOwner !== entryId) {
+        issues.push(
+          `section "${section.id}" reuses displayNumber "${displayNumber}" for both "${existingOwner}" and "${entryId}"; every visible source label in a section must identify one worksheet item`,
+        );
+      } else {
+        displayOwners.set(normalizedDisplayNumber, entryId);
+      }
+      if (sectionQuestionRoot === null) {
+        return;
+      }
+      const displayRoot = normalizeDisplayNumberRoot(displayNumber);
+      if (displayRoot !== null && displayRoot !== sectionQuestionRoot) {
+        issues.push(
+          `section "${section.id}" is labelled Question ${sectionQuestionRoot} but contains question "${entryId}" with displayNumber "${displayNumber}"; keep only that root's labels in the section or move the item to Question ${displayRoot}`,
+        );
+      }
+    };
+    const visitEntriesForDisplayNumbers = (
+      entries: readonly PaperSheetQuestionEntry[] | undefined,
+    ): void => {
+      for (const entry of entries ?? []) {
+        checkSectionDisplayNumber(entry.id, entry.displayNumber);
+        if (entry.type === "group") {
+          visitEntriesForDisplayNumbers(entry.questions);
+        }
+      }
+    };
+    visitEntriesForDisplayNumbers(sectionQuestionEntries);
     if (
       sectionQuestionRoot !== null &&
       sectionQuestionEntries.length === 1 &&
@@ -5086,7 +6270,7 @@ function collectGraderWorksheetPublishIssues(
         )
       ) {
         issues.push(
-          `section "${section.id}" already represents Question ${sectionQuestionRoot}, but renders a duplicate "${onlyGroup.displayNumber}" root group around decimal subparts; put the root stem in section.theory or direct prompt context, then render subparts as direct questions with short badgeLabel values like "1" and "2"`,
+          `section "${section.id}" already represents Question ${sectionQuestionRoot}, but renders a duplicate "${onlyGroup.displayNumber}" root group around decimal subparts; put plain root text in section.theory only when it has no named figures/tables/crops, otherwise put the shared source stem plus artifact in the first source-faithful prompt, then render subparts as direct questions with short badgeLabel values like "1" and "2"`,
         );
       }
     }
@@ -5111,6 +6295,36 @@ function collectGraderWorksheetPublishIssues(
         const groupRoot = entry.displayNumber
           ? normalizeDisplayNumberRoot(entry.displayNumber)
           : null;
+        const childRoots = new Set(
+          entry.questions
+            .map((question) =>
+              question.displayNumber
+                ? normalizeDisplayNumberRoot(question.displayNumber)
+                : null,
+            )
+            .filter((root): root is string => root !== null),
+        );
+        if (
+          entry.displayNumber === undefined &&
+          entry.questions.length > 1 &&
+          childRoots.size === 1
+        ) {
+          const childRoot = [...childRoots][0] ?? "unknown";
+          issues.push(
+            `group question "${entry.id}" has no displayNumber while its children use root question ${childRoot}; put the shared root stem in section.theory and render the children as direct subquestions, or keep a visible parent displayNumber so the layout grid does not collapse an unnumbered group`,
+          );
+        }
+        if (
+          entry.displayNumber !== undefined &&
+          groupRoot === null &&
+          childRoots.size === 1 &&
+          entry.questions.length > 1
+        ) {
+          const childRoot = [...childRoots][0] ?? "unknown";
+          issues.push(
+            `group question "${entry.id}" uses displayNumber "${entry.displayNumber}" while its children use root question ${childRoot}; figure/table labels belong in prompt text, not displayNumber. Render those subquestions directly with displayNumber values such as "0${childRoot}.1" and short badgeLabel values, or use the root displayNumber only for a real source question group.`,
+          );
+        }
         const groupFigureLabels = collectNamedReferences(
           entry.prompt,
           NAMED_FIGURE_REFERENCE_PATTERN,
@@ -5356,7 +6570,7 @@ function collectGraderWorksheetPublishIssues(
       );
     }
 
-    visitPaperSheetQuestions(section.questions, (question) => {
+    visitPaperSheetQuestions(section.questions, (question, parentGroup) => {
       const promptText = (() => {
         switch (question.type) {
           case "fill":
@@ -5372,6 +6586,9 @@ function collectGraderWorksheetPublishIssues(
             return question.segments.join(" ");
         }
       })();
+      const promptContext = [parentGroup?.prompt, promptText]
+        .filter((part): part is string => typeof part === "string")
+        .join("\n\n");
       const review = report.review.questions[question.id];
       const score = review?.score;
       if (sourcePaperOnlyNoStudent) {
@@ -5469,16 +6686,21 @@ function collectGraderWorksheetPublishIssues(
         question.displayNumber,
       );
       if (
-        decimalDisplayNumber !== null &&
-        sectionQuestionRoot === decimalDisplayNumber.root
+        question.badgeLabel !== undefined &&
+        badgeLabelLooksLikeFullSourceNumber(question.badgeLabel)
       ) {
+        issues.push(
+          `question "${question.id}" uses badgeLabel "${question.badgeLabel}" as a full source label; set displayNumber to the full source label and badgeLabel to only the short visible circle text`,
+        );
+      }
+      if (decimalDisplayNumber !== null) {
         const actualBadge =
           question.badgeLabel !== undefined
             ? normalizeSubpartLabel(question.badgeLabel)
             : null;
         if (actualBadge !== decimalDisplayNumber.subpart) {
           issues.push(
-            `question "${question.id}" uses displayNumber "${question.displayNumber}" inside section "${section.label}" but does not set badgeLabel "${decimalDisplayNumber.subpart}"; set the short badge so the section renders subquestions as "${decimalDisplayNumber.subpart}" instead of the full decimal source label`,
+            `question "${question.id}" uses displayNumber "${question.displayNumber}" but does not set badgeLabel "${decimalDisplayNumber.subpart}"; set the short badge so the sheet renders subquestions as "${decimalDisplayNumber.subpart}" instead of the full decimal source label`,
           );
         }
       }
@@ -5567,9 +6789,9 @@ function collectGraderWorksheetPublishIssues(
           `question "${question.id}" leaves a long sign row inline; preserve source display layout with display LaTeX or an equivalent line block`,
         );
       }
-      if (promptNeedsVisibleTable(promptText)) {
+      if (promptNeedsVisibleTable(promptContext)) {
         issues.push(
-          `question "${question.id}" references a source table but its prompt does not include a visible Markdown table or linked crop`,
+          `question "${question.id}" references a source table but its prompt or enclosing group prompt does not include a visible Markdown table or linked crop`,
         );
       }
       if (
@@ -5587,9 +6809,9 @@ function collectGraderWorksheetPublishIssues(
         issues.push(`question "${question.id}" ${orderingIssue}`);
       }
 
-      if (promptNeedsVisibleImage(promptText)) {
+      if (promptNeedsVisibleImage(promptContext)) {
         issues.push(
-          `question "${question.id}" references a visual but does not link a visible worksheet crop in the prompt; do not hide question-critical figures in source references or transcription`,
+          `question "${question.id}" references a visual but does not link a visible worksheet crop in the prompt or enclosing group prompt; do not hide question-critical figures in source references or transcription`,
         );
       }
     });
@@ -5616,39 +6838,61 @@ function collectGraderWorksheetPublishIssues(
     );
   }
 
-  if (sourceTranscriptMarkdown.length > 0) {
-    const sourceFigureLabels = collectNamedReferences(
-      sourceTranscriptMarkdown,
-      NAMED_FIGURE_REFERENCE_PATTERN,
+  {
+    const sourceFigureLabels = mergeNamedReferenceLabels(
+      collectNamedReferences(
+        options?.sheetPlanMarkdown ?? "",
+        NAMED_FIGURE_REFERENCE_PATTERN,
+      ),
+      collectNamedReferences(
+        sourceTranscriptMarkdown,
+        NAMED_FIGURE_REFERENCE_PATTERN,
+      ),
+      collectSourceReferenceLabelsNearDisplayNumbers(
+        sourceReferenceMarkdown,
+        reportDisplayNumbers,
+        NAMED_FIGURE_REFERENCE_PATTERN,
+      ),
     );
     for (const label of sourceFigureLabels) {
       if (!hasReferenceLabel(renderedSheetMarkdown, "Figure", label)) {
         issues.push(
-          `source transcription mentions Figure ${label} but the worksheet omits that named figure`,
+          `source references mention Figure ${label} near included worksheet questions but the worksheet omits that named figure`,
         );
         continue;
       }
       if (!hasNearbyMarkdownImage(renderedSheetMarkdown, "Figure", label)) {
         issues.push(
-          `source transcription mentions Figure ${label} but the worksheet does not link an image near that figure label`,
+          `source references mention Figure ${label} near included worksheet questions but the worksheet does not link an image near that figure label`,
         );
       }
     }
 
-    const sourceTableLabels = collectNamedReferences(
-      sourceTranscriptMarkdown,
-      NAMED_TABLE_REFERENCE_PATTERN,
+    const sourceTableLabels = mergeNamedReferenceLabels(
+      collectNamedReferences(
+        options?.sheetPlanMarkdown ?? "",
+        NAMED_TABLE_REFERENCE_PATTERN,
+      ),
+      collectNamedReferences(
+        sourceTranscriptMarkdown,
+        NAMED_TABLE_REFERENCE_PATTERN,
+      ),
+      collectSourceReferenceLabelsNearDisplayNumbers(
+        sourceReferenceMarkdown,
+        reportDisplayNumbers,
+        NAMED_TABLE_REFERENCE_PATTERN,
+      ),
     );
     for (const label of sourceTableLabels) {
       if (!hasReferenceLabel(renderedSheetMarkdown, "Table", label)) {
         issues.push(
-          `source transcription mentions Table ${label} but the worksheet omits that named table`,
+          `source references mention Table ${label} near included worksheet questions but the worksheet omits that named table`,
         );
         continue;
       }
       if (hasNearbyTableImageWithoutMarkdown(renderedSheetMarkdown, label)) {
         issues.push(
-          `source transcription mentions Table ${label} but the worksheet renders that table as an image crop instead of a Markdown table`,
+          `source references mention Table ${label} near included worksheet questions but the worksheet renders that table as an image crop instead of a Markdown table`,
         );
         continue;
       }
@@ -5680,11 +6924,12 @@ function collectGraderWorksheetPublishIssues(
       issues.push(
         "worksheet contains linked crop image assets but is missing grader/output/crop-validation.md; ask a fresh-context subagent to validate final crops and record the result before publishing",
       );
-    } else if (!hasPositiveCropValidationReport(cropValidationMarkdown)) {
-      issues.push(
-        "grader/output/crop-validation.md must record a passing fresh-context subagent validation for linked figure/table/image crops",
-      );
     } else {
+      if (!hasPositiveCropValidationReport(cropValidationMarkdown)) {
+        issues.push(
+          "grader/output/crop-validation.md must record a passing fresh-context subagent validation for linked figure/table/image crops",
+        );
+      }
       issues.push(
         ...collectCropValidationAssetIssues({
           renderedSheetMarkdown,
@@ -5729,6 +6974,7 @@ async function validateGraderWorkspaceForPublish(options: {
   rootDir: string;
   summaryPath: string;
   sheetPath: string;
+  requireSourceFidelityAudit?: boolean;
   onWorkspaceFileChanged?: (filePath: string) => void;
 }): Promise<PublishedGraderSheetArtifacts> {
   const normalizeWorkspacePath = (value: string): string =>
@@ -5877,6 +7123,13 @@ async function validateGraderWorkspaceForPublish(options: {
     summaryRaw = normalizedScores.summaryRaw;
   }
   summary = normalizedScores.summary;
+  const rawWorksheetShapeIssues =
+    collectRawGraderWorksheetShapeIssues(sheetJson);
+  if (rawWorksheetShapeIssues.length > 0) {
+    throw new Error(
+      `Worksheet artifact "${resolvedSheetPath}" has invalid grader worksheet question shapes: ${rawWorksheetShapeIssues.join("; ")}`,
+    );
+  }
   const parsedSheet = SparkGraderWorksheetReportSchema.safeParse(sheetJson);
   if (!parsedSheet.success) {
     throw new Error(
@@ -5951,6 +7204,26 @@ async function validateGraderWorkspaceForPublish(options: {
     resolveWorkspacePath(options.rootDir, "grader/output/transcription.md"),
     { encoding: "utf8" },
   ).catch(() => "");
+  const sourceReferenceMarkdown = (
+    await Promise.all([
+      readFile(resolveWorkspacePath(options.rootDir, "grader/output/qp-reference.md"), {
+        encoding: "utf8",
+      }).catch(() => ""),
+      readFile(
+        resolveWorkspacePath(
+          options.rootDir,
+          "grader/output/question-paper-reference.md",
+        ),
+        { encoding: "utf8" },
+      ).catch(() => ""),
+    ])
+  )
+    .filter((content) => content.trim().length > 0)
+    .join("\n\n");
+  const sheetPlanMarkdown = await readFile(
+    resolveWorkspacePath(options.rootDir, "grader/output/sheet-plan.md"),
+    { encoding: "utf8" },
+  ).catch(() => "");
   const cropValidationMarkdown = await readFile(
     resolveWorkspacePath(options.rootDir, "grader/output/crop-validation.md"),
     { encoding: "utf8" },
@@ -5972,16 +7245,24 @@ async function validateGraderWorkspaceForPublish(options: {
   const agentLogMarkdown = [rawAgentLogMarkdown, agentToolCallLogMarkdown]
     .filter((part) => part.trim().length > 0)
     .join("\n");
+  const scoringBatchFileCount = await countWorkspaceJsonFiles(
+    options.rootDir,
+    "grader/output/scoring",
+  );
   const requestPayload = await loadSparkGraderRequestPayloadFromWorkspace(
     options.rootDir,
   );
   const publishIssues = collectGraderWorksheetPublishIssues(report, {
     sourceTranscriptMarkdown,
+    sourceReferenceMarkdown,
+    sheetPlanMarkdown,
     cropValidationMarkdown,
     sourceFidelityAuditMarkdown,
     agentLogMarkdown,
+    scoringBatchFileCount,
     requestPayload,
     runSummary: summary,
+    requireSourceFidelityAudit: options.requireSourceFidelityAudit,
   });
   publishIssues.push(
     ...(await collectStaleCropValidationIssues({
@@ -8591,6 +9872,69 @@ function stripDeprecatedPdfReadTools(tools: LlmToolSet): LlmToolSet {
   return nextTools;
 }
 
+const GRADER_POST_ARTIFACT_ALLOWED_TOOLS = new Set([
+  "apply_patch",
+  "crop_image",
+  "done",
+  "draw_grid_overlay",
+  "extract_pdf_diagrams",
+  "extract_pdf_images",
+  "grep_files",
+  "grep_workspace_files",
+  "list_dir",
+  "list_workspace_dir",
+  "pad_image",
+  "pdf_to_images",
+  "propose_crop_bbox_with_fresh_agent",
+  "publish_sheet",
+  "read_file",
+  "read_workspace_file",
+  "review_run_progress_with_fresh_agent",
+  "trim_image",
+  "validate_crop_with_fresh_agent",
+  "validate_grader_artifacts",
+  "validate_source_fidelity_with_fresh_agent",
+  "view_image",
+  "write_json_workspace_file",
+  "write_workspace_file",
+]);
+
+const GRADER_PRE_PLAN_BLOCKED_TOOLS = new Set([
+  "apply_patch",
+  "crop_image",
+  "pad_image",
+  "publish_sheet",
+  "score_answers_with_fresh_agent",
+  "trim_image",
+  "validate_crop_with_fresh_agent",
+  "validate_grader_artifacts",
+  "validate_source_fidelity_with_fresh_agent",
+  "view_image",
+  "write_json_workspace_file",
+]);
+
+const GRADER_PRE_SCORING_BLOCKED_TOOLS = new Set([
+  "apply_patch",
+  "crop_image",
+  "extract_pdf_images",
+  "grep_files",
+  "grep_workspace_files",
+  "list_dir",
+  "list_workspace_dir",
+  "pad_image",
+  "pdf_to_images",
+  "publish_sheet",
+  "read_file",
+  "read_workspace_file",
+  "trim_image",
+  "validate_crop_with_fresh_agent",
+  "validate_grader_artifacts",
+  "validate_source_fidelity_with_fresh_agent",
+  "view_image",
+  "write_json_workspace_file",
+  "write_workspace_file",
+]);
+
 function safeToJsonSchema(
   schema: z.ZodType,
   name: string,
@@ -8661,20 +10005,7 @@ function buildSparkAgentAvailableTools(
   modelId: string,
 ): SparkAgentAvailableTool[] {
   const availableTools: SparkAgentAvailableTool[] = [];
-
-  for (const [name, toolConfig] of Object.entries(
-    createCodexFilesystemToolSet(),
-  )) {
-    const availableTool = buildSparkAgentAvailableTool({
-      name,
-      kind: "filesystem",
-      modelId,
-      toolConfig,
-    });
-    if (availableTool) {
-      availableTools.push(availableTool);
-    }
-  }
+  const filesystemToolNames = new Set(resolveSparkAgentFilesystemToolNames());
 
   const sortedFunctionTools = Object.entries(tools).sort(
     ([leftName], [rightName]) => leftName.localeCompare(rightName),
@@ -8682,7 +10013,7 @@ function buildSparkAgentAvailableTools(
   for (const [name, toolConfig] of sortedFunctionTools) {
     const availableTool = buildSparkAgentAvailableTool({
       name,
-      kind: "function",
+      kind: filesystemToolNames.has(name) ? "filesystem" : "function",
       modelId,
       toolConfig,
     });
@@ -8696,26 +10027,28 @@ function buildSparkAgentAvailableTools(
 
 export function buildSparkAgentSystemPrompt(options?: {
   includePdfTranscriptionSkill?: boolean;
+  mode?: "default" | "grader";
 }): string {
-  const lines = [
+  let lines = [
     "You are Spark Agent, a tool-using assistant.",
     "",
     "General rules:",
     "- Work with workspace-relative paths only (no absolute paths, no .. segments).",
     "- Use list_workspace_dir/read_workspace_file/grep_workspace_files to inspect text files in the workspace before editing.",
     "- Use view_image for image files (read_workspace_file is text-only).",
-    "- Use write_workspace_file for workspace file edits, including grader JSON artifacts.",
+    "- Use write_workspace_file for Markdown/text artifacts. Use write_json_workspace_file for JSON artifacts, especially grader/output/sheet.json and grader/output/run-summary.json.",
     "- Prefer fewer, larger patches over many tiny edits.",
     "- Use web_search when you need to look up facts or check details.",
     "- Use web_fetch to retrieve NON-PDF source pages/files from URLs discovered via web_search.",
     "- For PDF URLs discovered online, search `knowledge-base/index.md` or call `kb_search_pdfs` first. If a matching shared PDF exists, call `kb_download_pdf` and use the local workspace PDF. If no match exists, classify the official PDF and call `kb_cache_pdf_from_url`; use the returned shared `storagePath` in worksheet references such as `paperStoragePath` or `markSchemeStoragePath`.",
     "- Use extract_text to transcribe workspace document files (images/PDFs) into markdown with LaTeX formulas.",
     "- Use real Markdown line breaks in worksheet-visible text; never leave literal escaped newline text like `\\n`. For source maths layouts such as number grids, arranged arithmetic, matrices, and displayed formula blocks, prefer display LaTeX (`\\[...\\]`) using KaTeX-supported `array`/matrix/aligned environments when that is the source-faithful representation. Use Markdown tables for real tabular data, not for mathematical arrays that only look table-like.",
-    "- When writing JSON files directly, especially grader/output/sheet.json, JSON-escape every backslash in string values or avoid LaTeX backslash syntax. A string containing `\\(` in the visible Markdown must appear as `\\\\(` in the JSON file.",
+    "- When passing jsonText, it must be valid JSON before the tool can reserialize it. JSON-escape every backslash in string values or avoid raw LaTeX backslash syntax; a visible Markdown string containing `\\(` must appear in jsonText as `\\\\(`.",
     "- extract_text does not automatically know source filenames/paths; include identifying details inside instructions when needed.",
     "- For multi-page extraction tasks, you can request explicit page markers in the extracted markdown.",
-    "- For PDF transcription, render workspace PDFs with pdf_to_images and inspect page images with view_image. When extract_pdf_reference_text is available for a text-selectable PDF, use it once as a navigation/transcription aid before bulk page viewing.",
-    "- Use extract_pdf_images as a deterministic first pass when a PDF may contain embedded raster figures, maps, charts, or photos; validate useful extracted images before linking them. It does not locate vector diagrams or on-page coordinates, so still use pdf_to_images plus grid/crop tools for layout-sensitive or vector visuals.",
+    "- For PDF transcription, use extract_pdf_reference_text once as a navigation/transcription aid when available. For source PDFs with named figures/diagrams/photos, use extract_pdf_images only when the extracted object includes all printed labels/context; otherwise render exact pages with pdf_to_images, draw grids, and ask fresh bbox helpers in parallel where possible. Do not look up grade boundaries or examiner reports unless the user explicitly asked for those external references; a single component paper normally cannot be converted into a full qualification grade.",
+    "- For grader runs with uploaded question paper and mark scheme files, derive model answers from those uploads. Do not download optional worked-example/examiner-report PDFs or enrichment references before the source-faithful sheet is complete unless explicitly requested.",
+    "- Use extract_pdf_images as a cheap inventory when a PDF may contain embedded raster figures, maps, charts, or photos. Do not link grader/output/pdf-images/... files directly in a worksheet; if an extracted image object is the final visual, copy it into the planned final grader/output/assets/... path with crop_image fullImage=true. Do not create raw/candidate/draft/temp asset paths in grader/output/assets. extract_pdf_images does not locate vector diagrams, on-page coordinates, or labels drawn outside the image object, so use pdf_to_images plus grid/crop tools for named exam figures where labels/axes/group headings/captions matter.",
     "- Use extract_pdf_diagrams when you need Gemini-assisted coarse diagram bounding boxes from a PDF; treat them as proposals and validate/refine crops with rendered page images and view_image. If one manual crop-and-view correction for the same target is still clipped/noisy/uncertain, call propose_crop_bbox_with_fresh_agent or extract_pdf_diagrams for that source page and target label before spending more turns on hand-tuned crop boxes.",
     "- For figure crop refinement, do not do mask segmentation. Use a rectangular bbox workflow: inspect the selected base image and grid overlay with view_image, return or apply a single pixel bbox with origin top-left and right/bottom exclusive, prefer small safe margins over clipping, and reject surrounding question text, mark text, answer lines, page borders, next-question content, or standalone Figure/Table captions already rendered by the worksheet. Use propose_crop_bbox_with_fresh_agent when a fresh visual agent should choose the bbox, then apply the returned bbox with crop_image.",
     "- The workspace tools listed for this run are actually available. Never respond that you cannot read files, execute tool steps, access the PDF, or publish outputs when the relevant tool is present; call the tool instead.",
@@ -8732,11 +10065,15 @@ export function buildSparkAgentSystemPrompt(options?: {
     "When official source PDFs are discovered online, the visible sheet should link to Spark's cached shared storage path, not the third-party URL. Include `references.paperStoragePath` / `references.markSchemeStoragePath` in grader/output/sheet.json and `paperStoragePath` / `markSchemeStoragePath` in grader/output/run-summary.json whenever `kb_cache_pdf_from_url` or `kb_download_pdf` provides them. Keep the original URLs only as provenance fields.",
     "Do not copy request.json, brief.md, upload manifests, planning JSON, answer lists, or process summaries into grader/output/sheet.json or grader/output/run-summary.json. Those files must contain only the worksheet report schema and publish summary schema.",
     "For source-paper-only/no-student grader runs, do not solve the paper, derive correct options, list an answer key, or include worked solutions. Build an unanswered worksheet with blank answers and review.mode='awaiting_answers'.",
-    "Do not use generate_json for grader/output/sheet.json or grader/output/run-summary.json; generate_json is a lesson-output helper and request.json/grader/task.md are not JSON schemas. Write grader JSON outputs directly with write_workspace_file and use publish_sheet for validation.",
-    "Do not spawn subagents for grader intake, upload inventory, workspace file reading, transcription, final grading synthesis, or worksheet assembly. Use view_image for source-page/photo fidelity checks and for rendered PDF pages when text or layout matters; use extract_text for primary student/photo transcription, propose_crop_bbox_with_fresh_agent for uncertain crop bbox planning, and validate_crop_with_fresh_agent for final crop visual validation. Use bounded subagents only for official-source lookup/verification when allowed by request.json or for visual localization proposals.",
-    "Use pad_image only for a crop that has already passed fresh visual validation and only needs a clean white border after publish_sheet reports dark edge contact. Never use pad_image to fix a crop-review failure, missing content, clipping, unrelated text, or a duplicated standalone caption; recrop from the high-resolution source page and validate again.",
-    "Every final linked figure/image crop must be validated by its own validate_crop_with_fresh_agent call. Pass expectedContent with the exact visual labels/axes/options/table cells/annotations that must be visible, and duplicatedTextToExclude for surrounding prompt/caption/table text rendered separately; pass `none` only when no surrounding duplicated text needs exclusion. The fresh reviewer uses view_image, transcribes all visible text in the crop, and then judges whether those required visual elements are present, major duplicated caption/question/table text is excluded, unrelated neighbouring content outside the target visual is absent, and required content does not touch or clip at an edge. Treat missing/clipped/wrong target content as blocking; treat small duplicate caption fragments or safe whitespace as minor issues, not reasons for endless recropping.",
-    "If you use crop_image or trim_image on a linked worksheet asset after writing grader/output/crop-validation.md, rerun the fresh-context crop check and rewrite crop-validation.md for the final asset before publishing. pad_image is allowed only after a completed passing validation because it only adds a white border.",
+    "Do not use generate_json for grader/output/sheet.json or grader/output/run-summary.json; generate_json is a lesson-output helper and request.json/grader/task.md are not JSON schemas. Write grader JSON outputs with write_json_workspace_file and use publish_sheet for validation.",
+    "Do not use generic spawn_agent for grader intake, upload inventory, workspace file reading, transcription, final grading synthesis, or worksheet assembly. Use view_image for source-page/photo fidelity checks and for rendered PDF pages when text or layout matters; use extract_text for primary student/photo transcription, propose_crop_bbox_with_fresh_agent for uncertain crop bbox planning, validate_crop_with_fresh_agent for final crop visual validation, and score_answers_with_fresh_agent for bounded root-question scoring on long handwritten papers. The main agent still assembles final artifacts and publishes.",
+    "For handwritten-grading papers with more than 12 answer leaves or more than 30 marks, do not score the whole paper in one long reasoning pass. After sheet-plan and visual/table handling, call score_answers_with_fresh_agent in 2-4 contiguous root/range batches that cover all answer leaves, issuing all independent calls in one parallel tool turn whenever possible, then assemble sheet.json from the returned inline scoring and modelAnswer results. Do not reread every scoring file after the helper returns; read only a named file/question if a result is missing or a validation error points to it.",
+    "Use pad_image only to add a clean white border around otherwise complete source visuals. If a crop already passed fresh visual validation, do not rerun validate_crop_with_fresh_agent just because pad_image wrote the final linked path; record the final padded path in crop-validation.md and note the passed source validation. If the only failure was required content touching the edge while all content was visible, pad once and validate only the padded asset.",
+    "Source problem-statement transcription must be verbatim page-by-page source wording, not a compact audit or needed-for-grading summary. Include interstitial stems, answer instructions, options, table labels/cells, figure labels, displayed formulas, and layout-critical wording. Do not summarize displayed formulas/equations as prose such as `displayed formula shown for ...`; render the actual formula as Markdown/LaTeX or plan a visible crop.",
+    "After source transcription, immediately write grader/output/sheet-plan.md with leaves, marks, visual/table placements, and scoring batches. Self-check that Total source marks equals section totals and listed leaf marks, and that Total answer-bearing leaves equals the listed leaves. For every included named figure/diagram/graph/visual option block, including shared root context that applies to later leaves, the plan must name a guarded grader/output/assets/... crop path or record a real failed render/crop attempt; never write that no crop is needed because grading is possible without the visual. Source problem-statement transcription must not be an only-visibly-answered list, and must not summarize diagram options as labels only, such as `Options: A, B, C, D shown as diagram choices` or `Options shown as diagram labels`; preserve shared source context, displayed formula setup lines, displayed formulas, and the source figure/diagram reference, then plan a visible crop when needed. Do not write `displayed formula shown for ...` as a substitute for a source formula. For long handwritten papers, call score_answers_with_fresh_agent in 2-4 contiguous root/range batches covering every answer leaf, and issue the calls in one parallel tool turn before crop validation/polishing, model-answer polishing, optional reference enrichment, or thumbnail-summary work. After required scoring helper calls return, create only missing planned final guarded image assets at their exact sheet-plan paths; do not create `-raw`, `-candidate`, `-draft`, or temp copies under grader/output/assets. Then write grader/output/sheet.json and grader/output/run-summary.json with write_json_workspace_file immediately from the returned inline results; do not first record crop-validation.md, reread scoring files, regrade, or enrich. Then run validate_grader_artifacts, fix named schema/crop/source-fidelity blockers, record crop-validation.md when linked crops exist, and publish. For requested model answers, use concise modelAnswer fields returned by the scoring helper; if they are missing, do not delay validation or publish for a separate derivation pass. Use fill only for simple one- or two-blank lines with prompt/blanks/after; use cloze for any segments/blanks question. Keep named figures/tables and image links out of section.theory; put them in the exact source question/group prompt. Do not invent bridge text such as `Figure 1 and Figure 2 are used in this question`, `planned as crop`, `shown in the source paper`, or `options shown as diagram labels`. Source problem-statement transcription must not contain placeholders such as not yet copied, TBD, or TODO.",
+    "Every final linked figure/image crop must be validated by its own validate_crop_with_fresh_agent call, except for pad_image outputs derived from an already passing validation as described above. Pass expectedContent with the exact printed/visible visual labels/axes/options/table cells/annotations that must be visible, and duplicatedTextToExclude for surrounding prompt/caption/table text rendered separately; pass `none` only when no surrounding duplicated text needs exclusion. Do not ask the reviewer to require inferred answers, mark-scheme facts, or labels/headings absent from the source visual. The fresh reviewer uses view_image, transcribes all visible text in the crop, and then judges whether those required visual elements are present, major duplicated caption/question/table text is excluded, unrelated neighbouring content outside the official target visual is absent, and required content does not touch or clip at an edge. Treat missing/clipped/wrong target content as blocking; treat related subpanels inside the same official embedded figure/table image, small duplicate caption fragments, or safe whitespace as minor issues, not reasons for endless recropping.",
+    "If a crop reviewer fails an otherwise complete source visual only because expectedContent named inferred or unprinted content, such as a group name, answer, placeholder, or heading absent from the figure, correct expectedContent and revalidate once instead of recropping.",
+    "If you use crop_image or trim_image on a linked worksheet asset after writing grader/output/crop-validation.md, rerun the fresh-context crop check and rewrite crop-validation.md for the final asset before publishing. pad_image does not require another validation when it only adds a white border to an already passed crop.",
     "Do not publish known blocking crop failures. For uncertain crops or after validate_crop_with_fresh_agent reports clipped/missing/wrong content, a broad fallback, or confusing neighbouring content, stop hand-guessing coordinates and use the bad-crop/full-page/grid JSON workflow through propose_crop_bbox_with_fresh_agent. If the same validation problem recurs after a proposal-assisted retry, treat it as a wrong-path signal and call review_run_progress_with_fresh_agent before continuing crop polishing. If the remaining issue is only a small duplicated caption/prompt fragment and all expected content is visible, record it as minor and continue.",
     "If an image tool reports a repeated-crop or pre-publish image-edit budget error, stop guessing boxes for that output: call review_run_progress_with_fresh_agent, switch to propose_crop_bbox_with_fresh_agent / extract_pdf_images / extract_pdf_diagrams if appropriate, and do not relabel unresolved crop failures as passing or link full-page fallbacks.",
     "Only after publish_sheet succeeds may you call done({summary}). Never end the run with a normal assistant final response before publish_sheet; continue using tools instead.",
@@ -8803,6 +10140,13 @@ export function buildSparkAgentSystemPrompt(options?: {
     "- Use python_exec for calculations or verification (e.g. validate that a reference solution matches tests).",
     "- Provide stdinPath and capture stdout/stderr to workspace files so results are persisted.",
   ];
+  if (options?.mode === "grader") {
+    const lessonStart = lines.indexOf("Lesson creation pipeline (CRITICAL):");
+    const pythonStart = lines.indexOf("Python execution:");
+    if (lessonStart >= 0 && pythonStart > lessonStart) {
+      lines = [...lines.slice(0, lessonStart), ...lines.slice(pythonStart)];
+    }
+  }
   if (options?.includePdfTranscriptionSkill) {
     lines.push(
       "",
@@ -9192,6 +10536,7 @@ function buildAgentTools(options: {
   const shouldEnforceLessonPipeline = enforceLessonPipeline === true;
   const shouldAllowPythonExec = allowPythonExec ?? true;
   const isGraderPublishingRun = graderPublish !== undefined;
+  let graderPublishCompleted = false;
   let prePublishImageEditCount = 0;
   let prePublishGlobalImageEditBlockedReason: string | null = null;
   let prePublishDiagramExtractionCount = 0;
@@ -9211,6 +10556,549 @@ function buildAgentTools(options: {
       }
       throw error;
     }
+  };
+  const readWorkspaceFileIfExists = async (
+    filePath: string,
+  ): Promise<string> => {
+    return readFile(resolveWorkspacePath(rootDir, filePath), {
+      encoding: "utf8",
+    }).catch(() => "");
+  };
+  const isWriteWorkspaceFileTarget = (
+    input: unknown,
+    filePath: string,
+  ): boolean => {
+    if (input === null || typeof input !== "object") {
+      return false;
+    }
+    const rawFilePath = (input as { filePath?: unknown }).filePath;
+    if (typeof rawFilePath !== "string") {
+      return false;
+    }
+    return rawFilePath.replace(/\\/gu, "/").trim() === filePath;
+  };
+  const readWorkspaceStringInputField = (
+    input: unknown,
+    field: string,
+  ): string | null => {
+    if (input === null || typeof input !== "object") {
+      return null;
+    }
+    const rawValue = (input as Record<string, unknown>)[field];
+    if (typeof rawValue !== "string") {
+      return null;
+    }
+    const normalizedValue = rawValue.replace(/\\/gu, "/").trim();
+    return normalizedValue.length > 0 ? normalizedValue : null;
+  };
+  const isWorkspacePathUnder = (
+    filePath: string | null,
+    allowedPrefixes: readonly string[],
+  ): boolean => {
+    if (filePath === null) {
+      return false;
+    }
+    return allowedPrefixes.some((prefix) => {
+      return filePath === prefix || filePath.startsWith(`${prefix}/`);
+    });
+  };
+  const readWorkspacePathInputField = (input: unknown): string | null => {
+    return (
+      readWorkspaceStringInputField(input, "filePath") ??
+      readWorkspaceStringInputField(input, "file_path") ??
+      readWorkspaceStringInputField(input, "path")
+    );
+  };
+  const isPostScoringAssemblyRead = (
+    toolName: string,
+    input: unknown,
+  ): boolean => {
+    if (toolName !== "read_workspace_file" && toolName !== "read_file") {
+      return false;
+    }
+    const filePath = readWorkspacePathInputField(input);
+    if (filePath === null) {
+      return false;
+    }
+    return (
+      [
+        "brief.md",
+        "request.json",
+        "grader/task.md",
+        "grader/uploads/index.json",
+        "grader/output/transcription.md",
+        "grader/output/sheet-plan.md",
+        "grader/output/sheet.json",
+        "grader/output/run-summary.json",
+        "grader/output/crop-validation.md",
+        "grader/output/source-fidelity-audit.md",
+      ].includes(filePath) ||
+      isWorkspacePathUnder(filePath, [
+        "skills",
+        "grader/output/scoring",
+        "grader/output/source-fidelity-audits",
+      ])
+    );
+  };
+  const isPostScoringAssemblyListing = (
+    toolName: string,
+    input: unknown,
+  ): boolean => {
+    if (toolName !== "list_workspace_dir" && toolName !== "list_dir") {
+      return false;
+    }
+    const rawDirectoryPath =
+      readWorkspaceStringInputField(input, "directoryPath") ??
+      readWorkspaceStringInputField(input, "dir_path");
+    const directoryPath = rawDirectoryPath ?? ".";
+    return (
+      directoryPath === "." ||
+      [
+        "grader",
+        "grader/output",
+        "grader/output/assets",
+        "grader/output/scoring",
+        "skills",
+      ].includes(directoryPath)
+    );
+  };
+  const readPositiveIntegerInputField = (
+    input: unknown,
+    field: string,
+  ): number | null => {
+    if (input === null || typeof input !== "object") {
+      return null;
+    }
+    const rawValue = (input as Record<string, unknown>)[field];
+    if (typeof rawValue === "number" && Number.isInteger(rawValue) && rawValue > 0) {
+      return rawValue;
+    }
+    if (typeof rawValue === "string" && rawValue.trim().length > 0) {
+      const parsed = Number.parseInt(rawValue.trim(), 10);
+      return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+    }
+    return null;
+  };
+  const readPositiveIntegerArrayInputField = (
+    input: unknown,
+    field: string,
+  ): number[] | null => {
+    if (input === null || typeof input !== "object") {
+      return null;
+    }
+    const rawValue = (input as Record<string, unknown>)[field];
+    if (!Array.isArray(rawValue)) {
+      return null;
+    }
+    const pageNumbers = rawValue
+      .map((entry) => {
+        if (typeof entry === "number" && Number.isInteger(entry) && entry > 0) {
+          return entry;
+        }
+        if (typeof entry === "string" && entry.trim().length > 0) {
+          const parsed = Number.parseInt(entry.trim(), 10);
+          if (Number.isInteger(parsed) && parsed > 0) {
+            return parsed;
+          }
+        }
+        return null;
+      })
+      .filter((entry): entry is number => entry !== null);
+    return pageNumbers.length > 0 ? pageNumbers : null;
+  };
+  const isBoundedPdfPageSelection = (input: unknown): boolean => {
+    const explicitPages =
+      readPositiveIntegerArrayInputField(input, "pageNumbers") ??
+      readPositiveIntegerArrayInputField(input, "pages");
+    if (explicitPages !== null) {
+      return explicitPages.length <= PDF_PAGE_NUMBERS_PREFERRED_THRESHOLD;
+    }
+    if (readPositiveIntegerInputField(input, "page") !== null) {
+      return true;
+    }
+    const firstPage = readPositiveIntegerInputField(input, "firstPage");
+    const lastPage = readPositiveIntegerInputField(input, "lastPage");
+    if (firstPage === null && lastPage === null) {
+      return false;
+    }
+    const startPage = firstPage ?? lastPage;
+    const endPage = lastPage ?? firstPage;
+    if (startPage === null || endPage === null || endPage < startPage) {
+      return false;
+    }
+    return endPage - startPage + 1 <= PDF_PAGE_NUMBERS_PREFERRED_THRESHOLD;
+  };
+  const isPostScoringSourceVisualPrep = (
+    toolName: string,
+    input: unknown,
+  ): boolean => {
+    const pdfPath = readWorkspaceStringInputField(input, "pdfPath");
+    const outputDir = readWorkspaceStringInputField(input, "outputDir");
+    if (!isWorkspacePathUnder(pdfPath, ["grader/uploads"])) {
+      return false;
+    }
+    switch (toolName) {
+      case "extract_pdf_images":
+        return isWorkspacePathUnder(outputDir, [
+          "grader/output/pdf-images",
+          "grader/output/source-images",
+        ]);
+      case "pdf_to_images":
+        return (
+          isWorkspacePathUnder(outputDir, [
+            "grader/output/rendered-pages",
+            "grader/output/page-images",
+            "grader/output/source-pages",
+          ]) && isBoundedPdfPageSelection(input)
+        );
+      default:
+        return false;
+    }
+  };
+  const getLongHandwrittenGraderProgress = async (): Promise<{
+    longHandwritten: boolean;
+    transcriptionExists: boolean;
+    sheetPlanExists: boolean;
+    scoringHelperCalled: boolean;
+    cropReviewCalled: boolean;
+    cropValidationExists: boolean;
+    sheetJsonExists: boolean;
+    runSummaryJsonExists: boolean;
+    sheetPlanIssues: string[];
+    transcriptionIssues: string[];
+  }> => {
+    if (!isGraderPublishingRun || graderPublishCompleted) {
+      return {
+        longHandwritten: false,
+        transcriptionExists: false,
+        sheetPlanExists: false,
+        scoringHelperCalled: false,
+        cropReviewCalled: false,
+        cropValidationExists: false,
+        sheetJsonExists: false,
+        runSummaryJsonExists: false,
+        sheetPlanIssues: [],
+        transcriptionIssues: [],
+      };
+    }
+
+    const [
+      transcriptionMarkdown,
+      rawStudentTranscriptionMarkdown,
+      rawStudentExtractMarkdown,
+      studentExtractMarkdown,
+      transcriptionRawMarkdown,
+      studentTranscriptionRawMarkdown,
+      studentTranscriptionMarkdown,
+      studentWorkTranscriptionMarkdown,
+      sheetPlanMarkdown,
+    ] = await Promise.all([
+      readWorkspaceFileIfExists("grader/output/transcription.md"),
+      readWorkspaceFileIfExists("grader/output/raw-student-transcription.md"),
+      readWorkspaceFileIfExists("grader/output/raw-student-extract.md"),
+      readWorkspaceFileIfExists("grader/output/student-extract.md"),
+      readWorkspaceFileIfExists("grader/output/transcription-raw.md"),
+      readWorkspaceFileIfExists("grader/output/student-transcription-raw.md"),
+      readWorkspaceFileIfExists("grader/output/student-transcription.md"),
+      readWorkspaceFileIfExists("grader/output/student-work-transcription.md"),
+      readWorkspaceFileIfExists("grader/output/sheet-plan.md"),
+    ]);
+    const progressMarkdown = [
+      transcriptionMarkdown,
+      rawStudentTranscriptionMarkdown,
+      rawStudentExtractMarkdown,
+      studentExtractMarkdown,
+      transcriptionRawMarkdown,
+      studentTranscriptionRawMarkdown,
+      studentTranscriptionMarkdown,
+      studentWorkTranscriptionMarkdown,
+      sheetPlanMarkdown,
+    ].join("\n");
+    if (progressMarkdown.trim().length === 0) {
+      return {
+        longHandwritten: false,
+        transcriptionExists: false,
+        sheetPlanExists: false,
+        scoringHelperCalled: false,
+        cropReviewCalled: false,
+        cropValidationExists: false,
+        sheetJsonExists: false,
+        runSummaryJsonExists: false,
+        sheetPlanIssues: [],
+        transcriptionIssues: [],
+      };
+    }
+
+    const sourceLeafLabels = new Set<string>();
+    for (const match of progressMarkdown.matchAll(
+      /(?:^|[^\d.])0?\s*([1-9]\d?)\s*\.\s*([1-9]\d?)(?![\d.])/gu,
+    )) {
+      const root = match[1]?.replace(/\s+/gu, "");
+      const leaf = match[2]?.replace(/\s+/gu, "");
+      if (root && leaf) {
+        sourceLeafLabels.add(`${root}.${leaf}`);
+      }
+    }
+    const studentAnswerExtractMarkdown = [
+      rawStudentTranscriptionMarkdown,
+      rawStudentExtractMarkdown,
+      studentExtractMarkdown,
+      transcriptionRawMarkdown,
+      studentTranscriptionRawMarkdown,
+      studentTranscriptionMarkdown,
+      studentWorkTranscriptionMarkdown,
+    ].join("\n");
+    const studentAnswerExtractHasManyLeaves =
+      studentAnswerExtractMarkdown.trim().length > 0 && sourceLeafLabels.size > 12;
+    const handwrittenMode =
+      /\bmode\s*:\s*(?:[`*_]+)?handwritten-grading(?:[`*_]+)?\b/iu.test(
+        progressMarkdown,
+      ) ||
+      /\bstudent\s+(?:answer|work|handwritten)\s+transcription\b/iu.test(
+        progressMarkdown,
+      ) ||
+      /\bstudent\s+handwritten\s+answers?\b/iu.test(progressMarkdown) ||
+      studentAnswerExtractHasManyLeaves;
+    const longHandwritten =
+      handwrittenMode &&
+      (sourceLeafLabels.size > 12 ||
+        /\b(?:overall\s+expected\s+total|total)\s*:\s*(?:3[1-9]|[4-9]\d|\d{3,})\s*marks?\b/iu.test(
+          progressMarkdown,
+        ) ||
+        /\[(?:3[1-9]|[4-9]\d|\d{3,})\s*marks?\]/iu.test(progressMarkdown));
+
+    if (!longHandwritten) {
+      return {
+        longHandwritten: false,
+        transcriptionExists: false,
+        sheetPlanExists: false,
+        scoringHelperCalled: false,
+        cropReviewCalled: false,
+        cropValidationExists: false,
+        sheetJsonExists: false,
+        runSummaryJsonExists: false,
+        sheetPlanIssues: [],
+        transcriptionIssues: [],
+      };
+    }
+
+    const [
+      sheetPlanExists,
+      scoringBatchFileCount,
+      cropValidationExists,
+      sheetJsonExists,
+      runSummaryJsonExists,
+      rawAgentLogMarkdown,
+      agentToolCallLogMarkdown,
+      questionPaperReferenceMarkdown,
+      sourceReferenceMarkdown,
+      sourceReferenceAltMarkdown,
+    ] = await Promise.all([
+      workspaceFileExists("grader/output/sheet-plan.md"),
+      countWorkspaceJsonFiles(rootDir, "grader/output/scoring"),
+      workspaceFileExists("grader/output/crop-validation.md"),
+      workspaceFileExists("grader/output/sheet.json"),
+      workspaceFileExists("grader/output/run-summary.json"),
+      readWorkspaceFileIfExists("logs/agent/agent.log"),
+      readAgentToolCallLogMarkdown(rootDir),
+      readWorkspaceFileIfExists("grader/output/qp-reference.md"),
+      readWorkspaceFileIfExists("grader/output/question-paper-reference.md"),
+      readWorkspaceFileIfExists("grader/output/source-reference.md"),
+    ]);
+    const agentLogMarkdown = [
+      rawAgentLogMarkdown,
+      agentToolCallLogMarkdown,
+    ].join("\n");
+    const sourceReferenceMarkdownForSheetPlan = [
+      questionPaperReferenceMarkdown,
+      sourceReferenceMarkdown,
+      sourceReferenceAltMarkdown,
+    ].join("\n\n");
+
+    return {
+      longHandwritten: true,
+      transcriptionExists: transcriptionMarkdown.trim().length > 0,
+      sheetPlanExists,
+      scoringHelperCalled: scoringBatchFileCount > 0,
+      cropReviewCalled: FRESH_CROP_REVIEW_TOOL_PATTERN.test(agentLogMarkdown),
+      cropValidationExists,
+      sheetJsonExists,
+      runSummaryJsonExists,
+      sheetPlanIssues: [
+        ...collectSheetPlanConsistencyIssues(sheetPlanMarkdown),
+        ...collectSheetPlanSourceReferenceIssues({
+          sheetPlanMarkdown,
+          sourceReferenceMarkdown: sourceReferenceMarkdownForSheetPlan,
+        }),
+      ],
+      transcriptionIssues:
+        collectSourceTranscriptionIntegrityIssues(transcriptionMarkdown),
+    };
+  };
+  const shouldRequireGraderPublishCriticalPath =
+    async (): Promise<boolean> => {
+      if (!isGraderPublishingRun || graderPublishCompleted) {
+        return false;
+      }
+      const [summaryExists, sheetExists] = await Promise.all([
+        workspaceFileExists("grader/output/run-summary.json"),
+        workspaceFileExists("grader/output/sheet.json"),
+      ]);
+      return summaryExists && sheetExists;
+    };
+  const applyGraderPublishCriticalGate = (
+    sourceTools: LlmToolSet,
+  ): LlmToolSet => {
+    if (!isGraderPublishingRun) {
+      return sourceTools;
+    }
+    const nextTools: LlmToolSet = {};
+    const runGraderPublishCriticalGate = async (
+      toolName: string,
+      input: unknown,
+      executeTool: () => Promise<unknown> | unknown,
+    ): Promise<unknown> => {
+      const longHandwrittenProgress = await getLongHandwrittenGraderProgress();
+      const isScoringHelperTool = toolName === "score_answers_with_fresh_agent";
+      const isPostScoringAssemblyTarget =
+        toolName === "write_json_workspace_file" &&
+        (isWriteWorkspaceFileTarget(input, "grader/output/sheet.json") ||
+          isWriteWorkspaceFileTarget(input, "grader/output/run-summary.json"));
+      const isPostScoringGuardedAssetCreation =
+        toolName === "crop_image" || toolName === "pad_image";
+      const isPostScoringVisualPrep = isPostScoringSourceVisualPrep(
+        toolName,
+        input,
+      );
+      const isPostScoringWorkspaceRead = isPostScoringAssemblyRead(
+        toolName,
+        input,
+      );
+      const isPostScoringWorkspaceListing = isPostScoringAssemblyListing(
+        toolName,
+        input,
+      );
+      const isSheetPlanRewrite =
+        toolName === "write_workspace_file" &&
+        (isWriteWorkspaceFileTarget(input, "grader/output/sheet-plan.md") ||
+          isWriteWorkspaceFileTarget(input, "grader/output/transcription.md"));
+      if (
+        longHandwrittenProgress.longHandwritten &&
+        !longHandwrittenProgress.sheetPlanExists &&
+        GRADER_PRE_PLAN_BLOCKED_TOOLS.has(toolName)
+      ) {
+        return {
+          status: "blocked_sheet_plan_required",
+          blockedTool: toolName,
+          nextAction:
+            "This is a long handwritten-grading paper. Finish grader/output/transcription.md if needed, then write grader/output/sheet-plan.md with included leaves, marks, visual/table placements, and scoring batches. Then call score_answers_with_fresh_agent before image inspection/crop polishing.",
+        };
+      }
+      if (
+        longHandwrittenProgress.longHandwritten &&
+        !longHandwrittenProgress.transcriptionExists &&
+        !isSheetPlanRewrite &&
+        (isScoringHelperTool || GRADER_PRE_PLAN_BLOCKED_TOOLS.has(toolName))
+      ) {
+        return {
+          status: "blocked_source_transcription_required",
+          blockedTool: toolName,
+          nextAction:
+            "This is a long handwritten-grading paper. Write grader/output/transcription.md with page-by-page student evidence plus verbatim printed source wording, figures, tables, displayed formulas, and layout notes before bounded scoring or artifact assembly.",
+        };
+      }
+      if (
+        longHandwrittenProgress.longHandwritten &&
+        longHandwrittenProgress.transcriptionIssues.length > 0 &&
+        !isSheetPlanRewrite &&
+        (isScoringHelperTool || GRADER_PRE_SCORING_BLOCKED_TOOLS.has(toolName))
+      ) {
+        return {
+          status: "blocked_source_transcription_invalid",
+          blockedTool: toolName,
+          nextAction: `${longHandwrittenProgress.transcriptionIssues[0] ?? "grader/output/transcription.md is not source-faithful"}. Rewrite grader/output/transcription.md page-by-page from the printed source before bounded scoring or artifact assembly.`,
+        };
+      }
+      if (
+        longHandwrittenProgress.longHandwritten &&
+        longHandwrittenProgress.sheetPlanIssues.length > 0 &&
+        !isSheetPlanRewrite &&
+        (isScoringHelperTool || GRADER_PRE_SCORING_BLOCKED_TOOLS.has(toolName))
+      ) {
+        return {
+          status: "blocked_sheet_plan_invalid",
+          blockedTool: toolName,
+          nextAction: `${longHandwrittenProgress.sheetPlanIssues[0] ?? "grader/output/sheet-plan.md is internally inconsistent"}. Rewrite grader/output/sheet-plan.md with consistent leaf, section, and total marks before bounded scoring or artifact assembly.`,
+        };
+      }
+      if (
+        longHandwrittenProgress.longHandwritten &&
+        longHandwrittenProgress.sheetPlanExists &&
+        !longHandwrittenProgress.scoringHelperCalled &&
+        GRADER_PRE_SCORING_BLOCKED_TOOLS.has(toolName) &&
+        !isSheetPlanRewrite
+      ) {
+        return {
+          status: "blocked_bounded_scoring_required",
+          blockedTool: toolName,
+          nextAction:
+            "This is a long handwritten-grading paper and grader/output/sheet-plan.md already exists. Call score_answers_with_fresh_agent now in 2-4 contiguous root/range batches using the focused source, student-answer, and mark-scheme excerpts already in transcription.md/sheet-plan.md. If those excerpts are missing, rewrite transcription.md or sheet-plan.md; do not keep reading/searching before bounded scoring. Issue all planned scoring calls in one parallel tool turn and use the returned questions/modelAnswer fields directly.",
+        };
+      }
+      if (
+        longHandwrittenProgress.longHandwritten &&
+        longHandwrittenProgress.scoringHelperCalled &&
+        (!longHandwrittenProgress.sheetJsonExists ||
+          !longHandwrittenProgress.runSummaryJsonExists) &&
+        !isScoringHelperTool &&
+        !isPostScoringAssemblyTarget &&
+        !isPostScoringGuardedAssetCreation &&
+        !isPostScoringVisualPrep &&
+        !isPostScoringWorkspaceRead &&
+        !isPostScoringWorkspaceListing &&
+        !isSheetPlanRewrite
+      ) {
+        return {
+          status: "blocked_artifact_assembly_required",
+          blockedTool: toolName,
+          nextAction:
+            "Bounded scoring is complete for this long handwritten-grading paper. If planned final image asset files are missing and no source image inventory exists, run one bounded source-visual prep step: extract_pdf_images to grader/output/pdf-images or pdf_to_images for the exact needed pages under grader/output/rendered-pages. Then create only final guarded grader/output/assets/... files at their exact sheet-plan paths with crop_image/fullImage or pad_image; do not create `-raw`, `-candidate`, `-draft`, or temp asset copies. Batch all missing crop/pad calls in one parallel tool turn. Immediately write grader/output/sheet.json with write_json_workspace_file; a valid sheet write can derive grader/output/run-summary.json. Preserve returned scores and teacher-review statuses. Do not crop-validate, reread, regrade, search, or enrich before first-pass artifacts. Put each figure/table in the exact question/group prompt, not section.theory. After both JSON files exist, call validate_grader_artifacts.",
+        };
+      }
+      if (await shouldRequireGraderPublishCriticalPath()) {
+        if (GRADER_POST_ARTIFACT_ALLOWED_TOOLS.has(toolName)) {
+          return executeTool();
+        }
+        return {
+          status: "blocked_publish_required",
+          blockedTool: toolName,
+          nextAction:
+            'grader/output/sheet.json and grader/output/run-summary.json already exist. Do not start new extraction, scoring, web lookup, or enrichment work. Call validate_grader_artifacts({"requireSourceFidelityAudit": false}), fix any reported artifact issues, run the required source-fidelity audit if needed, then call publish_sheet({}).',
+        };
+      }
+      return executeTool();
+    };
+    for (const [toolName, toolConfig] of Object.entries(sourceTools)) {
+      if (toolConfig.type === "custom") {
+        nextTools[toolName] = {
+          ...toolConfig,
+          execute: async (input) =>
+            runGraderPublishCriticalGate(toolName, input, () =>
+              toolConfig.execute(input),
+            ),
+        };
+        continue;
+      }
+      nextTools[toolName] = {
+        ...toolConfig,
+        execute: async (input) => {
+          return runGraderPublishCriticalGate(toolName, input, () =>
+            toolConfig.execute(input),
+          );
+        },
+      };
+    }
+    return nextTools;
   };
   let sharedPdfKnowledgeBaseEntries:
     | readonly SharedPdfKnowledgeBaseEntry[]
@@ -9466,6 +11354,33 @@ function buildAgentTools(options: {
       rationale: z.string().trim().min(1),
     })
     .strict();
+
+  const freshGradingQuestionReviewSchema = z
+    .object({
+      id: z.string().trim().min(1),
+      status: z.enum(["correct", "incorrect", "teacher-review"]),
+      score: z.object({
+        got: z.number().min(0),
+        total: z.number().min(0),
+      }),
+      note: z.string(),
+      replyPlaceholder: z.string().optional(),
+      modelAnswer: z.string().optional(),
+      evidence: z.string().optional(),
+    })
+    .strip();
+
+  const freshGradingBatchResultSchema = z
+    .object({
+      scope: z.string(),
+      totals: z.object({
+        got: z.number().min(0),
+        total: z.number().min(0),
+      }),
+      questions: z.array(freshGradingQuestionReviewSchema),
+      uncertainties: z.array(z.string()).default([]),
+    })
+    .strip();
 
   const readAgentLogTail = async (maxChars: number): Promise<string> => {
     const raw = await readFile(path.join(rootDir, "logs/agent/agent.log"), {
@@ -11168,9 +13083,16 @@ function buildAgentTools(options: {
   const cropImageInputSchema = z
     .object({
       ...cropImageCommonSchema,
-      bboxPixels: cropImageBboxPixelsSchema,
+      bboxPixels: cropImageBboxPixelsSchema.optional(),
+      fullImage: z.boolean().optional(),
     })
-    .strict();
+    .strict()
+    .refine(
+      (input) => input.bboxPixels !== undefined || input.fullImage === true,
+      {
+        message: "Provide bboxPixels or set fullImage=true.",
+      },
+    );
   const cropBboxProposalSchema = z
     .object({
       cropBase: z.enum(["badCrop", "fullPage"]),
@@ -11188,7 +13110,7 @@ function buildAgentTools(options: {
       : {}),
     read_workspace_file: tool({
       description:
-        "Read a UTF-8 text file from the Spark agent workspace using a workspace-relative path. Use this for brief.md, request.json, grader/task.md, transcription markdown, and JSON artifacts. Large generated output/reference files without startLine/lineCount return a compact line-numbered outline only on first unbounded read; repeated unbounded reads return a reminder only. Use grep_workspace_files first, then targeted startLine/lineCount reads for exact source-paper or mark-scheme sections without loading the whole reference into context.",
+        'Read a UTF-8 text file from the Spark agent workspace using a workspace-relative path. Use this for brief.md, request.json, grader/task.md, transcription markdown, and JSON artifacts. Large generated output/reference files without startLine/lineCount return a compact line-numbered outline only on first unbounded read; repeated unbounded reads are blocked. Use grep_workspace_files first, then targeted startLine/lineCount reads for exact source-paper or mark-scheme sections without loading the whole reference into context. Example targeted call: {"filePath":"grader/output/qp-reference.md","startLine":68,"lineCount":80}.',
       inputSchema: z
         .object({
           filePath: z.string().trim().min(1),
@@ -11246,6 +13168,17 @@ function buildAgentTools(options: {
             normalizedFilePath,
             largeOutlineReadCount,
           );
+          if (largeOutlineReadCount > 1) {
+            throw new Error(
+              [
+                `[read_workspace_file] repeated unbounded read blocked for ${resolvedFilePath}`,
+                "This large generated output/reference file already returned a compact outline.",
+                "Use grep_workspace_files with specific question/page labels, then call read_workspace_file with startLine/lineCount or read_file with offset/limit.",
+                `Example: read_workspace_file({"filePath":"${resolvedFilePath}","startLine":68,"lineCount":80})`,
+                `Fallback: read_file({"file_path":"${resolvedFilePath}","offset":68,"limit":80})`,
+              ].join(" "),
+            );
+          }
         }
         return renderWorkspaceFileReadResult({
           filePath: resolvedFilePath,
@@ -11265,7 +13198,7 @@ function buildAgentTools(options: {
     }),
     write_workspace_file: tool({
       description:
-        "Write a UTF-8 text file in the Spark agent workspace using a workspace-relative path. Use this to create or replace grader/output/sheet.json, grader/output/run-summary.json, crop-validation.md, and transcription cleanup files.",
+        "Write a UTF-8 text file in the Spark agent workspace using a workspace-relative path. Use this for Markdown/text artifacts such as crop-validation.md and transcription cleanup files. For JSON artifacts, especially grader/output/sheet.json and grader/output/run-summary.json, use write_json_workspace_file instead so escaping stays valid.",
       inputSchema: z
         .object({
           filePath: z.string().trim().min(1),
@@ -11273,14 +13206,282 @@ function buildAgentTools(options: {
         })
         .strict(),
       execute: async ({ filePath, content }) => {
+        const normalizedFilePath = filePath.replace(/\\/gu, "/").trim();
+        if (
+          isGraderPublishingRun &&
+          (normalizedFilePath === "grader/output/source-fidelity-audit.md" ||
+            normalizedFilePath.startsWith(
+              "grader/output/source-fidelity-audits/",
+            ))
+        ) {
+          return {
+            status: "blocked_tool_owned_artifact",
+            blockedTool: "write_workspace_file",
+            filePath: normalizedFilePath,
+            nextAction:
+              "Do not write source-fidelity audit files manually. Call validate_source_fidelity_with_fresh_agent with sourcePaths; that tool writes grader/output/source-fidelity-audit.md and per-scope audit records after a real fresh-context review.",
+          };
+        }
         const resolvedPath = resolveWorkspacePath(rootDir, filePath);
         await ensureDir(path.dirname(resolvedPath));
         await writeFile(resolvedPath, content, { encoding: "utf8" });
         workspace.scheduleUpdate(filePath);
+        const sourceReferenceMarkdownForSheetPlan =
+          isGraderPublishingRun &&
+          normalizedFilePath === "grader/output/sheet-plan.md"
+            ? [
+                await readWorkspaceFileIfExists(
+                  "grader/output/qp-reference.md",
+                ),
+                await readWorkspaceFileIfExists(
+                  "grader/output/question-paper-reference.md",
+                ),
+                await readWorkspaceFileIfExists(
+                  "grader/output/source-reference.md",
+                ),
+              ].join("\n\n")
+            : "";
+        const graderArtifactIssues =
+          isGraderPublishingRun &&
+          normalizedFilePath === "grader/output/transcription.md"
+            ? collectSourceTranscriptionIntegrityIssues(content)
+            : isGraderPublishingRun &&
+                normalizedFilePath === "grader/output/sheet-plan.md"
+              ? [
+                  ...collectSheetPlanConsistencyIssues(content),
+                  ...collectSheetPlanSourceReferenceIssues({
+                    sheetPlanMarkdown: content,
+                    sourceReferenceMarkdown: sourceReferenceMarkdownForSheetPlan,
+                  }),
+                ]
+              : [];
+        const jsonWriteStatus = (() => {
+          if (!normalizedFilePath.endsWith(".json")) {
+            return null;
+          }
+          try {
+            JSON.parse(content);
+            return {
+              status: "valid_json" as const,
+            };
+          } catch (error) {
+            return {
+              status: "invalid_json" as const,
+              error: errorAsString(error),
+              fix:
+                normalizedFilePath === "grader/output/sheet.json" ||
+                normalizedFilePath === "grader/output/run-summary.json"
+                  ? "Repair this JSON before source-fidelity audit or publish; escaped LaTeX backslashes such as \\( must be written as \\\\( inside JSON strings, or use $...$ math delimiters."
+                  : "Repair this JSON before using it as an artifact.",
+            };
+          }
+        })();
+        if (graderArtifactIssues.length > 0) {
+          return {
+            status:
+              normalizedFilePath === "grader/output/transcription.md"
+                ? "written_invalid_source_transcription"
+                : "written_invalid_sheet_plan",
+            filePath,
+            bytes: Buffer.byteLength(content, "utf8"),
+            issues: graderArtifactIssues,
+            nextAction:
+              normalizedFilePath === "grader/output/transcription.md"
+                ? "Rewrite grader/output/transcription.md page-by-page from the printed source before bounded scoring or artifact assembly."
+                : "Rewrite grader/output/sheet-plan.md with consistent marks and explicit visual/table handling before bounded scoring or artifact assembly.",
+          };
+        }
+        const nextAction =
+          isGraderPublishingRun &&
+          normalizedFilePath === "grader/output/transcription.md"
+            ? "Immediately write grader/output/sheet-plan.md with source leaves, marks, visual/table placements, and 2-4 scoring batches. Do not inspect, crop, validate, search, or enrich before the plan."
+            : isGraderPublishingRun &&
+                normalizedFilePath === "grader/output/sheet-plan.md"
+              ? "Immediately call score_answers_with_fresh_agent in 2-4 contiguous root/range batches in one parallel tool turn. Do not inspect images, crop, validate, search, or enrich before scoring."
+              : null;
         return {
-          status: "written",
+          status:
+            jsonWriteStatus?.status === "invalid_json"
+              ? "written_invalid_json"
+              : "written",
           filePath,
           bytes: Buffer.byteLength(content, "utf8"),
+          ...(jsonWriteStatus !== null ? { json: jsonWriteStatus } : {}),
+          ...(nextAction !== null ? { nextAction } : {}),
+        };
+      },
+    }),
+    write_json_workspace_file: tool({
+      description:
+        "Write a JSON object to the Spark agent workspace using a workspace-relative .json path. Pass jsonText as the complete JSON text object; the tool parses and reserializes it so invalid JSON is rejected and valid LaTeX/backslashes are preserved. Prefer this over write_workspace_file for grader/output/sheet.json and grader/output/run-summary.json.",
+      inputSchema: z
+        .object({
+          filePath: z.string().trim().min(1),
+          jsonText: z.string().trim().min(2),
+        })
+        .strict(),
+      execute: async ({ filePath, jsonText }) => {
+        const normalizedFilePath = filePath.replace(/\\/gu, "/").trim();
+        if (!normalizedFilePath.endsWith(".json")) {
+          throw new Error(
+            `write_json_workspace_file can only write .json files (got "${normalizedFilePath}").`,
+          );
+        }
+        let json: unknown;
+        let repairedCommonRawLatexBackslashes = false;
+        const trimmedJsonText = jsonText.trim();
+        try {
+          json = JSON.parse(trimmedJsonText);
+        } catch (error) {
+          const repairedJsonText =
+            repairCommonRawLatexJsonBackslashes(trimmedJsonText);
+          if (repairedJsonText !== trimmedJsonText) {
+            try {
+              json = JSON.parse(repairedJsonText);
+              repairedCommonRawLatexBackslashes = true;
+            } catch (repairedError) {
+              return {
+                status: "invalid_json",
+                filePath: normalizedFilePath,
+                error: errorAsString(repairedError),
+                originalError: errorAsString(error),
+                fix:
+                  "Pass jsonText as one complete valid JSON object. Do not pass an empty object, a partial object, markdown, comments, or surrounding code fences. Escape LaTeX backslashes in JSON strings, for example write \\\\( for visible \\(.",
+              };
+            }
+          } else {
+            return {
+              status: "invalid_json",
+              filePath: normalizedFilePath,
+              error: errorAsString(error),
+              fix:
+                "Pass jsonText as one complete valid JSON object. Do not pass an empty object, a partial object, markdown, comments, or surrounding code fences. Escape LaTeX backslashes in JSON strings, for example write \\\\( for visible \\(.",
+            };
+          }
+        }
+        if (!isPlainRecord(json)) {
+          return {
+            status: "invalid_json",
+            filePath: normalizedFilePath,
+            error: "jsonText must parse to a JSON object.",
+            fix: "Pass a complete top-level JSON object.",
+          };
+        }
+        if (
+          (normalizedFilePath === "grader/output/sheet.json" ||
+            normalizedFilePath === "grader/output/run-summary.json") &&
+          Object.keys(json).length === 0
+        ) {
+          return {
+            status: "invalid_json",
+            filePath: normalizedFilePath,
+            error: `${normalizedFilePath} cannot be an empty object.`,
+            fix:
+              normalizedFilePath === "grader/output/sheet.json"
+                ? "Pass the full graded worksheet report with schemaVersion, sheet, answers, review, and optional references."
+                : "Pass the full run summary with presentation, totals, and sheet.filePath.",
+          };
+        }
+        const resolvedPath = resolveWorkspacePath(rootDir, normalizedFilePath);
+        await ensureDir(path.dirname(resolvedPath));
+        let outputJson: Record<string, unknown> = json;
+        const normalizedGraderSheetShape =
+          isGraderPublishingRun &&
+          normalizedFilePath === "grader/output/sheet.json"
+            ? normalizeRawPaperSheetShapeForPublish(json)
+            : { value: json, changed: false };
+        if (normalizedGraderSheetShape.changed) {
+          outputJson = isPlainRecord(normalizedGraderSheetShape.value)
+            ? normalizedGraderSheetShape.value
+            : json;
+        }
+        const content = `${JSON.stringify(outputJson, null, 2)}\n`;
+        await writeFile(resolvedPath, content, { encoding: "utf8" });
+        workspace.scheduleUpdate(normalizedFilePath);
+        const rawWorksheetShapeIssues =
+          isGraderPublishingRun &&
+          normalizedFilePath === "grader/output/sheet.json"
+            ? collectRawGraderWorksheetShapeIssues(outputJson)
+            : [];
+        if (rawWorksheetShapeIssues.length > 0) {
+          return {
+            status: "written_invalid_grader_schema",
+            filePath: normalizedFilePath,
+            bytes: Buffer.byteLength(content, "utf8"),
+            topLevelKeys: Object.keys(outputJson),
+            issues: rawWorksheetShapeIssues,
+            nextAction:
+              "Rewrite grader/output/sheet.json with supported question shapes, then call validate_grader_artifacts.",
+          };
+        }
+        const parsedWrittenGraderReport =
+          isGraderPublishingRun &&
+          normalizedFilePath === "grader/output/sheet.json"
+            ? SparkGraderWorksheetReportSchema.safeParse(outputJson)
+            : null;
+        const earlyAssemblyIssues =
+          parsedWrittenGraderReport?.success === true
+            ? collectGraderWorksheetEarlyAssemblyIssues(
+                parsedWrittenGraderReport.data,
+              )
+            : [];
+        if (earlyAssemblyIssues.length > 0) {
+          return {
+            status: "written_needs_publish_repair",
+            filePath: normalizedFilePath,
+            bytes: Buffer.byteLength(content, "utf8"),
+            topLevelKeys: Object.keys(outputJson),
+            issues: earlyAssemblyIssues.slice(0, 10),
+            nextAction:
+              "Rewrite grader/output/sheet.json now. Create and link any planned grader/output/assets/... crops or Markdown tables before run-summary.json, move every named figure/table and image link out of section.theory/infoBox into the exact question or group prompt, remove workflow/source-paper placeholder phrases, keep badgeLabel short, then write run-summary.json and validate_grader_artifacts.",
+          };
+        }
+        let derivedRunSummary: { path: string; bytes: number } | null = null;
+        if (
+          parsedWrittenGraderReport?.success === true &&
+          !(await workspaceFileExists("grader/output/run-summary.json"))
+        ) {
+          const summary = buildDerivedGraderRunSummary({
+            report: parsedWrittenGraderReport.data,
+            sheetPath: "grader/output/sheet.json",
+          });
+          const summaryContent = `${JSON.stringify(summary, null, 2)}\n`;
+          const summaryPath = resolveWorkspacePath(
+            rootDir,
+            "grader/output/run-summary.json",
+          );
+          await ensureDir(path.dirname(summaryPath));
+          await writeFile(summaryPath, summaryContent, { encoding: "utf8" });
+          workspace.scheduleUpdate("grader/output/run-summary.json");
+          derivedRunSummary = {
+            path: "grader/output/run-summary.json",
+            bytes: Buffer.byteLength(summaryContent, "utf8"),
+          };
+        }
+        const nextAction =
+          isGraderPublishingRun &&
+          normalizedFilePath === "grader/output/sheet.json"
+            ? (derivedRunSummary !== null ||
+              (await workspaceFileExists("grader/output/run-summary.json")))
+              ? 'Immediately call validate_grader_artifacts({"requireSourceFidelityAudit": false}); do not enrich, reread, or inspect images before validation names the remaining fixes.'
+              : "Immediately write grader/output/run-summary.json with totals matching review.score, then call validate_grader_artifacts. Do not enrich, reread, or inspect images before validation."
+            : isGraderPublishingRun &&
+                normalizedFilePath === "grader/output/run-summary.json"
+              ? 'Immediately call validate_grader_artifacts({"requireSourceFidelityAudit": false}); do not enrich, reread, or inspect images before validation names the remaining fixes.'
+              : null;
+        return {
+          status: "written",
+          filePath: normalizedFilePath,
+          bytes: Buffer.byteLength(content, "utf8"),
+          topLevelKeys: Object.keys(outputJson),
+          ...(normalizedGraderSheetShape.changed
+            ? { normalizedGraderSheetShape: true }
+            : {}),
+          ...(repairedCommonRawLatexBackslashes
+            ? { repairedCommonRawLatexBackslashes: true }
+            : {}),
+          ...(derivedRunSummary !== null ? { derivedRunSummary } : {}),
+          ...(nextAction !== null ? { nextAction } : {}),
         };
       },
     }),
@@ -11321,7 +13522,7 @@ function buildAgentTools(options: {
     }),
     grep_workspace_files: tool({
       description:
-        "Search UTF-8 workspace text files under a directory with a JavaScript regular expression pattern. Use this to find figure/table references or schema fields in workspace artifacts. Binary uploads and large non-text files are skipped. Matches in generated output/reference files include short surrounding context by default so you can avoid whole-file reads.",
+        "Search UTF-8 workspace text files under a directory with a JavaScript regular expression pattern. Use this to find figure/table references or source labels in workspace artifacts. Binary uploads, replay scaffolding, seeded skills, and large non-text files are skipped when searching from the workspace root. Matches in generated output/reference files include short surrounding context by default so you can avoid whole-file reads.",
       inputSchema: z
         .object({
           directoryPath: z.preprocess(
@@ -11391,6 +13592,8 @@ function buildAgentTools(options: {
           const entries = await readdir(absoluteDirectory, {
             withFileTypes: true,
           });
+          const searchingWorkspaceRoot =
+            path.resolve(rootAbsolute) === path.resolve(rootDir);
           for (const entry of entries) {
             if (matches.length >= limit) {
               return;
@@ -11405,6 +13608,10 @@ function buildAgentTools(options: {
               if (
                 entry.name === "node_modules" ||
                 entry.name === ".git" ||
+                (searchingWorkspaceRoot &&
+                  (entry.name === ".spark-agent-replay" ||
+                    entry.name === "logs" ||
+                    entry.name === "skills")) ||
                 entry.name === "llm_calls" ||
                 entry.name === "tool_calls"
               ) {
@@ -11419,6 +13626,17 @@ function buildAgentTools(options: {
             if (
               normalizedRelativePath.startsWith("grader/uploads/") ||
               normalizedRelativePath.startsWith("sheet/uploads/")
+            ) {
+              continue;
+            }
+            if (
+              searchingWorkspaceRoot &&
+              (normalizedRelativePath === "brief.md" ||
+                normalizedRelativePath === "request.json" ||
+                normalizedRelativePath === "grader/task.md" ||
+                normalizedRelativePath === "grader/uploads/index.json" ||
+                normalizedRelativePath === "sheet/task.md" ||
+                normalizedRelativePath === "sheet/uploads/index.json")
             ) {
               continue;
             }
@@ -11742,7 +13960,9 @@ function buildAgentTools(options: {
         "Reads promptPath from the workspace and expands {{relative/path}} placeholders by inlining referenced workspace files.",
         "",
         "Important:",
-        "- This tool is NOT for JSON outputs. Use generate_json + validate_json for JSON files.",
+        graderPublish
+          ? "- This tool is NOT for JSON outputs. For grader JSON, use write_workspace_file, then validate_grader_artifacts."
+          : "- This tool is NOT for JSON outputs. Use generate_json + validate_json for JSON files.",
         "- outputPath must NOT end with .json (generate_text will reject it).",
         "",
         "If the generated text contains a line like `pass: true|false` (used by lesson grading prompts),",
@@ -13162,21 +15382,66 @@ function buildAgentTools(options: {
     }),
     pdf_to_images: tool({
       description: [
-        "Render pages from a workspace PDF into PNG images in the workspace.",
-        "Use this for agentic diagram extraction loops before calling crop_image. For long PDFs, pass 1-based pageNumbers for the exact pages needed, matching the extracted reference headings such as ## Page 3; rendering every page is blocked.",
+        "Render selected pages from a workspace PDF into PNG images in the workspace.",
+        `Use this for agentic diagram extraction loops before calling crop_image. Always pass required 1-based pageNumbers for the exact pages needed, matching extracted reference headings such as ## Page 3. PDFs over ${PDF_PAGE_NUMBERS_REQUIRED_THRESHOLD.toString()} pages reject calls without pageNumbers.`,
+        'For page selection use {"pageNumbers":[2,3,11]}. pageNumbers is a required top-level tool field, not part of outputDir. Legacy aliases pages/page/firstPage/lastPage are tolerated only when pageNumbers is also present.',
       ].join("\n"),
       inputSchema: z
         .object({
           pdfPath: z.string().trim().min(1),
           outputDir: z.string().trim().min(1),
           pageNumbers: z.preprocess(
-            (value) => {
-              if (value === null || value === undefined) {
-                return undefined;
-              }
-              return value;
-            },
-            z.array(z.number().int().min(1)).max(200).optional(),
+            (value) => (value === null ? undefined : value),
+            z
+              .array(
+                z.preprocess((entry) => {
+                  if (typeof entry === "string" && entry.trim().length > 0) {
+                    const parsed = Number.parseInt(entry.trim(), 10);
+                    if (Number.isInteger(parsed)) {
+                      return parsed;
+                    }
+                  }
+                  return entry;
+                }, z.number().int().min(1)),
+              )
+              .min(1)
+              .max(200)
+              .describe("Required 1-based PDF page numbers to render."),
+          ),
+          pages: z.preprocess(
+            (value) => (value === null ? undefined : value),
+            z
+              .array(z.number().int().min(1))
+              .max(200)
+              .optional()
+              .describe("Alias for pageNumbers."),
+          ),
+          page: z.preprocess(
+            (value) => (value === null ? undefined : value),
+            z
+              .number()
+              .int()
+              .min(1)
+              .optional()
+              .describe("Single 1-based PDF page to render."),
+          ),
+          firstPage: z.preprocess(
+            (value) => (value === null ? undefined : value),
+            z
+              .number()
+              .int()
+              .min(1)
+              .optional()
+              .describe("First 1-based page in an inclusive render range."),
+          ),
+          lastPage: z.preprocess(
+            (value) => (value === null ? undefined : value),
+            z
+              .number()
+              .int()
+              .min(1)
+              .optional()
+              .describe("Last 1-based page in an inclusive render range."),
           ),
           scale: z.preprocess((value) => {
             if (value === null || value === undefined) {
@@ -13200,10 +15465,42 @@ function buildAgentTools(options: {
         pdfPath,
         outputDir,
         pageNumbers,
+        pages,
+        page,
+        firstPage,
+        lastPage,
         scale,
         maxDimension,
         filenamePrefix,
       }) => {
+        const recoveredSelectionFromOutputDir = (() => {
+          const match = outputDir.match(
+            /[\\"]*,\s*[\\"]*(pageNumbers|pages)[\\"]*\s*:\s*\[([0-9,\s]+)\]/u,
+          );
+          if (!match || match.index === undefined) {
+            return null;
+          }
+          const recoveredPages = match[2]
+            .split(",")
+            .map((entry) => Number.parseInt(entry.trim(), 10))
+            .filter((entry) => Number.isInteger(entry) && entry > 0);
+          if (recoveredPages.length === 0) {
+            return null;
+          }
+          const recoveredOutputDir = outputDir
+            .slice(0, match.index)
+            .replace(/[\\"]+$/u, "")
+            .trim();
+          if (recoveredOutputDir.length === 0) {
+            return null;
+          }
+          return {
+            outputDir: recoveredOutputDir,
+            pageNumbers: recoveredPages,
+          };
+        })();
+        const effectiveOutputDir =
+          recoveredSelectionFromOutputDir?.outputDir ?? outputDir;
         const decoded = await decodePdfBytesFromWorkspace({
           toolName: "read_pdf",
           pdfPath,
@@ -13211,16 +15508,54 @@ function buildAgentTools(options: {
         const pdfBytes = Uint8Array.from(decoded.pdfBytes);
         const pageCount = await getPdfPageCount({ pdfBytes });
         if (
-          pageCount > 12 &&
-          (pageNumbers === undefined || pageNumbers.length === 0)
+          firstPage !== undefined &&
+          lastPage !== undefined &&
+          lastPage < firstPage
         ) {
           throw new Error(
-            `pdf_to_images requires 1-based pageNumbers for PDFs longer than 12 pages (pageCount=${pageCount.toString()}). Use extract_pdf_reference_text/grep first to choose exact pages, then retry with pageNumbers, for example {"pageNumbers":[2,3,11]}.`,
+            `pdf_to_images lastPage ${lastPage.toString()} must be greater than or equal to firstPage ${firstPage.toString()}.`,
+          );
+        }
+        const resolvedPageNumbers = (() => {
+          if (pageNumbers !== undefined && pageNumbers.length > 0) {
+            return pageNumbers;
+          }
+          if (
+            recoveredSelectionFromOutputDir !== null &&
+            recoveredSelectionFromOutputDir.pageNumbers.length > 0
+          ) {
+            return recoveredSelectionFromOutputDir.pageNumbers;
+          }
+          if (pages !== undefined && pages.length > 0) {
+            return pages;
+          }
+          if (page !== undefined) {
+            return [page];
+          }
+          if (firstPage !== undefined || lastPage !== undefined) {
+            const start = firstPage ?? lastPage ?? 1;
+            const end = lastPage ?? firstPage ?? start;
+            return Array.from(
+              { length: end - start + 1 },
+              (_, index) => start + index,
+            );
+          }
+          return undefined;
+        })();
+        const missingPageNumbers =
+          resolvedPageNumbers === undefined ||
+          resolvedPageNumbers.length === 0;
+        if (
+          pageCount > PDF_PAGE_NUMBERS_REQUIRED_THRESHOLD &&
+          missingPageNumbers
+        ) {
+          throw new Error(
+            `pdf_to_images requires explicit 1-based pages for PDFs longer than ${PDF_PAGE_NUMBERS_REQUIRED_THRESHOLD.toString()} pages (pageCount=${pageCount.toString()}). Use extract_pdf_reference_text/grep first to choose exact pages, then retry with one of {"pageNumbers":[2,3,11]}, {"pages":[2,3,11]}, {"page":3}, or {"firstPage":2,"lastPage":4}.`,
           );
         }
         const requestedPages =
-          pageNumbers && pageNumbers.length > 0
-            ? [...new Set(pageNumbers)].sort((a, b) => a - b)
+          !missingPageNumbers && resolvedPageNumbers
+            ? [...new Set(resolvedPageNumbers)].sort((a, b) => a - b)
             : Array.from({ length: pageCount }, (_, index) => index + 1);
         if (requestedPages.length === 0) {
           throw new Error(
@@ -13237,15 +15572,14 @@ function buildAgentTools(options: {
         const resolvedScale = scale ?? DEFAULT_PDF_PAGE_IMAGE_SCALE;
         const resolvedMaxDimension =
           maxDimension ?? DEFAULT_PDF_PAGE_IMAGE_MAX_DIMENSION;
-        const renderedByPage = await renderPdfPagesBgra({
-          pdfBytes,
-          pageNumbers: requestedPages,
-          scale: resolvedScale,
-        });
-        const normalizedOutputDir = outputDir
+        const renderBatchSize =
+          requestedPages.length > PDF_PAGE_NUMBERS_PREFERRED_THRESHOLD
+            ? 4
+            : requestedPages.length;
+        const normalizedEffectiveOutputDir = effectiveOutputDir
           .replace(/\\/g, "/")
           .replace(/\/+$/u, "");
-        if (normalizedOutputDir.length === 0) {
+        if (normalizedEffectiveOutputDir.length === 0) {
           throw new Error("outputDir must not be empty.");
         }
         const prefix = (filenamePrefix ?? "page").replace(
@@ -13259,65 +15593,90 @@ function buildAgentTools(options: {
           height: number;
           bytes: number;
         }> = [];
-        for (const pageNumber of requestedPages) {
-          const bitmap = renderedByPage.get(pageNumber);
-          if (!bitmap) {
-            continue;
-          }
-          const relativePath = `${normalizedOutputDir}/${prefix}-${pageNumber
-            .toString()
-            .padStart(4, "0")}.png`;
-          const resolvedPath = resolveWorkspacePath(rootDir, relativePath);
-          await ensureDir(path.dirname(resolvedPath));
-          let pngBytes: Uint8Array = Buffer.from(encodeBgraBitmapToPng(bitmap));
-          let outputWidth = bitmap.width;
-          let outputHeight = bitmap.height;
-          if (Math.max(outputWidth, outputHeight) > resolvedMaxDimension) {
-            const sharp = getSharp();
-            pngBytes = await sharp(pngBytes)
-              .resize({
-                width:
-                  outputWidth >= outputHeight
-                    ? resolvedMaxDimension
-                    : undefined,
-                height:
-                  outputHeight > outputWidth ? resolvedMaxDimension : undefined,
-                fit: "inside",
-                withoutEnlargement: true,
-              })
-              .png()
-              .toBuffer();
-            const outputMetadata = await sharp(pngBytes).metadata();
-            if (
-              typeof outputMetadata.width === "number" &&
-              outputMetadata.width > 0
-            ) {
-              outputWidth = outputMetadata.width;
-            }
-            if (
-              typeof outputMetadata.height === "number" &&
-              outputMetadata.height > 0
-            ) {
-              outputHeight = outputMetadata.height;
-            }
-          }
-          await writeFile(resolvedPath, pngBytes);
-          workspace.scheduleUpdate(relativePath);
-          written.push({
-            page: pageNumber,
-            path: relativePath,
-            width: outputWidth,
-            height: outputHeight,
-            bytes: pngBytes.byteLength,
+        for (
+          let pageIndex = 0;
+          pageIndex < requestedPages.length;
+          pageIndex += renderBatchSize
+        ) {
+          const pageBatch = requestedPages.slice(
+            pageIndex,
+            pageIndex + renderBatchSize,
+          );
+          const renderedByPage = await renderPdfPagesBgra({
+            pdfBytes,
+            pageNumbers: pageBatch,
+            scale: resolvedScale,
           });
+          for (const pageNumber of pageBatch) {
+            const bitmap = renderedByPage.get(pageNumber);
+            if (!bitmap) {
+              continue;
+            }
+            const relativePath = `${normalizedEffectiveOutputDir}/${prefix}-${pageNumber
+              .toString()
+              .padStart(4, "0")}.png`;
+            const resolvedPath = resolveWorkspacePath(rootDir, relativePath);
+            await ensureDir(path.dirname(resolvedPath));
+            let pngBytes: Uint8Array = Buffer.from(
+              encodeBgraBitmapToPng(bitmap),
+            );
+            let outputWidth = bitmap.width;
+            let outputHeight = bitmap.height;
+            if (Math.max(outputWidth, outputHeight) > resolvedMaxDimension) {
+              const sharp = getSharp();
+              pngBytes = await sharp(pngBytes)
+                .resize({
+                  width:
+                    outputWidth >= outputHeight
+                      ? resolvedMaxDimension
+                      : undefined,
+                  height:
+                    outputHeight > outputWidth
+                      ? resolvedMaxDimension
+                      : undefined,
+                  fit: "inside",
+                  withoutEnlargement: true,
+                })
+                .png()
+                .toBuffer();
+              const outputMetadata = await sharp(pngBytes).metadata();
+              if (
+                typeof outputMetadata.width === "number" &&
+                outputMetadata.width > 0
+              ) {
+                outputWidth = outputMetadata.width;
+              }
+              if (
+                typeof outputMetadata.height === "number" &&
+                outputMetadata.height > 0
+              ) {
+                outputHeight = outputMetadata.height;
+              }
+            }
+            await writeFile(resolvedPath, pngBytes);
+            workspace.scheduleUpdate(relativePath);
+            written.push({
+              page: pageNumber,
+              path: relativePath,
+              width: outputWidth,
+              height: outputHeight,
+              bytes: pngBytes.byteLength,
+            });
+          }
         }
         return {
           status: "written",
           pdfPath: decoded.resolvedPdfPath,
           pageCount,
-          outputDir: normalizedOutputDir,
+          outputDir: normalizedEffectiveOutputDir,
+          ...(recoveredSelectionFromOutputDir !== null
+            ? { recoveredPageSelectionFromOutputDir: true }
+            : {}),
+          pageSelection:
+            missingPageNumbers ? "all-pages" : "explicit-pageNumbers",
           scale: resolvedScale,
           maxDimension: resolvedMaxDimension,
+          renderBatchSize,
           pages: written,
         };
       },
@@ -13326,7 +15685,7 @@ function buildAgentTools(options: {
       description: [
         "Crop a workspace image (JPG/PNG/WEBP/GIF/HEIC/HEIF) using a required bboxPixels rectangle.",
         "Use bboxPixels when you have coordinates from a rendered page/crop grid: left/top/right/bottom are pixel coordinates in the selected source image, origin top-left, right/bottom exclusive.",
-        "The cropped output is written as PNG and follows the requested bbox exactly by default; include the intended safe white margin in bboxPixels.",
+        "The cropped output is written as PNG and follows the requested bbox exactly by default; when a final worksheet asset crop touches a source-image edge, the tool adds a clean white border unless you explicitly pass paddingPx.",
         "Do not call this tool without bboxPixels; do not pass null, zero, or tiny placeholder coordinates.",
         "Use paddingPx only when you intentionally want an additional source-image margin outside bboxPixels.",
         "Use this to iteratively refine diagram crops from page images; when content touches an edge, expand the bbox outward rather than tightening it.",
@@ -13355,6 +15714,19 @@ function buildAgentTools(options: {
           bboxPixels,
           paddingPx,
         } = input;
+        const intermediateAssetMessage =
+          getBlockedIntermediateWorksheetAssetMessage(outputPath);
+        if (intermediateAssetMessage !== null) {
+          return {
+            status: "blocked",
+            reason: "intermediate_worksheet_asset_path",
+            sourcePath,
+            outputPath,
+            message: intermediateAssetMessage,
+            nextAction:
+              "Retry crop_image immediately with the exact planned final grader/output/assets/... or sheet/output/assets/... path, then use that exact path in the worksheet JSON. Do not spend another turn promoting or validating a raw/candidate asset before the first sheet.json.",
+          };
+        }
         const blockedReason = await checkGraderPrePublishImageEditAllowed(
           "crop_image",
           outputPath,
@@ -13442,7 +15814,18 @@ function buildAgentTools(options: {
             "crop_image received no crop bounds. Provide bboxPixels/bbox1000/bboxNorm or set fullImage=true.",
           );
         })();
-        const marginPx = fullImage === true ? 0 : (paddingPx ?? 0);
+        const requestedCropTouchesSourceEdge =
+          pixels.left === 0 ||
+          pixels.top === 0 ||
+          pixels.right === sourceWidth ||
+          pixels.bottom === sourceHeight;
+        const marginPx =
+          paddingPx ??
+          ((fullImage === true ||
+            (WORKSHEET_CROP_ASSET_PATH_PATTERN.test(outputPath) &&
+              requestedCropTouchesSourceEdge))
+            ? DEFAULT_CROP_IMAGE_MARGIN_PX
+            : 0);
         const crop = expandCropPixelsWithMargin({
           pixels,
           sourceWidth,
@@ -13667,6 +16050,270 @@ function buildAgentTools(options: {
           outputHeight: sourceHeight + border * 2,
           paddingPx: border,
           outputBytes: paddedBytes.byteLength,
+        };
+      },
+    }),
+    validate_grader_artifacts: tool({
+      description: [
+        "Validate grader/output/sheet.json and grader/output/run-summary.json before source-fidelity audit or publish.",
+        "Use this immediately after writing both grader JSON artifacts. It catches invalid JSON, schema errors, score mismatches, missing crop validation, missing bounded scoring for long handwritten papers, and publish-guard issues without publishing.",
+        "Call with requireSourceFidelityAudit=false before running validate_source_fidelity_with_fresh_agent; call publish_sheet for the final required publish validation.",
+      ].join("\n"),
+      inputSchema: z
+        .object({
+          summaryPath: z
+            .string()
+            .trim()
+            .min(1)
+            .default("grader/output/run-summary.json"),
+          sheetPath: z
+            .string()
+            .trim()
+            .min(1)
+            .default("grader/output/sheet.json"),
+          requireSourceFidelityAudit: z
+            .boolean()
+            .describe(
+              "Use false before the source-fidelity audit exists; use true only when checking the final pre-publish state.",
+            )
+            .default(false),
+        })
+        .strict(),
+      execute: async ({
+        summaryPath,
+        sheetPath,
+        requireSourceFidelityAudit,
+      }) => {
+        const resolvedSummaryPath =
+          summaryPath ?? "grader/output/run-summary.json";
+        const resolvedSheetPath = sheetPath ?? "grader/output/sheet.json";
+        const resolvedRequireSourceFidelityAudit =
+          requireSourceFidelityAudit ?? false;
+        try {
+          const publication = await validateGraderWorkspaceForPublish({
+            rootDir,
+            summaryPath: resolvedSummaryPath,
+            sheetPath: resolvedSheetPath,
+            requireSourceFidelityAudit: resolvedRequireSourceFidelityAudit,
+            onWorkspaceFileChanged: (filePath) => {
+              workspace.scheduleUpdate(filePath);
+            },
+          });
+          return {
+            status: "ok",
+            summaryPath: publication.summaryPath,
+            sheetPath: publication.sheetPath,
+            awardedMarks: publication.totals.awardedMarks,
+            maxMarks: publication.totals.maxMarks,
+            requireSourceFidelityAudit: resolvedRequireSourceFidelityAudit,
+          };
+        } catch (error) {
+          const errorText = errorAsString(error);
+          const nextAction =
+            /section "[^"]+" (?:theory|infoBox) contains a named figure\/table or linked crop/iu.test(
+              errorText,
+            ) ||
+            /workflow or paraphrase wording/iu.test(errorText)
+              ? "Rewrite grader/output/sheet.json first. Move figures/tables/crop links out of section.theory/infoBox into the exact question or group prompt, remove source-paper/workflow placeholder phrases, then call validate_grader_artifacts again. Do not crop, crop-validate, or run source-fidelity audit until this sheet JSON placement issue is fixed."
+              : "Fix the named artifact or guard issue, then call validate_grader_artifacts again before source-fidelity audit or publish.";
+          return {
+            status: "needs_fix",
+            summaryPath: resolvedSummaryPath,
+            sheetPath: resolvedSheetPath,
+            requireSourceFidelityAudit: resolvedRequireSourceFidelityAudit,
+            error: errorText,
+            nextAction,
+          };
+        }
+      },
+    }),
+    score_answers_with_fresh_agent: tool({
+      description: [
+        "Ask a fresh-context grading agent to score one bounded root question or short question range from already-extracted source/student/mark-scheme excerpts.",
+        "Use this in handwritten-grading mode after transcription, source references, and sheet-plan exist, especially when a paper has many answer leaves or more than one root question.",
+        "Call one instance per root question or small contiguous range. The fresh agent scores only the supplied excerpt and writes a compact JSON result; this tool also returns the per-question results inline so the main agent can assemble sheet.json without rereading every scoring file. The main agent still assembles sheet.json, run-summary.json, source-fidelity audit, and publish_sheet.",
+      ].join("\n"),
+      inputSchema: z
+        .object({
+          scope: z.string().trim().min(1),
+          worksheetIds: z.array(z.string().trim().min(1)).min(1).max(30),
+          sourceMarkdown: z.string().trim().min(1),
+          markSchemeMarkdown: z.string().trim().min(1),
+          studentAnswersMarkdown: z.string().trim().min(1),
+          notes: z.preprocess(
+            (value) => parseOptionalString(value),
+            z.string().trim().min(1).optional(),
+          ),
+          outputPath: z.preprocess(
+            (value) => parseOptionalString(value),
+            z.string().trim().min(1).optional(),
+          ),
+        })
+        .strict(),
+      execute: async ({
+        scope,
+        worksheetIds,
+        sourceMarkdown,
+        markSchemeMarkdown,
+        studentAnswersMarkdown,
+        notes,
+        outputPath,
+      }) => {
+        const resolvedOutputPath =
+          outputPath ??
+          `grader/output/scoring/${sanitizePdfImageFilenamePrefix(scope)}.json`;
+        const sourceExcerptIssues =
+          collectSourceTranscriptionIntegrityIssues(sourceMarkdown);
+        if (sourceExcerptIssues.length > 0) {
+          return {
+            status: "blocked_source_excerpt_invalid",
+            blockedTool: "score_answers_with_fresh_agent",
+            scope,
+            outputPath: resolvedOutputPath,
+            nextAction: `${sourceExcerptIssues[0] ?? "The scoring source excerpt is not source-faithful"}. Rewrite grader/output/transcription.md and grader/output/sheet-plan.md from the printed source, then call score_answers_with_fresh_agent with the exact source excerpt, not a figure/table/options summary.`,
+          };
+        }
+        const prompt = [
+          "You are a bounded Spark grading subagent.",
+          "Score only the supplied scope. Do not infer missing source text from memory, do not rewrite the worksheet, do not assemble sheet JSON, and do not grade items outside worksheetIds.",
+          "Use the official mark scheme excerpt as the scoring authority. If evidence is ambiguous, set status to teacher-review and put the short uncertainty in note/evidence or the top-level uncertainties array. Do not add per-question fields beyond the exact shape.",
+          "Accept mathematically equivalent forms and methods when the supplied work shows the same value or relationship, such as 1/2 for 0.5, equivalent rearrangements, or equivalent significant figures unless the mark scheme explicitly requires one form.",
+          "Inline notes must be short gap-closing cues for the learner. Do not reveal a full model answer, full mark scheme, final corrected sentence, or complete method in the note.",
+          "For incorrect or partial items, include modelAnswer as a concise answer or method from the supplied source and mark scheme. The main agent uses this field for requested model-answer/reference sections, so do not leave it to a later derivation pass.",
+          "Use status correct only when got equals total. Use incorrect for partial, blank, or wrong answers.",
+          "",
+          `Scope: ${scope}`,
+          `Worksheet ids to score: ${worksheetIds.join(", ")}`,
+          notes ? ["Notes:", notes].join("\n") : "",
+          "",
+          "Source excerpt:",
+          sourceMarkdown,
+          "",
+          "Student answer evidence:",
+          studentAnswersMarkdown,
+          "",
+          "Official mark scheme excerpt:",
+          markSchemeMarkdown,
+          "",
+          "Return JSON only with this exact shape:",
+          "{",
+          '  "scope": "same scope string",',
+          '  "totals": { "got": 0, "total": 0 },',
+          '  "questions": [',
+          '    { "id": "worksheet id", "status": "correct|incorrect|teacher-review", "score": { "got": 0, "total": 0 }, "note": "short cue or empty", "replyPlaceholder": "optional focused repair prompt", "modelAnswer": "optional concise model answer for incorrect or partial items", "evidence": "short evidence basis" }',
+          "  ],",
+          '  "uncertainties": []',
+          "}",
+        ]
+          .filter((part) => part.trim().length > 0)
+          .join("\n");
+
+        progress?.log(`fresh grading batch: ${scope}`);
+        const thinkingLevel = resolveSparkAgentThinkingLevel(
+          DEFAULT_AGENT_MODEL_ID,
+        );
+        const result = await generateText({
+          model: DEFAULT_AGENT_MODEL_ID,
+          input: buildSingleUserInput([
+            {
+              type: "text",
+              text: [
+                "You are a bounded grading reviewer. Return one JSON object only. Do not call tools.",
+                "",
+                prompt,
+              ].join("\n"),
+            },
+          ]),
+          ...(thinkingLevel ? { thinkingLevel } : {}),
+        });
+        recordLlmTextResult({
+          progress,
+          modelId: DEFAULT_AGENT_MODEL_ID,
+          result,
+        });
+        onToolLlmCost?.("generate_text", result.costUsd);
+
+        let parsedReview: z.infer<typeof freshGradingBatchResultSchema>;
+        try {
+          parsedReview = freshGradingBatchResultSchema.parse(
+            parseJsonFromLlmText(result.text),
+          );
+        } catch (error) {
+          throw new Error(
+            `score_answers_with_fresh_agent returned invalid grading JSON: ${errorAsString(error)}`,
+          );
+        }
+
+        const expectedIds = new Set(worksheetIds);
+        const unexpectedIds = parsedReview.questions
+          .map((question) => question.id)
+          .filter((id) => !expectedIds.has(id));
+        if (unexpectedIds.length > 0) {
+          throw new Error(
+            `score_answers_with_fresh_agent returned ids outside worksheetIds: ${unexpectedIds.join(", ")}`,
+          );
+        }
+        const returnedIds = new Set(parsedReview.questions.map((question) => question.id));
+        const missingIds = worksheetIds.filter((id) => !returnedIds.has(id));
+        if (missingIds.length > 0) {
+          throw new Error(
+            `score_answers_with_fresh_agent omitted worksheetIds: ${missingIds.join(", ")}`,
+          );
+        }
+        const duplicateIds = parsedReview.questions
+          .map((question) => question.id)
+          .filter((id, index, ids) => ids.indexOf(id) !== index);
+        if (duplicateIds.length > 0) {
+          throw new Error(
+            `score_answers_with_fresh_agent returned duplicate worksheetIds: ${[...new Set(duplicateIds)].join(", ")}`,
+          );
+        }
+        const questionTotals = parsedReview.questions.reduce(
+          (totals, question) => ({
+            got: totals.got + question.score.got,
+            total: totals.total + question.score.total,
+          }),
+          { got: 0, total: 0 },
+        );
+        const normalizedTotalsFromQuestions =
+          parsedReview.totals.got !== questionTotals.got ||
+          parsedReview.totals.total !== questionTotals.total;
+
+        const normalizedReview = {
+          ...parsedReview,
+          scope,
+          totals: questionTotals,
+        };
+        const absoluteOutputPath = resolveWorkspacePath(
+          rootDir,
+          resolvedOutputPath,
+        );
+        await ensureDir(path.dirname(absoluteOutputPath));
+        await writeFile(
+          absoluteOutputPath,
+          JSON.stringify(normalizedReview, null, 2).concat("\n"),
+          { encoding: "utf8" },
+        );
+        workspace.scheduleUpdate(resolvedOutputPath);
+
+        return {
+          status: "written",
+          scope,
+          outputPath: resolvedOutputPath,
+          questionCount: normalizedReview.questions.length,
+          totals: normalizedReview.totals,
+          questions: normalizedReview.questions,
+          uncertainties: normalizedReview.uncertainties,
+          ...(normalizedTotalsFromQuestions
+            ? {
+                normalizedTotalsFromQuestions: true,
+                originalTotals: parsedReview.totals,
+              }
+            : {}),
+          nextAction:
+            "Use the returned questions array directly when assembling review.questions, and use any modelAnswer fields for requested model-answer/reference text. If sheet-plan names final visual asset paths that are not yet written, create only those exact guarded grader/output/assets/... paths now with crop_image/fullImage; do not create raw/candidate/draft/temp copies, and do not validate or inspect crops yet. Then write sheet.json and run-summary.json. Put every figure/table crop or Markdown table in the exact question/group prompt, never in section.theory.",
+          modelId: DEFAULT_AGENT_MODEL_ID,
+          costUsd: result.costUsd,
         };
       },
     }),
@@ -13997,8 +16644,8 @@ function buildAgentTools(options: {
       description: [
         "Validate one final worksheet figure/image crop with a fresh-context visual agent.",
         "Use this once per final linked crop before writing grader/output/crop-validation.md.",
-        "Pass expectedContent with the exact visual content that must be visible, and duplicatedTextToExclude for surrounding prompt/caption/table text rendered separately.",
-        "The fresh agent must call view_image on the crop, transcribe visible text, and judge missing/clipped target content, edge contact, major duplicated text, and unrelated neighbouring content outside the target visual.",
+        "Pass expectedContent with the exact printed/visible visual content that must be visible, and duplicatedTextToExclude for surrounding prompt/caption/table text rendered separately.",
+        "The fresh agent must call view_image on the crop, transcribe visible text, and judge missing/clipped target content, edge contact, major duplicated text, and unrelated neighbouring content outside the official target visual.",
         "Do not use generic spawn_agent for grader intake or file summaries; use this dedicated tool only for final crop visual validation.",
       ].join("\n"),
       inputSchema: z
@@ -14013,7 +16660,7 @@ function buildAgentTools(options: {
               .trim()
               .min(1)
               .describe(
-                "Exact visual labels, axes, option letters, table cells, annotations, or shapes that must be visible in this crop. Do not include prompt/caption/table text that is rendered elsewhere.",
+                "Exact printed/visible visual labels, axes, option letters, table cells, annotations, or shapes that must be visible in this crop. Do not include inferred answers, mark-scheme facts, unprinted labels/headings, or prompt/caption/table text that is rendered elsewhere.",
               ),
           ),
           duplicatedTextToExclude: z.preprocess(
@@ -14059,14 +16706,17 @@ function buildAgentTools(options: {
         const reviewPrompt = [
           "You are a fresh-context crop validation agent.",
           "Use the `view_image` tool on the crop path before judging it. Do not answer from text alone.",
-          "Be practical and judge against the explicit Expected visual content below. A pass is allowed when the target visual is complete, has a safe margin, and contains no confusing neighbouring content outside the target visual.",
-          "Fail only for blocking visual problems: missing required expected content, clipped/touching required content, wrong figure/table/option association, broken/blank image, broad page fallback, or neighbouring content that would confuse the worksheet.",
+          "Judge only source content that is actually printed or visible in the crop. Do not fail because an inferred answer, hidden context, mark-scheme fact, or unprinted label/heading is absent.",
+          "If Expected visual content asks for unprinted placeholders, inferred group names, inferred answers, or labels/headings that are not visible in an otherwise complete official figure/table, do not treat that absence as missing crop content. Note the mismatch in issues and pass if the visible official target visual is complete.",
+          "Be practical and judge against the explicit Expected visual content below. A pass is allowed when the official target visual is complete, has a safe margin, and contains no confusing neighbouring content outside that official figure/table/image.",
+          "Fail only for blocking visual problems: missing required expected content, clipped/touching required content, wrong figure/table/option association, broken/blank image, broad page fallback, or neighbouring content outside the official target visual that would confuse the worksheet.",
           "Do not fail solely for small duplicate caption/prompt fragments, isolated Figure/Table labels, harmless scan artifacts, or extra whitespace when all Expected visual content is complete and readable. Record those as issues on a passing crop.",
+          "If the crop is an extracted embedded image from an official PDF, treat related subpanels, labels, scale markings, apparatus side panels, and other content inside the same official figure/table image object as part of the target visual unless it contradicts Expected visual content.",
           "Do not fail merely because the target visual contains ink, graph gridlines, diagram outlines, arrows, labels, tick labels, option letters, or a Figure/Table label that is part of Expected visual content.",
           "Do not require broader prompt text, data tables, captions, method steps, answer lines, or mark text that are not listed under Expected visual content.",
           "Fail the crop if the target visual occupies only a small part of the frame because of large empty internal whitespace; crops should look like figures, not mostly blank placeholders.",
           "Fail the crop if any required line, shape, option, label, axis, legend, table cell, or annotation is cut off or touches the crop edge.",
-          "Fail the crop if you see answer lines, page borders, separator rules, neighbouring-question text, or neighbouring visual fragments that are outside the target visual and would confuse a learner.",
+          "Fail the crop if you see answer lines, page borders, separator rules, neighbouring-question text, or neighbouring visual fragments that are outside the official target visual and would confuse a learner.",
           "For text listed under Duplicated surrounding text to exclude, mark `duplicated caption/question/table text excluded: no` when it appears. Still use `pass/fail: pass` if that duplicated text is only a small caption/prompt fragment and the expected visual is complete.",
           "For diagram-option crops, every candidate label and every option diagram must be fully visible with margin; if any option outline is clipped by an edge, fail.",
           "Use `not_applicable` for duplicated text only when Duplicated surrounding text to exclude is `none` and there is no visible non-target caption/question/table text.",
@@ -14143,12 +16793,17 @@ function buildAgentTools(options: {
         "Validate source-to-sheet transfer with a fresh-context agent before publish.",
         "Use this after grader/output/transcription.md, grader/output/sheet-plan.md, and grader/output/sheet.json exist.",
         "Split long papers by source page or root question. The fresh agent checks only transfer fidelity: visible source items, verbatim wording, numbering/badges, figures/tables/layouts, and answer-evidence alignment.",
-        "Write the returned reviewMarkdown into grader/output/source-fidelity-audit.md before publish. Do not use this tool for grading, solving, or rewriting the worksheet.",
+        "The tool writes a per-scope review under grader/output/source-fidelity-audits/ and refreshes grader/output/source-fidelity-audit.md before publish. If it fails, patch all blockers for that scope once and run at most one follow-up audit before escalating. Do not use this tool for grading, solving, or rewriting the worksheet.",
       ].join("\n"),
       inputSchema: z
         .object({
           sourceScope: z.string().trim().min(1),
-          sourcePaths: z.array(z.string().trim().min(1)).default([]),
+          sourcePaths: z
+            .array(z.string().trim().min(1))
+            .min(
+              1,
+              "Pass relevant source reference markdown and/or rendered source page image paths.",
+            ),
           transcriptionPath: z
             .string()
             .trim()
@@ -14164,7 +16819,15 @@ function buildAgentTools(options: {
             .trim()
             .min(1)
             .default("grader/output/sheet.json"),
-          notes: z.string().trim().optional(),
+          outputPath: z
+            .preprocess(
+              (value) => parseOptionalString(value),
+              z.string().trim().min(1).optional(),
+            ),
+          notes: z.preprocess(
+            (value) => parseOptionalString(value),
+            z.string().trim().min(1).optional(),
+          ),
         })
         .strict(),
       execute: async ({
@@ -14173,13 +16836,29 @@ function buildAgentTools(options: {
         transcriptionPath,
         sheetPlanPath,
         sheetPath,
+        outputPath,
         notes,
       }) => {
         const resolvedTranscriptionPath = transcriptionPath.trim();
         const resolvedSheetPlanPath = sheetPlanPath.trim();
         const resolvedSheetPath = sheetPath.trim();
+        const aggregateOutputPath = "grader/output/source-fidelity-audit.md";
+        const resolvedOutputPath =
+          outputPath?.trim() ??
+          `grader/output/source-fidelity-audits/${sanitizePdfImageFilenamePrefix(sourceScope)}.md`;
         await stat(resolveWorkspacePath(rootDir, resolvedTranscriptionPath));
         await stat(resolveWorkspacePath(rootDir, resolvedSheetPath));
+        const sheetRaw = await readFile(
+          resolveWorkspacePath(rootDir, resolvedSheetPath),
+          { encoding: "utf8" },
+        );
+        try {
+          JSON.parse(sheetRaw);
+        } catch (error) {
+          throw new Error(
+            `Cannot run source-fidelity audit because "${resolvedSheetPath}" is invalid JSON: ${errorAsString(error)}. Call validate_grader_artifacts after fixing the JSON, then audit source fidelity.`,
+          );
+        }
         const sheetPlanExists =
           (await stat(
             resolveWorkspacePath(rootDir, resolvedSheetPlanPath),
@@ -14187,6 +16866,11 @@ function buildAgentTools(options: {
         const resolvedSourcePaths = sourcePaths.map((sourcePath) =>
           sourcePath.trim(),
         );
+        if (resolvedSourcePaths.length === 0) {
+          throw new Error(
+            "validate_source_fidelity_with_fresh_agent requires sourcePaths. Pass the relevant reference markdown, source photo, and/or rendered source page images for this scope so the fresh audit can catch omitted figures, tables, and wording.",
+          );
+        }
         for (const sourcePath of resolvedSourcePaths) {
           await stat(resolveWorkspacePath(rootDir, sourcePath));
         }
@@ -14287,13 +16971,65 @@ function buildAgentTools(options: {
             "validate_source_fidelity_with_fresh_agent failed: the fresh audit agent returned without reading or viewing source/worksheet files.",
           );
         }
+        const reviewMarkdown = result.text.trim();
+        await ensureDir(
+          path.dirname(resolveWorkspacePath(rootDir, resolvedOutputPath)),
+        );
+        await writeFile(
+          resolveWorkspacePath(rootDir, resolvedOutputPath),
+          reviewMarkdown.concat("\n"),
+          { encoding: "utf8" },
+        );
+        workspace.scheduleUpdate(resolvedOutputPath);
+        if (resolvedOutputPath !== aggregateOutputPath) {
+          const auditDir = "grader/output/source-fidelity-audits";
+          const absoluteAuditDir = resolveWorkspacePath(rootDir, auditDir);
+          const auditEntries = await readdir(absoluteAuditDir, {
+            withFileTypes: true,
+          }).catch(() => []);
+          const auditRecords: string[] = [];
+          for (const entry of auditEntries) {
+            if (!entry.isFile() || !/\.md$/iu.test(entry.name)) {
+              continue;
+            }
+            const record = await readFile(
+              path.join(absoluteAuditDir, entry.name),
+              { encoding: "utf8" },
+            );
+            if (record.trim().length > 0) {
+              auditRecords.push(record.trim());
+            }
+          }
+          const aggregateMarkdown = [
+            "# Source fidelity audits",
+            "",
+            ...auditRecords.map((record, index) => {
+              if (index === 0) {
+                return record;
+              }
+              return `---\n\n${record}`;
+            }),
+          ].join("\n\n");
+          await writeFile(
+            resolveWorkspacePath(rootDir, aggregateOutputPath),
+            aggregateMarkdown.concat("\n"),
+            { encoding: "utf8" },
+          );
+          workspace.scheduleUpdate(aggregateOutputPath);
+        }
+        const passed = hasPositiveSourceFidelityAudit(reviewMarkdown);
+        const blockingIssues =
+          SOURCE_FIDELITY_BLOCKING_ISSUES_FIELD_PATTERN.exec(reviewMarkdown)?.[1]
+            ?.trim() ?? "";
         return {
-          status: "reviewed",
+          status: passed ? "passed" : "failed",
           sourceScope,
           usedReadTool,
+          outputPath: resolvedOutputPath,
           modelId: DEFAULT_AGENT_MODEL_ID,
           costUsd: result.totalCostUsd,
-          reviewMarkdown: result.text.trim(),
+          blockingIssues: blockingIssues.length > 0 ? blockingIssues : null,
+          reviewMarkdown,
         };
       },
     }),
@@ -14354,6 +17090,7 @@ function buildAgentTools(options: {
         }
 
         await onPublishSheet?.(publication);
+        graderPublishCompleted = true;
 
         return {
           status: "published" as const,
@@ -14366,6 +17103,11 @@ function buildAgentTools(options: {
       },
     });
     tools.publish_sheet = publish_sheet;
+    delete (tools as Record<string, unknown>).generate_json;
+    delete (tools as Record<string, unknown>).validate_json;
+    delete (tools as Record<string, unknown>).validate_schema;
+  } else {
+    delete (tools as Record<string, unknown>).validate_grader_artifacts;
   }
   if (sheetDraftPublish) {
     const publish_sheet_draft = tool({
@@ -14434,7 +17176,7 @@ function buildAgentTools(options: {
   if (!shouldAllowPythonExec) {
     delete (tools as Record<string, unknown>).python_exec;
   }
-  return tools;
+  return applyGraderPublishCriticalGate(tools);
 }
 
 export function buildSparkAgentTools(options: {
@@ -15727,12 +18469,17 @@ export async function runSparkAgentTask(
           done: doneTool,
         }
       : (() => {
-          const baseTools: LlmToolSet = {
-            ...(workspaceFilesystemToolConfig
+          const workspaceFilesystemTools: LlmToolSet =
+            workspaceFilesystemToolConfig
               ? createCodexFilesystemToolSet(
                   workspaceFilesystemToolConfig.options,
                 )
-              : {}),
+              : {};
+          if (graderRunId !== null) {
+            delete workspaceFilesystemTools.apply_patch;
+          }
+          const baseTools: LlmToolSet = {
+            ...workspaceFilesystemTools,
             ...stripDeprecatedPdfReadTools(
               buildAgentTools({
                 workspace: workspaceSync,
@@ -15826,10 +18573,7 @@ export async function runSparkAgentTask(
 
     progress.log(
       `exposed tools: ${Array.from(
-        new Set([
-          ...resolveSparkAgentFilesystemToolNames(),
-          ...Object.keys(tools),
-        ]),
+        new Set(Object.keys(tools)),
       )
         .sort()
         .join(", ")}`,
@@ -15853,6 +18597,7 @@ export async function runSparkAgentTask(
         ].join("\n")
       : buildSparkAgentSystemPrompt({
           includePdfTranscriptionSkill: graderRunId !== null,
+          mode: graderRunId !== null ? "grader" : "default",
         });
     if (graderRunId && workspaceRoot) {
       try {

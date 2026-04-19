@@ -7,7 +7,7 @@ description: Use when a worksheet or grader run needs a visible crop of a source
 
 Use this skill to turn source-page visuals into worksheet-visible image assets.
 
-For handwritten grading, use this skill for source visuals that the learner must see to understand the task, their answer, or the feedback. A linked original/source PDF instruction is a fallback, not the default, and should be used only when the source pixels are unavailable or a clean crop is not feasible after a real bounded attempt. A failed `pdf_to_images` call without required `pageNumbers` is not a bounded attempt; retry it with explicit page numbers.
+For handwritten grading, use this skill for every included source item whose wording names, points to, or depends on a source figure, diagram, graph, table, photo, or option block. A linked original/source PDF instruction is not a valid first-pass substitute for an uploaded/source PDF visual; artifact validation rejects ordinary named figures/tables that are only referenced as "linked original PDF" when source pixels or table text are available. Use that fallback only for genuinely unavailable source pixels, such as a missing external insert, and only after the failed render/crop/table attempt is recorded in the plan and source-fidelity audit. Use explicit 1-based `pageNumbers` for every `pdf_to_images` call; `pageNumbers` is required and must be a top-level tool field, not part of `outputDir`.
 
 ## Inputs
 
@@ -16,25 +16,27 @@ For handwritten grading, use this skill for source visuals that the learner must
 - Output asset path under the guarded worksheet asset directory:
   - `grader/output/assets/...` for grader runs,
   - `sheet/output/assets/...` for draft-sheet runs.
+- Use the final linked asset path directly. Do not create `-raw`, `-candidate`, `-draft`, `tmp`, or `temp` files under those guarded asset directories that require a later promotion step.
 
 ## Workflow
 
-For each target visual, keep an explicit `image-cutting-step N/8` note in the crop plan or crop-validation draft. Do not run more than 8 image-cutting steps for one target visual without calling `review_run_progress_with_fresh_agent` and switching strategy or reporting the blocker.
+For each target visual, keep an explicit `image-cutting-step N/4` note in the crop plan or crop-validation draft. Do not run more than 4 image-cutting steps for one target visual without calling `review_run_progress_with_fresh_agent` and switching strategy or reporting the blocker.
 
-1. If the source is a PDF and `extract_pdf_images` is available, run it once for the relevant page range before manual cropping. Use it as a deterministic first pass for embedded raster figures, maps, charts, photos, or apparatus images; ignore tiny repeated strips/noise and validate useful outputs before linking them.
-2. Render PDF pages to high-resolution page images before cropping. Use the highest useful `pdf_to_images` output and crop from that page image, not from thumbnails or screenshots. Use this path for vector diagrams, layout-sensitive figures, or extracted images that lack needed labels/context. For long PDFs, pass 1-based `pageNumbers` from the extracted reference headings or grep context, for example `pageNumbers: [2, 3, 11]`; if the tool reports missing `pageNumbers`, immediately retry with the chosen pages.
-3. For ambiguous source-page bounds, create a labelled coordinate grid with `draw_grid_overlay` and call `propose_crop_bbox_with_fresh_agent` instead of repeatedly inspecting page images in the main agent context.
-4. Do not rely on direct main-context `view_image` during grader-publish runs; it is intentionally unavailable there. Use extraction tools plus fresh-context visual helpers for proposals and validation so image inspection does not pollute the grading context.
-5. Choose one rectangular pixel bbox in the selected base image coordinate space.
-6. Crop with `crop_image` using `bboxPixels`.
-7. Inspect the crop with `validate_crop_with_fresh_agent` when available, or another fresh-context visual helper in local/debug flows.
-8. Use `trim_image` only after the crop is complete and only to remove safe whitespace.
-9. Validate the final linked crop with `validate_crop_with_fresh_agent` when that tool is available. Always pass:
-   - `expectedContent`: the exact visual content that must be visible in the crop,
+1. For named figures in official/printed exam PDFs, first decide whether any required labels, axes, group headings, option letters, captions, or side panels may be drawn on the page outside the embedded image object. When labels/context matter, render the exact source pages with `pdf_to_images` and crop from the rendered page instead of spending validation turns on extracted image objects that may omit page-drawn text.
+2. If the source is a PDF and `extract_pdf_images` is available, run it once as an inventory for simple embedded raster figures, maps, charts, photos, or apparatus images that clearly include all visible labels/context inside the image object. Ignore tiny repeated strips/noise. Do not link `grader/output/pdf-images/...` inventory files directly; if an extracted object is the whole final visual, call `crop_image` with `fullImage: true` and the exact final `outputPath` from the artifact plan under `grader/output/assets/...`. `crop_image` adds a clean white border for final worksheet assets that touch a source-image edge; use `pad_image` only if validation/publish still reports edge contact. When an embedded official figure image includes related subpanels, apparatus side panels, or scale labels inside the same figure object, keep and validate the whole figure instead of repeatedly cropping away useful context.
+3. Render PDF pages to high-resolution page images before cropping when embedded images are insufficient, the visual is vector/layout-sensitive, or you need page context for a crop/table. Use the highest useful `pdf_to_images` output and crop from that page image, not from thumbnails or screenshots. Pass 1-based `pageNumbers` from the extracted reference headings or grep context, for example `pageNumbers: [2, 3, 11]`; do not render a medium/long PDF all at once.
+4. For ambiguous source-page bounds, create a labelled coordinate grid with `draw_grid_overlay` and call `propose_crop_bbox_with_fresh_agent` instead of repeatedly inspecting page images in the main agent context. When several figures need proposal from rendered pages, issue the proposal calls in parallel after the page renders/grid overlays are ready.
+5. Use direct main-context `view_image` only for bounded source-page/photo fidelity checks; use extraction tools plus fresh-context visual helpers for proposals and final validation so image inspection does not pollute the grading context.
+6. Choose one rectangular pixel bbox in the selected base image coordinate space.
+7. Crop with `crop_image` using `bboxPixels`.
+8. Inspect the crop with `validate_crop_with_fresh_agent` when available, or another fresh-context visual helper in local/debug flows. In capped grader first-pass assembly, defer this validation until after `sheet.json` and `run-summary.json` exist and `validate_grader_artifacts` reports no schema/placement blocker.
+9. Use `trim_image` only after the crop is complete and only to remove safe whitespace.
+10. Validate the final linked crop with `validate_crop_with_fresh_agent` when that tool is available. In capped grader runs this is a post-JSON pre-publish step, not a blocker before the first `sheet.json`. Always pass:
+   - `expectedContent`: the exact printed/visible source content that must be visible in the crop,
    - `duplicatedTextToExclude`: prompt/caption/table text that is rendered separately and should not be required inside the crop; use `none` only when no surrounding duplicated text needs exclusion.
-10. Validate one final crop per validation call; do not batch several high-risk crops into one review.
-11. Record final validation in the caller's crop-validation file before publishing.
-12. Link the final crop from the visible worksheet prompt with the exact workspace-relative path returned by the last successful image tool. Preserve its extension exactly, including `.png` outputs from `pad_image` or `trim_image`.
+11. Validate one final crop per validation call; do not batch several high-risk crops into one review.
+12. Record final validation in the caller's crop-validation file before publishing.
+13. Link the final crop from the visible worksheet prompt with the exact workspace-relative path returned by the last successful image tool. Preserve its extension exactly, including `.png` outputs from `pad_image` or `trim_image`.
 
 ## Fresh-Context Visual Review
 
@@ -42,7 +44,7 @@ Use a fresh-context visual helper whenever a crop is high-risk: ambiguous figure
 
 The helper may propose or review candidate rectangles, but the published asset must still be one validated rectangular crop.
 
-Use `review_run_progress_with_fresh_agent` whenever the crop loop has repeated the same failure, hit an image-edit budget warning, or reached the 8-step cap for one target visual. The reviewer is for process diagnosis only; it must not grade, assemble worksheet JSON, or replace final crop validation.
+Use `review_run_progress_with_fresh_agent` whenever the crop loop has repeated the same failure, hit an image-edit budget warning, or reached the 4-step cap for one target visual. The reviewer is for process diagnosis only; it must not grade, assemble worksheet JSON, or replace final crop validation.
 
 ## Bounding Box Rules
 
@@ -64,18 +66,22 @@ Use `review_run_progress_with_fresh_agent` whenever the crop loop has repeated t
 
 ## Quality Rules
 
-- The final crop must include every label, axis, legend, option label, table cell, annotation, and visible mark needed by the question.
+- The final crop must include every label, axis, legend, option label, table cell, annotation, and visible mark actually printed in the target source visual.
+- Do not include inferred answers, hidden context, mark-scheme facts, or unprinted labels in `expectedContent`. If the question asks the learner to infer a group, option, value, or relationship from a figure, validate the crop against the visible figure only and leave the inference to the question text and mark scheme.
 - Clipped required information is worse than slight extra whitespace.
 - Slight extra whitespace or a small duplicated caption/prompt fragment is better than clipping required labels, axes, option diagrams, or table cells.
 - Avoid broad page fallbacks and crops with large empty internal whitespace. The target visual should occupy most of the crop while preserving a clean margin.
 - If a figure area contains a transcribable text or numeric table, transcribe the table as Markdown in the worksheet even when a crop is also useful.
 - For option-diagram questions, crop one complete options block or separate complete option crops. Every candidate label and every option diagram must be fully visible.
 - Never validate option-diagram crops as top/bottom portions, used-together fragments, or partial crops.
-- When validating a crop, do not make the fresh reviewer infer required content from a broad question summary. Tell it exactly which axes, labels, option letters, diagrams, table cells, or visual annotations must be present, and which surrounding prompt/table/caption text is intentionally excluded because it is transcribed elsewhere.
-- If `validate_crop_with_fresh_agent` reports clipped content, missing labels, wrong association, broad full-page fallback, recognizable neighbouring content outside the target visual, or any medium/high severity issue, fix the crop and validate again before publishing.
+- When validating a crop, do not make the fresh reviewer infer required content from a broad question summary. Tell it exactly which visible axes, labels, option letters, diagrams, table cells, or visual annotations must be present, and which surrounding prompt/table/caption text is intentionally excluded because it is transcribed elsewhere.
+- If `validate_crop_with_fresh_agent` reports clipped content, missing labels, wrong association, broad full-page fallback, recognizable neighbouring content outside the official target visual, or any medium/high severity issue, fix the crop and validate again before publishing. Treat related subpanels inside the same official embedded figure/table image as target context, not neighbouring-question noise, when all expected content is visible.
+- If repeated validation failures are caused by content that is not actually printed in the source visual, correct `expectedContent` and continue instead of recropping.
 - If validation reports only a small duplicated caption/prompt fragment or harmless extra whitespace while all expected visual content is complete and readable, record it as a minor issue and keep the crop. Do not spend repeated turns chasing a cosmetic crop when the figure is usable.
+- If a text/numeric table or formula can be rendered faithfully as Markdown or LaTeX from extracted source text, render it that way instead of repeated crop refinement.
+- If validation fails only because `expectedContent` asked for inferred or unprinted content, such as a group name, answer, placeholder, or heading that is not visible in the source figure, fix `expectedContent` and rerun validation once. Do not recrop an otherwise complete visual to chase pixels that the source never printed.
 - If `crop_image` or `trim_image` changes a linked worksheet asset after crop validation, validation is stale. Rerun the fresh validation and rewrite the crop-validation record.
-- Use `pad_image` only after a crop has already passed fresh validation and only to add a clean white border. Never use padding to fix missing content, clipping, unrelated text, or a failed crop review.
+- Use `pad_image` only to add a clean white border around otherwise complete source visuals. If a crop already passed fresh validation, do not rerun validation just because padding wrote the final linked path; record the final padded path in `crop-validation.md` and note the passed source validation. If the only failure was required content touching the edge while all content was visible, pad once and validate only that padded asset.
 - If `pad_image`, `trim_image`, or a recrop creates a new output file, the worksheet image link, crop-validation record, and any subsequent fresh validation call must all use that exact new path. Do not change `.png` paths to `.jpg`, do not invent parallel filenames, and do not link a file path that was not produced by a tool.
 - If one manual crop-and-view correction for the same target is still clipped, noisy, or uncertain, call `propose_crop_bbox_with_fresh_agent` or `extract_pdf_diagrams` before spending more turns on hand-tuned crop boxes.
 - When the same visual target fails for the same reason after a manual correction, treat that as a wrong-path signal. Switch strategy: call `propose_crop_bbox_with_fresh_agent`, `extract_pdf_images`, or `extract_pdf_diagrams` for the source page and target label instead of continuing hand-tuned crop boxes. If you already tried the relevant alternatives, call `review_run_progress_with_fresh_agent`.
@@ -85,20 +91,20 @@ Use `review_run_progress_with_fresh_agent` whenever the crop loop has repeated t
 
 ## Worksheet Placement
 
-- Source references and transcription files are audit trails only. If a prompt mentions an answer-critical diagram, graph, chart, map, table, network, photo, or other visual, the visible worksheet prompt must include the crop near that text whenever the source pixels are available.
+- Source references and transcription files are audit trails only. If a prompt names or points to a diagram, figure, graph, chart, map, table, network, photo, or other visual, the visible worksheet prompt must include the crop near that text whenever the source pixels are available.
 - Do not avoid image obligations by rewriting a figure question as text-only, omitting the `Figure N` reference, or saying the figure was not needed because the student left it blank. Source-faithful sheets must preserve the source visual reference for every source subquestion where the original paper uses that visual to answer the question.
-- Prefer crops for ordinary source visuals that are actually present in the uploaded/source PDF and feasible to crop. Use a linked original/source PDF reference only as a fallback for visuals that are not available as pixels in the working source, are supplied only through a source link, or cannot be cropped without making a broken/fake visual after a recorded render/crop attempt.
-- For compact handwritten grading reports, do not recreate irrelevant exam layout, but do crop the figure/table/diagram block that the learner must see to understand or answer the item.
-- Do not treat public-PDF figure omissions, source-insert omissions, or source notices as blockers. Spark is making a private student study UI that can link to the original/source PDF. When a required visual truly cannot be embedded after a real render/crop attempt, keep the question and write a visible instruction such as `Use Figure N in the linked original PDF.` Do not exclude a source question, remove its marks, or call it ungradable solely because a public PDF omits a figure/map/photo or because an insert is missing.
+- Prefer crops for ordinary source visuals that are actually present in the uploaded/source PDF and feasible to crop. Do not use a linked original/source PDF reference for those visuals in the first-pass worksheet; validation will reject the artifact. Only use a source-PDF reference when the visual pixels are genuinely unavailable in the working source or would require a fake/broken crop after a recorded bounded attempt.
+- For compact handwritten grading reports, do not recreate irrelevant exam layout, but do crop every named figure/table/diagram block used by an included source item; do not omit it because the mark scheme makes the answer inferable.
+- Do not treat public-PDF figure omissions, source-insert omissions, or source notices as blockers. Spark is making a private student study UI that can link to the original/source PDF only when the actual visual is missing from the working source. When a required visual truly cannot be embedded after a real render/crop/table attempt, keep the question and write a visible instruction such as `Use Figure N in the linked original PDF.` Do not exclude a source question, remove its marks, or call it ungradable solely because a public PDF omits a figure/map/photo or because an insert is missing.
 - Only report a blocking issue when the question cannot be understood or graded from the uploaded/official source material and no useful source-PDF reference is available.
 - Put the crop at the nearest source-faithful level:
   - parent `group.prompt` when the visual is before the first subpart or shared by all subparts,
   - child prompt when the visual is introduced inside one subquestion.
 - Put `Figure N` caption text adjacent to the `Figure N` crop, and `Table N` caption text adjacent to the `Table N` table.
 - Render a reused visual once at the first source-faithful location, then refer to it later with an anchor link or with `Figure N above` / `Table N above`.
-- Use clickable image Markdown with a real workspace-relative target, for example `[![Figure 1](grader/output/assets/q1-figure-1.jpg)](grader/output/assets/q1-figure-1.jpg)` or `[![Figure 1](grader/output/assets/q1-figure-1-border.png)](grader/output/assets/q1-figure-1-border.png)` when the final tool output is PNG.
-- Do not publish empty image frames, placeholder ovals, broken links, or broad blank crops. If the crop asset cannot be produced and validated after a real attempt, use an explicit linked original/source PDF reference instead of a fake crop when that gives the student access to the real visual.
-- Before publishing, compare worksheet Markdown against source/transcription references: every answer-critical `Figure N` that matters must have a nearby image link unless the validation record explains why embedding was impossible, and every visible `Table N` that is text/numeric must have a nearby Markdown table.
+- Use clickable image Markdown with a real workspace-relative target under the guarded worksheet asset directory, for example `[![Figure 1](grader/output/assets/q1-figure-1.jpg)](grader/output/assets/q1-figure-1.jpg)` or `[![Figure 1](grader/output/assets/q1-figure-1-border.png)](grader/output/assets/q1-figure-1-border.png)` when the final tool output is PNG. Never link scratch extraction inventory files such as `grader/output/pdf-images/...`; first copy/crop the final visual into `grader/output/assets/...`.
+- Do not publish empty image frames, placeholder ovals, broken links, or broad blank crops. If an uploaded/source PDF visual exists, keep working with a bounded render/crop/table path or report the blocker; do not replace it with a linked-original shortcut. If the visual is genuinely unavailable after a recorded attempt, use an explicit linked original/source PDF reference instead of a fake crop when that gives the student access to the real visual.
+- Before publishing, compare worksheet Markdown against source/transcription references: every included `Figure N` must have a nearby image link unless the validation record explains why embedding was impossible, and every visible `Table N` that is text/numeric must have a nearby Markdown table.
 
 ## Validation Record
 

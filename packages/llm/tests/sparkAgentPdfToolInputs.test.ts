@@ -231,6 +231,57 @@ describe("Spark agent PDF tool inputs", () => {
     });
   });
 
+  it("blocks intermediate worksheet asset names for crop_image", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await mkdir(path.join(rootDir, "assets"), { recursive: true });
+      await writeSourcePng(path.join(rootDir, "assets/source.png"));
+
+      const tools = buildSparkAgentTools({
+        workspace: buildMinimalWorkspace(),
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: { mode: "mock" },
+      });
+
+      const cropTool = tools.crop_image;
+      requireFunctionTool(cropTool);
+
+      await expect(
+        cropTool.execute({
+          sourcePath: "assets/source.png",
+          outputPath: "grader/output/assets/q01-figure-1-raw.png",
+          bbox1000: {
+            left: 400,
+            top: 400,
+            right: 600,
+            bottom: 600,
+          },
+        }),
+      ).resolves.toMatchObject({
+        status: "blocked",
+        reason: "intermediate_worksheet_asset_path",
+        message: expect.stringContaining("planned final asset path"),
+      });
+
+      await expect(
+        cropTool.execute({
+          sourcePath: "assets/source.png",
+          outputPath: "grader/output/assets/q01-figure-1.png",
+          bbox1000: {
+            left: 400,
+            top: 400,
+            right: 600,
+            bottom: 600,
+          },
+        }),
+      ).resolves.toMatchObject({ status: "written" });
+    });
+  });
+
   it("accepts pixel coordinates for crop refinement", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =
@@ -357,6 +408,12 @@ describe("Spark agent PDF tool inputs", () => {
     requireFunctionTool(proposeTool);
     const progressReviewTool = tools.review_run_progress_with_fresh_agent;
     requireFunctionTool(progressReviewTool);
+    expect((reviewTool as { description?: string }).description).toContain(
+      "printed/visible visual content",
+    );
+    expect((reviewTool as { description?: string }).description).toContain(
+      "surrounding prompt/caption/table text",
+    );
     expect(
       reviewTool.inputSchema.safeParse({
         cropPath: "grader/output/assets/figure-1.png",
@@ -420,6 +477,141 @@ describe("Spark agent PDF tool inputs", () => {
     expect(parsed.firstPage).toBe(2);
     expect(parsed.lastPage).toBeUndefined();
     expect(parsed.minHeight).toBe(80);
+  });
+
+  it("documents page-number requirements for rendered PDF page images", async () => {
+    const { buildSparkAgentTools } =
+      await import("../src/agent/sparkAgentRunner");
+
+    const tools = buildSparkAgentTools({
+      workspace: buildMinimalWorkspace(),
+      rootDir: "/tmp/spark-agent-pdf-tools",
+      userId: "test-user",
+      serviceAccountJson: "{}",
+      graderPublish: { mode: "mock", runId: "sheet-1" },
+    });
+
+    const pageImageTool = tools.pdf_to_images;
+    requireFunctionTool(pageImageTool);
+    expect(
+      (pageImageTool as { description?: string }).description,
+    ).toContain("Always pass required 1-based pageNumbers");
+    expect(
+      (pageImageTool as { description?: string }).description,
+    ).toContain('{"pageNumbers":[2,3,11]}');
+    expect(
+      (pageImageTool as { description?: string }).description,
+    ).toContain("not part of outputDir");
+    expect(
+      pageImageTool.inputSchema.safeParse({
+        pdfPath: "grader/uploads/paper.pdf",
+        outputDir: "grader/output/page-images",
+      }).success,
+    ).toBe(false);
+
+    const parsed = pageImageTool.inputSchema.parse({
+      pdfPath: "grader/uploads/paper.pdf",
+      outputDir: "grader/output/page-images",
+      pageNumbers: [2, 3, 11],
+      pages: [4],
+      page: 5,
+      firstPage: 6,
+      lastPage: 7,
+    }) as {
+      pageNumbers?: unknown[];
+      pages?: unknown[];
+      page?: number;
+      firstPage?: number;
+      lastPage?: number;
+    };
+    expect(parsed.pageNumbers).toEqual([2, 3, 11]);
+    expect(parsed.pages).toEqual([4]);
+    expect(parsed.page).toBe(5);
+    expect(parsed.firstPage).toBe(6);
+    expect(parsed.lastPage).toBe(7);
+
+    const parsedWithNullAliases = pageImageTool.inputSchema.parse({
+      pdfPath: "grader/uploads/paper.pdf",
+      outputDir: "grader/output/page-images",
+      pageNumbers: [11],
+      pages: null,
+      page: null,
+      firstPage: null,
+      lastPage: null,
+    }) as {
+      pageNumbers?: unknown[];
+      pages?: unknown[];
+      page?: number;
+      firstPage?: number;
+      lastPage?: number;
+    };
+    expect(parsedWithNullAliases.pageNumbers).toEqual([11]);
+    expect(parsedWithNullAliases.pages).toBeUndefined();
+    expect(parsedWithNullAliases.page).toBeUndefined();
+    expect(parsedWithNullAliases.firstPage).toBeUndefined();
+    expect(parsedWithNullAliases.lastPage).toBeUndefined();
+    const parsedStringPages = pageImageTool.inputSchema.parse({
+      pdfPath: "grader/uploads/paper.pdf",
+      outputDir: "grader/output/page-images",
+      pageNumbers: ["18"],
+    }) as {
+      pageNumbers?: unknown[];
+    };
+    expect(parsedStringPages.pageNumbers).toEqual([18]);
+  });
+
+  it("keeps root grep searches out of replay and seeded skill scaffolding", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await mkdir(path.join(rootDir, ".spark-agent-replay"), {
+        recursive: true,
+      });
+      await mkdir(path.join(rootDir, "skills/paper-to-sheet"), {
+        recursive: true,
+      });
+      await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
+      await mkdir(path.join(rootDir, "grader"), { recursive: true });
+      await mkdir(path.join(rootDir, "grader/output"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, ".spark-agent-replay/manifest.json"),
+        '{"schemaVersion":1}\n',
+      );
+      await writeFile(
+        path.join(rootDir, "skills/paper-to-sheet/SKILL.md"),
+        "schemaVersion and sheet examples live here\n",
+      );
+      await writeFile(
+        path.join(rootDir, "logs/agent/agent.log"),
+        "schemaVersion and sheet examples live here\n",
+      );
+      await writeFile(
+        path.join(rootDir, "grader/task.md"),
+        "schemaVersion and sheet examples live here\n",
+      );
+      await writeFile(
+        path.join(rootDir, "grader/output/question.md"),
+        "Figure 1 shows the source apparatus.\n",
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: buildMinimalWorkspace(),
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+      });
+
+      const grepTool = tools.grep_workspace_files;
+      requireFunctionTool(grepTool);
+      const output = (await grepTool.execute({
+        pattern: "schemaVersion|Figure 1",
+      })) as { matches: Array<{ filePath: string }> };
+
+      expect(output.matches.map((match) => match.filePath)).toEqual([
+        "grader/output/question.md",
+      ]);
+    });
   });
 
   it("adds a clean white border around final crops with pad_image", async () => {

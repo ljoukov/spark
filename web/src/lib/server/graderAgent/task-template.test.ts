@@ -30,6 +30,15 @@ describe('grader task template', () => {
 		expect(graderTaskTemplate).toContain('use `status: "correct"` only for full marks');
 		expect(graderTaskTemplate).toContain('[got/total mark(s)]');
 		expect(graderTaskTemplate).toContain('Do not use `generate_json`');
+		expect(graderTaskTemplate).toContain('validate_grader_artifacts');
+		expect(graderTaskTemplate).toContain('Use returned question/modelAnswer results directly');
+		expect(graderTaskTemplate).toContain('even when the learner asks for model answers');
+		expect(graderTaskTemplate).toContain('preserving `teacher-review`');
+		expect(graderTaskTemplate).toContain('Preserve returned scores/statuses');
+		expect(graderTaskTemplate).toContain('The next non-repair tool call must be');
+		expect(graderTaskTemplate).toContain('Do not reread every scoring file');
+		expect(graderTaskTemplate).toContain('omit optional enrichment');
+		expect(graderTaskTemplate).toContain('never write a bare `type: "calc"`');
 	});
 
 	it('keeps subagents bounded and crop validation dedicated', () => {
