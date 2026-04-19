@@ -6,12 +6,15 @@ import {
 	SparkTutorReviewThreadSchema,
 	type PaperSheetFeedbackAttachment,
 	type SparkGraderWorksheetReport,
+	type SparkTutorReviewGapBand,
 	type SparkTutorReviewMessage,
 	type SparkTutorReviewState,
 	type SparkTutorReviewThread
 } from '@spark/schemas';
 
 import { listWorksheetQuestionEntries } from '$lib/server/grader/problemReport';
+
+type PaperSheetReviewQuestion = SparkGraderWorksheetReport['review']['questions'][string];
 
 const EMPTY_SHEET_STATE: SparkTutorReviewState = SparkTutorReviewStateSchema.parse({
 	sheet: {
@@ -64,14 +67,37 @@ function createReviewMessage(options: {
 function createReviewThread(options: {
 	questionId: string;
 	status: SparkTutorReviewThread['status'];
+	gapBand: SparkTutorReviewGapBand;
 	createdAt: string;
 }): SparkTutorReviewThread {
 	return SparkTutorReviewThreadSchema.parse({
 		questionId: options.questionId,
 		status: options.status,
+		gapBand: options.gapBand,
 		messages: [],
 		...(options.status === 'resolved' ? { resolvedAt: options.createdAt } : {})
 	});
+}
+
+function resolveInitialGapBand(
+	review: PaperSheetReviewQuestion | undefined,
+	status: SparkTutorReviewThread['status']
+): SparkTutorReviewGapBand {
+	if (status === 'resolved') {
+		return 'closed';
+	}
+	const score = review?.score;
+	if (!score || score.total <= 0) {
+		return 'large_gap';
+	}
+	const missingMarks = score.total - score.got;
+	if (missingMarks <= 1 || score.got / score.total >= 0.75) {
+		return 'small_gap';
+	}
+	if (score.got > 0 && score.got / score.total >= 0.35) {
+		return 'medium_gap';
+	}
+	return 'large_gap';
 }
 
 export function buildInitialTutorReviewState(options: {
@@ -87,6 +113,7 @@ export function buildInitialTutorReviewState(options: {
 		threads[entry.question.id] = createReviewThread({
 			questionId: entry.question.id,
 			status,
+			gapBand: resolveInitialGapBand(review, status),
 			createdAt
 		});
 	}
@@ -125,12 +152,16 @@ export function appendTutorReviewMessage(options: {
 	attachments?: PaperSheetFeedbackAttachment[] | undefined;
 	createdAt: string;
 	status?: SparkTutorReviewThread['status'];
+	gapBand?: SparkTutorReviewGapBand;
 	resolvedAt?: string;
 }): SparkTutorReviewThread {
 	const nextStatus = options.status ?? options.thread.status;
+	const nextGapBand =
+		options.gapBand ?? (nextStatus === 'resolved' ? 'closed' : options.thread.gapBand);
 	return SparkTutorReviewThreadSchema.parse({
 		...options.thread,
 		status: nextStatus,
+		...(nextGapBand ? { gapBand: nextGapBand } : {}),
 		messages: [
 			...options.thread.messages,
 			createReviewMessage({

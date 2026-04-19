@@ -10,7 +10,7 @@
 		isSparkSupportedClientFile,
 		resolveSparkAttachmentBadge
 	} from '$lib/spark/attachments';
-	import type { PaperSheetFeedbackAttachment } from '@spark/schemas';
+	import type { PaperSheetFeedbackAttachment, SparkTutorReviewGapBand } from '@spark/schemas';
 
 	type CloseGapMessage = {
 		id: string;
@@ -26,6 +26,7 @@
 		questionPrompt,
 		studentAnswer,
 		reviewNote,
+		gapBand = 'large_gap',
 		messages = [],
 		draft = $bindable(''),
 		placeholder = 'Write your response here',
@@ -41,6 +42,7 @@
 		questionPrompt: string;
 		studentAnswer: string;
 		reviewNote: string;
+		gapBand?: SparkTutorReviewGapBand;
 		messages?: CloseGapMessage[];
 		draft?: string;
 		placeholder?: string;
@@ -61,7 +63,9 @@
 	let scheduledScrollTimeouts: number[] = [];
 
 	const isRuntimeLocked = $derived(sending || runtimeStatus !== null);
-	const canSend = $derived(!isRuntimeLocked && !resolved && (draft.trim().length > 0 || selectedFiles.length > 0));
+	const canSend = $derived(
+		!isRuntimeLocked && !resolved && (draft.trim().length > 0 || selectedFiles.length > 0)
+	);
 	const latestStudentMessageId = $derived.by(() => {
 		for (let index = messages.length - 1; index >= 0; index -= 1) {
 			const message = messages[index];
@@ -72,6 +76,18 @@
 		return null;
 	});
 	const shouldUseThreadPadding = $derived(latestStudentMessageId !== null);
+	const progressLabel = $derived.by(() => {
+		switch (gapBand) {
+			case 'large_gap':
+				return 'largest gap';
+			case 'medium_gap':
+				return 'closing';
+			case 'small_gap':
+				return 'nearly closed';
+			case 'closed':
+				return 'closed';
+		}
+	});
 	const statusLabel = $derived.by(() => {
 		if (runtimeStatus === 'responding') {
 			return assistantDraftText ? null : 'Responding...';
@@ -253,7 +269,11 @@
 
 <svelte:window onkeydown={handleKeydown} onresize={handleResize} />
 
-<div class="close-gap-response-modal" role="presentation" onclick={handleBackdropClick}>
+<div
+	class={`close-gap-response-modal is-gap-${gapBand}`}
+	role="presentation"
+	onclick={handleBackdropClick}
+>
 	<div
 		class="close-gap-response-modal__dialog"
 		role="dialog"
@@ -262,11 +282,21 @@
 	>
 		<header class="close-gap-response-modal__header">
 			<div>
-				<p>{questionLabel}</p>
+				<div class="close-gap-response-modal__meta">
+					<p>{questionLabel}</p>
+					<span class="close-gap-response-modal__progress">{progressLabel}</span>
+				</div>
 				<h2 id="close-gap-response-title">Close the gap</h2>
-				<span>Work through this problem before changing your final answer.</span>
+				<span class="close-gap-response-modal__subtitle">
+					Work through this problem before changing your final answer.
+				</span>
 			</div>
-			<button type="button" class="close-gap-response-modal__close" aria-label="Close response" onclick={onClose}>
+			<button
+				type="button"
+				class="close-gap-response-modal__close"
+				aria-label="Close response"
+				onclick={onClose}
+			>
 				<XIcon size={20} />
 			</button>
 		</header>
@@ -284,7 +314,10 @@
 			</aside>
 
 			<section class="close-gap-response-modal__chat" aria-label="Response chat">
-				<div class={`agent-thread ${shouldUseThreadPadding ? 'has-thread-padding' : ''}`} bind:this={messagesElement}>
+				<div
+					class={`agent-thread ${shouldUseThreadPadding ? 'has-thread-padding' : ''}`}
+					bind:this={messagesElement}
+				>
 					<div class={`agent-messages ${shouldUseThreadPadding ? 'has-thread-padding' : ''}`}>
 						<div class="agent-message is-agent" data-message-id="review-note">
 							<span class="sr-only">Spark review note</span>
@@ -323,7 +356,10 @@
 								{#if message.markdown.trim().length > 0}
 									<div class="message-bubble">
 										{#if message.author === 'assistant'}
-											<MarkdownContent markdown={message.markdown} class="message-markdown markdown" />
+											<MarkdownContent
+												markdown={message.markdown}
+												class="message-markdown markdown"
+											/>
 										{:else}
 											<p class="message-plain">{message.markdown}</p>
 										{/if}
@@ -351,7 +387,10 @@
 							<div class="agent-message is-agent" data-message-id="assistant-draft">
 								<span class="sr-only">Spark tutor response</span>
 								<div class="message-bubble">
-									<MarkdownContent markdown={assistantDraftText} class="message-markdown markdown" />
+									<MarkdownContent
+										markdown={assistantDraftText}
+										class="message-markdown markdown"
+									/>
 								</div>
 							</div>
 						{:else if statusLabel}
@@ -387,11 +426,19 @@
 										<div class="attachment-card is-file" role="listitem">
 											<div class="attachment-doc">
 												<span class="attachment-doc__icon">
-													{resolveSparkAttachmentBadge({ filename: file.name, contentType: file.type })}
+													{resolveSparkAttachmentBadge({
+														filename: file.name,
+														contentType: file.type
+													})}
 												</span>
 												<span class="attachment-doc__name">{file.name}</span>
 											</div>
-											<button type="button" class="attachment-remove" aria-label={`Remove ${file.name}`} onclick={() => removeSelectedFile(file)}>
+											<button
+												type="button"
+												class="attachment-remove"
+												aria-label={`Remove ${file.name}`}
+												onclick={() => removeSelectedFile(file)}
+											>
 												<span class="attachment-remove__glyph" aria-hidden="true">×</span>
 											</button>
 										</div>
@@ -437,28 +484,59 @@
 		display: grid;
 		place-items: center;
 		padding: 4rem 1.25rem;
-		background: color-mix(in srgb, #fff7e8 42%, rgba(64, 53, 43, 0.46));
+		background: var(--close-gap-backdrop);
 		backdrop-filter: blur(14px) saturate(0.98);
 		color: var(--close-gap-ink);
 		font-family: Georgia, 'Times New Roman', serif;
+		--close-gap-backdrop: color-mix(in srgb, #fff0ea 42%, rgba(64, 43, 38, 0.46));
 		--close-gap-paper: #ffffff;
 		--close-gap-paper-wash: #fffaf1;
 		--close-gap-paper-soft: #f8f5f0;
+		--close-gap-panel-wash: color-mix(
+			in srgb,
+			var(--close-gap-accent-soft) 44%,
+			var(--close-gap-paper-wash)
+		);
 		--close-gap-paper-border: rgba(118, 83, 47, 0.2);
-		--close-gap-paper-border-strong: rgba(198, 99, 23, 0.34);
+		--close-gap-paper-border-strong: rgba(184, 69, 46, 0.34);
 		--close-gap-ink: #241d19;
 		--close-gap-muted: rgba(87, 71, 58, 0.72);
 		--close-gap-subtle: rgba(87, 71, 58, 0.5);
-		--close-gap-accent: #c66317;
-		--close-gap-accent-soft: #fbefe3;
+		--close-gap-accent: #b8452e;
+		--close-gap-accent-soft: #fff0ea;
 		--close-gap-gold: #d6a11e;
 		--close-gap-shadow: 0 22px 70px -38px rgba(64, 44, 25, 0.55);
 		--chat-surface: color-mix(in srgb, var(--close-gap-paper) 92%, transparent);
 		--chat-border: var(--close-gap-paper-border);
 		--chat-user-bg: color-mix(in srgb, var(--close-gap-accent-soft) 88%, var(--close-gap-paper));
-		--chat-user-border: color-mix(in srgb, var(--close-gap-accent) 28%, var(--close-gap-paper-border));
+		--chat-user-border: color-mix(
+			in srgb,
+			var(--close-gap-accent) 28%,
+			var(--close-gap-paper-border)
+		);
 		--chat-send-bg: var(--close-gap-accent);
 		--chat-send-fg: #fffaf1;
+	}
+
+	.close-gap-response-modal.is-gap-medium_gap {
+		--close-gap-backdrop: color-mix(in srgb, #fff6d8 42%, rgba(72, 58, 26, 0.46));
+		--close-gap-paper-border-strong: rgba(214, 161, 30, 0.38);
+		--close-gap-accent: #b07a00;
+		--close-gap-accent-soft: #fff6d8;
+	}
+
+	.close-gap-response-modal.is-gap-small_gap {
+		--close-gap-backdrop: color-mix(in srgb, #f0fbf6 42%, rgba(36, 78, 61, 0.44));
+		--close-gap-paper-border-strong: rgba(34, 166, 110, 0.3);
+		--close-gap-accent: #23845d;
+		--close-gap-accent-soft: #f0fbf6;
+	}
+
+	.close-gap-response-modal.is-gap-closed {
+		--close-gap-backdrop: color-mix(in srgb, #e9fbf1 45%, rgba(32, 82, 54, 0.42));
+		--close-gap-paper-border-strong: rgba(34, 166, 110, 0.36);
+		--close-gap-accent: #1a8c5b;
+		--close-gap-accent-soft: #edfdf6;
 	}
 
 	.close-gap-response-modal__dialog {
@@ -482,13 +560,21 @@
 		gap: 1rem;
 		border-bottom: 1px solid var(--close-gap-paper-border);
 		padding: 1rem 1.15rem;
-		background: linear-gradient(180deg, var(--close-gap-paper-wash), var(--close-gap-paper-soft));
+		background: linear-gradient(180deg, var(--close-gap-panel-wash), var(--close-gap-paper-soft));
 	}
 
 	.close-gap-response-modal__header p,
 	.close-gap-response-modal__header h2,
-	.close-gap-response-modal__header span {
+	.close-gap-response-modal__subtitle,
+	.close-gap-response-modal__progress {
 		margin: 0;
+	}
+
+	.close-gap-response-modal__meta {
+		display: flex;
+		align-items: center;
+		gap: 0.55rem;
+		flex-wrap: wrap;
 	}
 
 	.close-gap-response-modal__header p {
@@ -506,12 +592,28 @@
 		color: var(--close-gap-ink);
 	}
 
-	.close-gap-response-modal__header span {
+	.close-gap-response-modal__subtitle {
 		display: block;
 		margin-top: 0.3rem;
 		color: var(--close-gap-muted);
 		font-size: 0.94rem;
 		line-height: 1.35;
+	}
+
+	.close-gap-response-modal__progress {
+		display: inline-flex;
+		align-items: center;
+		min-height: 1.35rem;
+		border: 1px solid var(--close-gap-paper-border-strong);
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--close-gap-accent-soft) 82%, var(--close-gap-paper));
+		color: var(--close-gap-accent);
+		padding: 0 0.55rem;
+		font-size: 0.66rem;
+		font-weight: 800;
+		letter-spacing: 0.08em;
+		line-height: 1;
+		text-transform: uppercase;
 	}
 
 	.close-gap-response-modal__close {
@@ -533,7 +635,7 @@
 		gap: 1rem;
 		min-height: 0;
 		padding: 1rem;
-		background: var(--close-gap-paper-wash);
+		background: var(--close-gap-panel-wash);
 	}
 
 	.close-gap-response-modal__context,
@@ -776,7 +878,11 @@
 		--chat-composer-text: var(--close-gap-ink);
 		--chat-composer-placeholder: var(--close-gap-muted);
 		--chat-composer-button-fg: var(--close-gap-muted);
-		--chat-composer-button-hover-bg: color-mix(in srgb, var(--close-gap-accent) 12%, var(--close-gap-paper));
+		--chat-composer-button-hover-bg: color-mix(
+			in srgb,
+			var(--close-gap-accent) 12%,
+			var(--close-gap-paper)
+		);
 		--chat-composer-button-hover-fg: var(--close-gap-accent);
 		--chat-composer-ring: color-mix(in srgb, var(--close-gap-accent) 38%, transparent);
 		--chat-composer-send-shadow: 0 8px 20px -14px var(--close-gap-accent);
@@ -886,23 +992,60 @@
 		font-weight: 700;
 	}
 
-	:global([data-theme='dark']) .close-gap-response-modal {
-		background: color-mix(in srgb, #17142a 48%, rgba(4, 3, 10, 0.62));
+	:global([data-theme='dark']) .close-gap-response-modal,
+	:global(.dark) .close-gap-response-modal {
+		--close-gap-backdrop: color-mix(in srgb, #17142a 48%, rgba(4, 3, 10, 0.62));
 		--close-gap-paper: #17142a;
 		--close-gap-paper-wash: #141125;
 		--close-gap-paper-soft: #201c39;
 		--close-gap-paper-border: color-mix(in srgb, #e4ba46 22%, #302850);
-		--close-gap-paper-border-strong: color-mix(in srgb, #e4ba46 38%, #302850);
+		--close-gap-paper-border-strong: color-mix(in srgb, #fbbf24 38%, #302850);
 		--close-gap-ink: #f3ede5;
 		--close-gap-muted: rgba(224, 214, 204, 0.76);
 		--close-gap-subtle: rgba(224, 214, 204, 0.5);
-		--close-gap-accent: #e4ba46;
-		--close-gap-accent-soft: color-mix(in srgb, #e4ba46 14%, #161224);
-		--close-gap-gold: #e4ba46;
+		--close-gap-accent: #fde68a;
+		--close-gap-accent-soft: color-mix(in srgb, #d6a11e 18%, #161224);
+		--close-gap-gold: #fbbf24;
 		--close-gap-shadow: 0 28px 80px -40px rgba(0, 0, 0, 0.72);
 		--chat-surface: color-mix(in srgb, var(--close-gap-paper-soft) 92%, transparent);
-		--chat-user-bg: color-mix(in srgb, var(--close-gap-paper-soft) 90%, var(--close-gap-accent) 10%);
+		--chat-user-bg: color-mix(
+			in srgb,
+			var(--close-gap-paper-soft) 90%,
+			var(--close-gap-accent) 10%
+		);
 		--chat-send-fg: #161224;
+	}
+
+	:global([data-theme='dark']) .close-gap-response-modal.is-gap-large_gap,
+	:global(.dark) .close-gap-response-modal.is-gap-large_gap {
+		--close-gap-backdrop: color-mix(in srgb, #17142a 48%, rgba(18, 8, 6, 0.64));
+		--close-gap-paper-border-strong: color-mix(in srgb, #fb8a72 40%, #302850);
+		--close-gap-accent: #fca08b;
+		--close-gap-accent-soft: color-mix(in srgb, #b8452e 22%, #161224);
+	}
+
+	:global([data-theme='dark']) .close-gap-response-modal.is-gap-medium_gap,
+	:global(.dark) .close-gap-response-modal.is-gap-medium_gap {
+		--close-gap-backdrop: color-mix(in srgb, #17142a 48%, rgba(22, 16, 4, 0.62));
+		--close-gap-paper-border-strong: color-mix(in srgb, #fbbf24 38%, #302850);
+		--close-gap-accent: #fde68a;
+		--close-gap-accent-soft: color-mix(in srgb, #d6a11e 20%, #161224);
+	}
+
+	:global([data-theme='dark']) .close-gap-response-modal.is-gap-small_gap,
+	:global(.dark) .close-gap-response-modal.is-gap-small_gap {
+		--close-gap-backdrop: color-mix(in srgb, #17142a 48%, rgba(6, 22, 16, 0.62));
+		--close-gap-paper-border-strong: color-mix(in srgb, #4ade80 32%, #302850);
+		--close-gap-accent: #9be7bc;
+		--close-gap-accent-soft: color-mix(in srgb, #22a66e 16%, #161224);
+	}
+
+	:global([data-theme='dark']) .close-gap-response-modal.is-gap-closed,
+	:global(.dark) .close-gap-response-modal.is-gap-closed {
+		--close-gap-backdrop: color-mix(in srgb, #17142a 48%, rgba(8, 28, 16, 0.6));
+		--close-gap-paper-border-strong: color-mix(in srgb, #4ade80 40%, #302850);
+		--close-gap-accent: #86efac;
+		--close-gap-accent-soft: color-mix(in srgb, #22a66e 22%, #161224);
 	}
 
 	:global(body.close-gap-response-modal-is-open) {

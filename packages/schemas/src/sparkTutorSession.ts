@@ -102,6 +102,17 @@ export type SparkTutorReviewThreadStatus = z.infer<
   typeof SparkTutorReviewThreadStatusSchema
 >;
 
+export const SparkTutorReviewGapBandSchema = z.enum([
+  "large_gap",
+  "medium_gap",
+  "small_gap",
+  "closed",
+]);
+
+export type SparkTutorReviewGapBand = z.infer<
+  typeof SparkTutorReviewGapBandSchema
+>;
+
 export const SparkTutorReviewMessageSchema = z
   .object({
     id: trimmedString,
@@ -131,6 +142,7 @@ export type SparkTutorReviewMessage = z.infer<
 export const SparkTutorReviewThreadSchema = z.object({
   questionId: trimmedString,
   status: SparkTutorReviewThreadStatusSchema,
+  gapBand: SparkTutorReviewGapBandSchema.optional(),
   messages: z.array(SparkTutorReviewMessageSchema),
   resolvedAt: z.string().datetime({ offset: true }).optional(),
 });

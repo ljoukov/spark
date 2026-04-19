@@ -10,6 +10,7 @@ import {
 	type PaperSheetQuestion,
 	type PaperSheetQuestionEntry,
 	type SparkGraderWorksheetReport,
+	type SparkTutorReviewGapBand,
 	type SparkTutorReviewState,
 	type SparkTutorReviewThread
 } from '@spark/schemas';
@@ -60,7 +61,8 @@ const requestSchema = z.object({
 
 const closeGapResponseSchema = z.object({
 	replyMarkdown: z.string().trim().min(1),
-	status: z.enum(['open', 'resolved'])
+	status: z.enum(['open', 'resolved']),
+	gapBand: z.enum(['large_gap', 'medium_gap', 'small_gap', 'closed'])
 });
 
 type ParsedTurnRequest = z.infer<typeof requestSchema> & {
@@ -71,6 +73,19 @@ type PreparedReplyAttachment = {
 	metadata: PaperSheetFeedbackAttachment;
 	inlinePart: LlmContentPart;
 };
+
+function normalizeCloseGapBand(
+	status: 'open' | 'resolved',
+	gapBand: SparkTutorReviewGapBand
+): SparkTutorReviewGapBand {
+	if (status === 'resolved') {
+		return 'closed';
+	}
+	if (gapBand === 'closed') {
+		return 'small_gap';
+	}
+	return gapBand;
+}
 
 function isFileLike(value: FormDataEntryValue | null): value is File {
 	if (!value) {
@@ -516,6 +531,12 @@ function buildCloseGapSystemPrompt(options: {
 		'Start by acknowledging the most sensible part of the latest attempt before naming the exact remaining gap.',
 		'Keep the reply student-facing, specific, and short.',
 		'Set status to "resolved" only when the latest student response closes the gap for this selected question. Otherwise set status to "open".',
+		'Also set gapBand as a discrete progress score for the remaining gap after this reply:',
+		'- "large_gap": the student still has a major missing idea, method, or setup.',
+		'- "medium_gap": the student has the main direction but still needs an important repair.',
+		'- "small_gap": the student is close and only a detail, wording, or final check remains.',
+		'- "closed": the latest student response has closed the gap. Use this with status "resolved".',
+		'If status is "open", do not set gapBand to "closed".',
 		'',
 		`Worksheet: ${options.report.sheet.title}`,
 		`Section: ${entry.section.label}`,
@@ -804,12 +825,14 @@ export const POST: RequestHandler = async ({ request, params }) => {
 		});
 
 		const completedAt = new Date();
+		const gapBand = normalizeCloseGapBand(response.status, response.gapBand);
 		const assistantThread = appendTutorReviewMessage({
 			thread: respondingThread,
 			author: 'assistant',
 			markdown: response.replyMarkdown,
 			createdAt: completedAt.toISOString(),
 			status: response.status === 'resolved' ? 'resolved' : 'open',
+			gapBand,
 			...(response.status === 'resolved' ? { resolvedAt: completedAt.toISOString() } : {})
 		});
 		const finalReviewState = updateTutorReviewThread({

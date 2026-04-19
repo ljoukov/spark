@@ -16,6 +16,7 @@
 		SparkSheetPageState,
 		SparkSolveSheetDraft,
 		SparkSolveSheetAnswers,
+		SparkTutorReviewGapBand,
 		SparkTutorReviewState
 	} from '@spark/schemas';
 	import {
@@ -72,6 +73,7 @@
 		studentAnswer: string;
 		reviewNote: string;
 		replyPlaceholder: string;
+		gapBand: SparkTutorReviewGapBand;
 		messages: CloseGapMessage[];
 		resolved: boolean;
 	};
@@ -614,6 +616,30 @@
 		return 'zero';
 	}
 
+	function resolveCloseGapBand(options: {
+		thread: SparkTutorReviewState['threads'][string];
+		score: { got: number; total: number } | null | undefined;
+	}): SparkTutorReviewGapBand {
+		if (options.thread.status === 'resolved') {
+			return 'closed';
+		}
+		if (options.thread.gapBand) {
+			return options.thread.gapBand;
+		}
+		const score = options.score;
+		if (!score || score.total <= 0) {
+			return 'large_gap';
+		}
+		const missingMarks = score.total - score.got;
+		if (missingMarks <= 1 || score.got / score.total >= 0.75) {
+			return 'small_gap';
+		}
+		if (score.got > 0 && score.got / score.total >= 0.35) {
+			return 'medium_gap';
+		}
+		return 'large_gap';
+	}
+
 	function collectQuestionMarkLabelsFromEntries(
 		entries: readonly PaperSheetQuestionEntry[] | undefined,
 		review: PaperSheetReview | null | undefined,
@@ -833,6 +859,10 @@
 				reviewNote: review.note,
 				replyPlaceholder:
 					review.replyPlaceholder ?? 'Write what you would change, and why that fixes the gap.',
+				gapBand: resolveCloseGapBand({
+					thread,
+					score: review.score ?? null
+				}),
 				messages,
 				resolved: thread.status === 'resolved'
 			};
@@ -1803,6 +1833,7 @@
 			questionPrompt={activeResponseContext.questionPrompt}
 			studentAnswer={activeResponseContext.studentAnswer}
 			reviewNote={activeResponseContext.reviewNote}
+			gapBand={activeResponseContext.gapBand}
 			messages={activeResponseContext.messages}
 			bind:draft={activeResponseDraft}
 			placeholder={activeResponseContext.replyPlaceholder}
