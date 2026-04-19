@@ -30,7 +30,7 @@
 		"@connectrpc/connect-node": "^2.1.1",
 		"@connectrpc/connect-web": "^2.1.1",
 		"@ljoukov/llm": "7.0.9",
-		"@ljoukov/sheet": "0.3.5",
+		"@ljoukov/sheet": "0.3.6",
 		"@spark/llm": "workspace:*",
 		"@spark/proto": "workspace:*",
 		"@spark/schemas": "workspace:*",
@@ -38,7 +38,8 @@
 		"highlight.js": "^11.11.1",
 		"katex": "^0.16.27",
 		"marked-katex-extension": "^5.1.6",
-		"monaco-editor": "^0.55.1"
+		"monaco-editor": "^0.55.1",
+		"sharp": "^0.34.5"
 	},
 	"devDependencies": {
 		"@astral-sh/ruff-wasm-nodejs": "^0.14.13",

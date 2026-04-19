@@ -100,7 +100,7 @@
         "@connectrpc/connect-node": "^2.1.1",
         "@connectrpc/connect-web": "^2.1.1",
         "@ljoukov/llm": "7.0.9",
-        "@ljoukov/sheet": "0.3.5",
+        "@ljoukov/sheet": "0.3.6",
         "@spark/llm": "workspace:*",
         "@spark/proto": "workspace:*",
         "@spark/schemas": "workspace:*",
@@ -109,6 +109,7 @@
         "katex": "^0.16.27",
         "marked-katex-extension": "^5.1.6",
         "monaco-editor": "^0.55.1",
+        "sharp": "^0.34.5",
       },
       "devDependencies": {
         "@astral-sh/ruff-wasm-nodejs": "^0.14.13",
@@ -478,7 +479,7 @@
 
     "@ljoukov/llm": ["@ljoukov/llm@7.0.9", "", { "dependencies": { "@alcyone-labs/zod-to-json-schema": "^4.0.10", "@google-cloud/storage": "^7.19.0", "@google/genai": "^1.45.0", "ajv": "^8.18.0", "ajv-formats": "^3.0.1", "google-auth-library": "^10.5.0", "mime": "^4.1.0", "openai": "^6.29.0", "undici": "^7.21.0", "ws": "^8.19.0", "zod": "^4.3.6" } }, "sha512-LHtRTRfm0WxsbdRdSVzqOoopiY40rvpgpPB+1jvGHOnBtOatP7pKMmaASbxc3+GE55GbcBcu09f5nqachzX02Q=="],
 
-    "@ljoukov/sheet": ["@ljoukov/sheet@0.3.5", "", { "dependencies": { "@lucide/svelte": "^0.562.0", "esm-env": "^1.2.2", "highlight.js": "^11.11.1", "katex": "^0.16.27", "marked": "^17.0.5", "marked-katex-extension": "^5.1.7", "zod": "^4.3.6" }, "peerDependencies": { "svelte": "^5.0.0" } }, "sha512-S6wHeyJNHvH0WR/EEx1cji0QV9dcIQgVbFxIiGe0O5WE/kqtl1z09qiJbBzg2mDCHHnJZFH9cLaaZgvuofdFJQ=="],
+    "@ljoukov/sheet": ["@ljoukov/sheet@0.3.6", "", { "dependencies": { "@lucide/svelte": "^0.562.0", "esm-env": "^1.2.2", "highlight.js": "^11.11.1", "katex": "^0.16.27", "marked": "^17.0.5", "marked-katex-extension": "^5.1.7", "zod": "^4.3.6" }, "peerDependencies": { "svelte": "^5.0.0" } }, "sha512-unO81WUFYu+FWRuzALcysG0Od4UYpPj+C+PWdTbhocUAapQ741HdViOf4oaUKKhFmmyiTMTrHOlet1fRk45h4A=="],
 
     "@lucide/svelte": ["@lucide/svelte@0.562.0", "", { "peerDependencies": { "svelte": "^5" } }, "sha512-wDMULwtTFN2Sc/TFBm6gfuVCNb4Y5P9LDrwxNnUbV52+IEU7NXZmvxwXoz+vrrpad6Xupq+Hw5eUlqIHEGhouw=="],
 

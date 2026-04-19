@@ -9,6 +9,8 @@ Use this skill to turn source-page visuals into worksheet-visible image assets.
 
 For handwritten grading, use this skill for every included source item whose wording names, points to, or depends on a source figure, diagram, graph, table, photo, or option block. A linked original/source PDF instruction is not a valid first-pass substitute for an uploaded/source PDF visual; artifact validation rejects ordinary named figures/tables that are only referenced as "linked original PDF" when source pixels or table text are available. Use that fallback only for genuinely unavailable source pixels, such as a missing external insert, and only after the failed render/crop/table attempt is recorded in the plan and source-fidelity audit. Use explicit 1-based `pageNumbers` for every `pdf_to_images` call; `pageNumbers` is required and must be a top-level tool field, not part of `outputDir`.
 
+Prefer real source crops or PDF embedded images over generated SVG. Use inline SVG only for clean isolated line diagrams after rendering it and comparing it with the source; never use generated SVG for photographed, handwritten, annotated, shadowed, or mixed text-and-diagram visuals when source pixels are available.
+
 ## Inputs
 
 - Source page image path or an existing bad crop.
