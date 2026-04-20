@@ -204,7 +204,7 @@
 	};
 
 	function parseSheetImageViewport(image: HTMLImageElement): SheetImageViewport | null {
-		const rawSource = image.currentSrc || image.src;
+		const rawSource = image.getAttribute('src') || image.src || image.currentSrc;
 		if (!rawSource) {
 			return null;
 		}
@@ -305,6 +305,15 @@
 				image.addEventListener('load', apply);
 			}
 		}
+	}
+
+	function refreshLocalizedSheetFigures(): void {
+		const root = sheetShellElement ?? document.querySelector<HTMLElement>('.sheet-shell');
+		if (!root) {
+			return;
+		}
+		eagerLoadSheetFigures(root);
+		enhanceLocalizedSheetFigures(root);
 	}
 
 	const FIGURE_REFERENCE_LABEL_PATTERN =
@@ -1468,6 +1477,45 @@
 		return () => {
 			window.removeEventListener('popstate', syncCloseGapFromLocation);
 			window.removeEventListener('hashchange', syncCloseGapFromLocation);
+		};
+	});
+
+	onMount(() => {
+		if (!browser) {
+			return;
+		}
+		let frame: number | null = null;
+		let observedRoot: HTMLElement | null = null;
+		const observer = new MutationObserver(() => {
+			schedule();
+		});
+		const schedule = () => {
+			if (frame !== null) {
+				return;
+			}
+			frame = window.requestAnimationFrame(() => {
+				frame = null;
+				const root = sheetShellElement ?? document.querySelector<HTMLElement>('.sheet-shell');
+				if (root && root !== observedRoot) {
+					observer.disconnect();
+					observer.observe(root, {
+						childList: true,
+						subtree: true
+					});
+					observedRoot = root;
+				}
+				refreshLocalizedSheetFigures();
+				if (!root) {
+					schedule();
+				}
+			});
+		};
+		schedule();
+		return () => {
+			if (frame !== null) {
+				window.cancelAnimationFrame(frame);
+			}
+			observer.disconnect();
 		};
 	});
 
