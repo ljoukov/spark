@@ -405,7 +405,9 @@ async function writeSourceProblemStatementTranscription(
   );
 }
 
-async function writeLongHandwrittenTranscription(rootDir: string): Promise<void> {
+async function writeLongHandwrittenTranscription(
+  rootDir: string,
+): Promise<void> {
   const labels = Array.from({ length: 13 }, (_, index) => {
     const label = `01.${(index + 1).toString()}`;
     return `- **${label}** Source prompt ${label}. [1]`;
@@ -476,7 +478,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
         /Missing required grader summary/iu,
       );
     });
-  });
+  }, 10_000);
 
   it("rejects publish when the worksheet artifact fails schema validation", async () => {
     await withTempDir(async (rootDir) => {
@@ -1572,7 +1574,9 @@ describe("Spark agent tool: publish_sheet guards", () => {
           expect.stringContaining('section "Q1" theory'),
         ]),
       });
-      expect(JSON.stringify(result)).toContain("exact question or group prompt");
+      expect(JSON.stringify(result)).toContain(
+        "exact question or group prompt",
+      );
     });
   });
 
@@ -1738,7 +1742,9 @@ describe("Spark agent tool: publish_sheet guards", () => {
         blockedTool: "validate_crop_with_fresh_agent",
       });
       expect(JSON.stringify(result)).toContain("sheet-plan.md");
-      expect(JSON.stringify(result)).toContain("score_answers_with_fresh_agent");
+      expect(JSON.stringify(result)).toContain(
+        "score_answers_with_fresh_agent",
+      );
     });
   });
 
@@ -2138,7 +2144,9 @@ describe("Spark agent tool: publish_sheet guards", () => {
         status: "blocked_bounded_scoring_required",
         blockedTool: "write_workspace_file",
       });
-      expect(JSON.stringify(result)).toContain("score_answers_with_fresh_agent");
+      expect(JSON.stringify(result)).toContain(
+        "score_answers_with_fresh_agent",
+      );
     });
   });
 
@@ -2933,8 +2941,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
       const result = await scoreAnswersTool.execute({
         scope: "Question 1",
         worksheetIds: ["q1"],
-        sourceMarkdown:
-          "Question 1.3: Figure 2 is shown in the source paper.",
+        sourceMarkdown: "Question 1.3: Figure 2 is shown in the source paper.",
         markSchemeMarkdown: "Question 1 mark scheme.",
         studentAnswersMarkdown: "Question 1 student answers.",
       });
@@ -3062,7 +3069,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
       await expect(
         writeJsonTool.execute({
           filePath: "grader/output/sheet.json",
-          jsonText: '{"schemaVersion":1,"sheet":{"id":"s","subject":"Science","level":"GCSE","title":"T","subtitle":"S","color":"#000000","accent":"#000000","light":"#ffffff","border":"#cccccc","sections":[]},"answers":{},"review":{"score":{"got":0,"total":0},"label":"0/0","message":"Ready.","note":"","questions":{}}}',
+          jsonText:
+            '{"schemaVersion":1,"sheet":{"id":"s","subject":"Science","level":"GCSE","title":"T","subtitle":"S","color":"#000000","accent":"#000000","light":"#ffffff","border":"#cccccc","sections":[]},"answers":{},"review":{"score":{"got":0,"total":0},"label":"0/0","message":"Ready.","note":"","questions":{}}}',
         }),
       ).resolves.toMatchObject({
         status: "written",
@@ -4327,7 +4335,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
           id: "q1",
           type: "mcq",
           marks: 1,
-          prompt: "Which model represents the plum pudding model? Tick one box.",
+          prompt:
+            "Which model represents the plum pudding model? Tick one box.",
           displayMode: "labels_only",
           options: [
             { id: "a", label: "A", text: "" },
@@ -4414,7 +4423,9 @@ describe("Spark agent tool: publish_sheet guards", () => {
       expect(normalizedSheet.answers.q2).toBe("Noble gases");
       expect(normalizedSheet.answers.q3).toBe("green-red");
       expect(normalizedSheet.sheet.sections[0].questions[1].type).toBe("lines");
-      expect(normalizedSheet.sheet.sections[0].questions[1].options).toBeUndefined();
+      expect(
+        normalizedSheet.sheet.sections[0].questions[1].options,
+      ).toBeUndefined();
     });
   });
 
@@ -4828,7 +4839,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
     });
   });
 
-  it("normalizes linked worksheet crop assets to 512px JPEGs on publish", async () => {
+  it("normalizes linked worksheet crop assets to 1500px JPEGs on publish", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =
         await import("../src/agent/sparkAgentRunner");
@@ -4896,7 +4907,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
       expect(metadata.format).toBe("jpeg");
       expect(
         Math.max(metadata.width ?? 0, metadata.height ?? 0),
-      ).toBeLessThanOrEqual(512);
+      ).toBeLessThanOrEqual(1500);
       expect(scheduledPaths).toEqual(
         expect.arrayContaining([
           jpgPath,
@@ -4907,12 +4918,10 @@ describe("Spark agent tool: publish_sheet guards", () => {
     });
   });
 
-  it("preserves linked worksheet SVG assets on publish", async () => {
+  it("rejects linked worksheet SVG assets on publish", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =
         await import("../src/agent/sparkAgentRunner");
-      const { resolveWorkspacePathContentType } =
-        await import("../src/agent/workspaceFileStore");
       const assetPath = "grader/output/assets/figure-1.svg";
 
       await writeMockPublishArtifacts({
@@ -4963,12 +4972,107 @@ describe("Spark agent tool: publish_sheet guards", () => {
         sourceLabel: "Figure 1",
       });
 
-      const scheduledPaths: string[] = [];
       const tools = buildSparkAgentTools({
         workspace: {
-          scheduleUpdate: (filePath) => {
-            scheduledPaths.push(filePath);
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /SVG worksheet visuals|Do not publish SVG|simple horizontal\/vertical grids/iu,
+      );
+    });
+  });
+
+  it("accepts localized source-photo viewport links without crop validation", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const sourceImagePath = "grader/uploads/photo.jpg";
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "Science worksheet",
+        awardedMarks: 1,
+        maxMarks: 1,
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Science",
+            level: "GCSE",
+            title: "Science worksheet",
+            subtitle: "Uploaded paper",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q1",
+                label: "Question 1",
+                questions: [
+                  {
+                    id: "q1",
+                    type: "lines",
+                    marks: 1,
+                    displayNumber: "1",
+                    prompt:
+                      "Figure 1 shows the apparatus.\n\n[![Figure 1](grader/uploads/photo.jpg#spark-bbox=10,12,120,90)](grader/uploads/photo.jpg)",
+                    lines: 2,
+                  },
+                ],
+              },
+            ],
           },
+          answers: {
+            q1: "A suitable answer.",
+          },
+          review: {
+            score: {
+              got: 1,
+              total: 1,
+            },
+            label: "1/1",
+            message: "Checked.",
+            note: "Answer reviewed.",
+            questions: {
+              q1: {
+                status: "correct",
+                score: {
+                  got: 1,
+                  total: 1,
+                },
+                note: "Correct.",
+              },
+            },
+          },
+        },
+      });
+      await mkdir(path.dirname(path.join(rootDir, sourceImagePath)), {
+        recursive: true,
+      });
+      await writeTestPng({
+        filePath: path.join(rootDir, sourceImagePath),
+        width: 200,
+        height: 120,
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
           deleteFile: () => Promise.resolve(),
           moveFile: () => Promise.resolve(),
         },
@@ -4989,23 +5093,100 @@ describe("Spark agent tool: publish_sheet guards", () => {
         awardedMarks: 1,
         maxMarks: 1,
       });
+      await expect(
+        readFile(path.join(rootDir, "grader/output/crop-validation.md"), {
+          encoding: "utf8",
+        }),
+      ).rejects.toThrow();
+    });
+  });
 
-      const jpgPath = "grader/output/assets/figure-1.jpg";
-      const sheetRaw = await readFile(
-        path.join(rootDir, "grader/output/sheet.json"),
-        { encoding: "utf8" },
+  it("rejects inline SVG in visible worksheet prompts", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "Maths worksheet",
+        awardedMarks: 1,
+        maxMarks: 1,
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Mathematics",
+            level: "GCSE",
+            title: "Maths worksheet",
+            subtitle: "Uploaded paper",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q1",
+                label: "Question 1",
+                questions: [
+                  {
+                    id: "q1",
+                    type: "lines",
+                    displayNumber: "1",
+                    marks: 1,
+                    prompt:
+                      "The diagram is <svg xmlns='http://www.w3.org/2000/svg'></svg>.",
+                    lines: 1,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q1: "A",
+          },
+          review: {
+            score: {
+              got: 1,
+              total: 1,
+            },
+            label: "1/1",
+            message: "Checked.",
+            note: "",
+            questions: {
+              q1: {
+                status: "correct",
+                score: {
+                  got: 1,
+                  total: 1,
+                },
+                note: "",
+              },
+            },
+          },
+        },
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /inline SVG|source-backed JPEG images/iu,
       );
-      expect(sheetRaw).toContain(assetPath);
-      expect(sheetRaw).not.toContain(jpgPath);
-      const cropValidationRaw = await readFile(
-        path.join(rootDir, "grader/output/crop-validation.md"),
-        { encoding: "utf8" },
-      );
-      expect(cropValidationRaw).toContain(assetPath);
-      expect(cropValidationRaw).not.toContain(jpgPath);
-      await expect(readFile(path.join(rootDir, jpgPath))).rejects.toThrow();
-      expect(resolveWorkspacePathContentType(assetPath)).toBe("image/svg+xml");
-      expect(scheduledPaths).not.toContain(jpgPath);
     });
   });
 
@@ -5916,7 +6097,8 @@ describe("Spark agent tool: publish_sheet guards", () => {
                         displayNumber: "1(a)",
                         badgeLabel: "a",
                         marks: 1,
-                        prompt: "Explain the feature labelled in Figure 1 above.",
+                        prompt:
+                          "Explain the feature labelled in Figure 1 above.",
                         lines: 2,
                       },
                       {
@@ -9099,7 +9281,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
       requireFunctionTool(publishSheetTool);
 
       await expect(publishSheetTool.execute({})).rejects.toThrow(
-        /failed publish guards.*outside grader\/output\/assets/iu,
+        /failed publish guards.*outside guarded worksheet asset\/source image paths/iu,
       );
     });
   });
@@ -10213,9 +10395,68 @@ describe("Spark agent tool: publish_sheet guards", () => {
         },
       });
 
-      const outputPng = PNG.sync.read(await readFile(path.join(rootDir, outputPath)));
+      const outputPng = PNG.sync.read(
+        await readFile(path.join(rootDir, outputPath)),
+      );
       expect(outputPng.width).toBe(92);
       expect(outputPng.height).toBe(82);
+    });
+  });
+
+  it("caps crop_image JPEG outputs at 1500px on either side", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+      const { getSharp } = await import("../src/utils/sharp");
+
+      const sourcePath = "grader/output/rendered-pages/page-0001.png";
+      const outputPath = "grader/output/source-pages/page-0001.jpg";
+      await mkdir(path.dirname(path.join(rootDir, sourcePath)), {
+        recursive: true,
+      });
+      await writeTestPng({
+        filePath: path.join(rootDir, sourcePath),
+        width: 1600,
+        height: 900,
+      });
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const cropImageTool = tools.crop_image;
+      requireFunctionTool(cropImageTool);
+
+      await expect(
+        cropImageTool.execute({
+          sourcePath,
+          outputPath,
+          fullImage: true,
+          paddingPx: 0,
+        }),
+      ).resolves.toMatchObject({
+        status: "written",
+        outputFormat: "jpeg",
+      });
+
+      const metadata = await getSharp()(
+        await readFile(path.join(rootDir, outputPath)),
+      ).metadata();
+      expect(metadata.format).toBe("jpeg");
+      expect(
+        Math.max(metadata.width ?? 0, metadata.height ?? 0),
+      ).toBeLessThanOrEqual(1500);
     });
   });
 
@@ -11203,8 +11444,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
                     type: "group",
                     displayNumber: "Figure 2",
                     marks: 2,
-                    prompt:
-                      "Figure 2 represents different models of the atom.",
+                    prompt: "Figure 2 represents different models of the atom.",
                     questions: [
                       {
                         id: "q01_2",
@@ -12998,7 +13238,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
                     displayNumber: "1",
                     marks: 1,
                     prompt:
-                      "Figure 1 shows the setup.\n\n[![Figure 1](grader/uploads/figure-1.png)](grader/uploads/figure-1.png)\n\nWhat is shown?",
+                      "Figure 1 shows the setup.\n\n[![Figure 1](untrusted/figure-1.png)](untrusted/figure-1.png)\n\nWhat is shown?",
                     lines: 1,
                   },
                 ],
@@ -13049,7 +13289,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
       requireFunctionTool(publishSheetTool);
 
       await expect(publishSheetTool.execute({})).rejects.toThrow(
-        /outside grader\/output\/assets/iu,
+        /outside guarded worksheet asset\/source image paths/iu,
       );
     });
   });

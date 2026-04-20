@@ -17,10 +17,30 @@ const WORKSHEET_ASSET_PATH_PREFIXES = [
 	'sheet/assets/',
 	'sheet/output/assets/'
 ] as const;
+const SOURCE_PAGE_IMAGE_PATH_PREFIXES = [
+	'grader/output/source-pages/',
+	'grader/output/rendered-pages/',
+	'grader/output/page-images/',
+	'sheet/output/source-pages/',
+	'sheet/output/rendered-pages/',
+	'sheet/output/page-images/'
+] as const;
 const SOURCE_ATTACHMENT_PATH_PREFIXES = ['grader/uploads/'] as const;
 
+function splitAssetTarget(target: string): { filePath: string; suffix: string } {
+	const trimmed = target.trim();
+	const suffixStart = trimmed.indexOf('#');
+	if (suffixStart === -1) {
+		return { filePath: trimmed, suffix: '' };
+	}
+	return {
+		filePath: trimmed.slice(0, suffixStart),
+		suffix: trimmed.slice(suffixStart)
+	};
+}
+
 function normalizeAssetPath(filePath: string): string {
-	return filePath.replace(/\\/g, '/').replace(/^\/+/u, '').trim();
+	return splitAssetTarget(filePath).filePath.replace(/\\/g, '/').replace(/^\/+/u, '').trim();
 }
 
 export function isAllowedWorksheetAssetPath(filePath: string): boolean {
@@ -28,26 +48,40 @@ export function isAllowedWorksheetAssetPath(filePath: string): boolean {
 	return WORKSHEET_ASSET_PATH_PREFIXES.some((prefix) => normalized.startsWith(prefix));
 }
 
+export function isAllowedSourcePageImagePath(filePath: string): boolean {
+	const normalized = normalizeAssetPath(filePath);
+	return SOURCE_PAGE_IMAGE_PATH_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
+
 export function isAllowedSourceAttachmentPath(filePath: string): boolean {
 	const normalized = normalizeAssetPath(filePath);
 	return SOURCE_ATTACHMENT_PATH_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
+
+export function isAllowedSheetMarkdownAssetPath(filePath: string): boolean {
+	return (
+		isAllowedWorksheetAssetPath(filePath) ||
+		isAllowedSourcePageImagePath(filePath) ||
+		isAllowedSourceAttachmentPath(filePath)
+	);
 }
 
 export function buildSheetWorkspaceAssetUrl(options: {
 	sheetId: string;
 	filePath: string;
 }): string {
+	const { suffix } = splitAssetTarget(options.filePath);
 	const normalizedPath = normalizeAssetPath(options.filePath);
 	const params = new URLSearchParams({
 		path: normalizedPath,
 		filename: path.basename(normalizedPath)
 	});
-	return `/api/spark/sheets/${encodeURIComponent(options.sheetId)}/attachment?${params.toString()}`;
+	return `/api/spark/sheets/${encodeURIComponent(options.sheetId)}/attachment?${params.toString()}${suffix}`;
 }
 
 function rewriteMarkdownAssetTargets(markdown: string, sheetId: string): string {
 	const rewriteTarget = (target: string): string | null => {
-		if (!isAllowedWorksheetAssetPath(target)) {
+		if (!isAllowedSheetMarkdownAssetPath(target)) {
 			return null;
 		}
 		return buildSheetWorkspaceAssetUrl({ sheetId, filePath: target });
@@ -180,9 +214,7 @@ function rewriteQuestion(question: PaperSheetQuestion, sheetId: string): PaperSh
 		case 'cloze':
 			return {
 				...question,
-				segments: question.segments.map((segment) =>
-					rewriteMarkdownAssetTargets(segment, sheetId)
-				),
+				segments: question.segments.map((segment) => rewriteMarkdownAssetTargets(segment, sheetId)),
 				...(question.wordBank
 					? {
 							wordBank: question.wordBank.map((option) =>
@@ -194,9 +226,7 @@ function rewriteQuestion(question: PaperSheetQuestion, sheetId: string): PaperSh
 		case 'answer_bank':
 			return {
 				...question,
-				segments: question.segments.map((segment) =>
-					rewriteMarkdownAssetTargets(segment, sheetId)
-				),
+				segments: question.segments.map((segment) => rewriteMarkdownAssetTargets(segment, sheetId)),
 				options: question.options.map((option) => ({
 					...option,
 					text: rewriteMarkdownAssetTargets(option.text, sheetId)

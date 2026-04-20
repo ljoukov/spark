@@ -409,6 +409,12 @@ const STOP_POLL_INTERVAL_MS = 10_000;
 const AGENT_INLINE_ATTACHMENTS_MAX_COUNT = 24;
 const AGENT_INLINE_ATTACHMENT_MAX_BYTES = 8 * 1024 * 1024;
 const ATTACHMENT_DOWNLOAD_CONCURRENCY = 6;
+const SUPPORTED_INLINE_IMAGE_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+]);
 const DEFAULT_PDF_PAGE_IMAGE_SCALE = 4.75;
 const DEFAULT_PDF_PAGE_IMAGE_MAX_DIMENSION = 4000;
 const PDF_PAGE_NUMBERS_PREFERRED_THRESHOLD = 12;
@@ -2833,9 +2839,12 @@ async function countWorkspaceJsonFiles(
   targetDir: string,
 ): Promise<number> {
   try {
-    const entries = await readdir(resolveWorkspacePath(workspaceDir, targetDir), {
-      withFileTypes: true,
-    });
+    const entries = await readdir(
+      resolveWorkspacePath(workspaceDir, targetDir),
+      {
+        withFileTypes: true,
+      },
+    );
     return entries.filter((entry) => {
       return entry.isFile() && /\.json$/iu.test(entry.name);
     }).length;
@@ -3028,8 +3037,17 @@ async function loadAttachmentParts(options: {
         downloaded.contentType && downloaded.contentType.trim().length > 0
           ? downloaded.contentType
           : attachment.contentType;
-      if (!mimeType.startsWith("image/")) {
+      const normalizedMimeType =
+        mimeType.split(";")[0]?.trim().toLowerCase() ?? "";
+      if (!normalizedMimeType.startsWith("image/")) {
         const note = `[${index.toString()}] omitted ${label} from inline prompt: document uploads stay available through workspace tools`;
+        return {
+          note,
+          logLine: `info: ${note}`,
+        };
+      }
+      if (!SUPPORTED_INLINE_IMAGE_MIME_TYPES.has(normalizedMimeType)) {
+        const note = `[${index.toString()}] omitted ${label} from inline prompt: unsupported image type ${normalizedMimeType}; file remains available through workspace tools`;
         return {
           note,
           logLine: `info: ${note}`,
@@ -3040,9 +3058,9 @@ async function loadAttachmentParts(options: {
         part: {
           type: "inlineData",
           data,
-          mimeType,
+          mimeType: normalizedMimeType,
         },
-        logLine: `input_attachment: added ${label} mime=${mimeType} bytes=${bytes.length.toString()}`,
+        logLine: `input_attachment: added ${label} mime=${normalizedMimeType} bytes=${bytes.length.toString()}`,
       };
     },
   });
@@ -3225,7 +3243,13 @@ function flattenZodIssueForSummary(
   issue: z.ZodIssue,
   parentPath: readonly (string | number)[] = [],
 ): string[] {
-  const issuePath = [...parentPath, ...issue.path];
+  const issuePath = [
+    ...parentPath,
+    ...issue.path.filter(
+      (part): part is string | number =>
+        typeof part === "string" || typeof part === "number",
+    ),
+  ];
   if (issue.code === "invalid_union") {
     const nestedIssueGroups = (issue as { errors?: unknown }).errors;
     if (Array.isArray(nestedIssueGroups)) {
@@ -3264,6 +3288,14 @@ function collectRawGraderWorksheetShapeIssues(
   pathParts: readonly string[] = [],
 ): string[] {
   const issues: string[] = [];
+  if (typeof value === "string") {
+    if (/<svg\b/iu.test(value)) {
+      issues.push(
+        `${pathParts.join(".") || "(root)"} contains inline SVG; use Markdown/LaTeX only for simple horizontal/vertical grids, and use source-backed JPEG images for diagrams, geometry, charts, photos, or complex visuals`,
+      );
+    }
+    return issues;
+  }
   if (Array.isArray(value)) {
     for (const [index, item] of value.entries()) {
       issues.push(
@@ -3297,10 +3329,7 @@ function collectRawGraderWorksheetShapeIssues(
 
   for (const [key, nestedValue] of Object.entries(value)) {
     issues.push(
-      ...collectRawGraderWorksheetShapeIssues(nestedValue, [
-        ...pathParts,
-        key,
-      ]),
+      ...collectRawGraderWorksheetShapeIssues(nestedValue, [...pathParts, key]),
     );
   }
   return issues;
@@ -3484,6 +3513,8 @@ const FAKE_OBJECTIVE_OPTION_TEXT_PATTERN =
   /^(?:option\s+[A-Z]|choice\s+[A-Z])$/iu;
 const WORKSHEET_CROP_ASSET_PATH_PATTERN =
   /^(?:grader\/(?:output\/)?assets\/|sheet\/(?:output\/)?assets\/)/u;
+const WORKSHEET_SOURCE_IMAGE_PATH_PATTERN =
+  /^(?:grader\/uploads\/|grader\/output\/(?:source-pages|rendered-pages|page-images)\/|sheet\/output\/(?:source-pages|rendered-pages|page-images)\/)/u;
 const INTERMEDIATE_WORKSHEET_ASSET_BASENAME_PATTERN =
   /(?:^|[-_])(?:raw|candidate|draft|tmp|temp)(?:[-_.]|$)/iu;
 const MARKDOWN_IMAGE_TARGET_PATTERN = /!\[[^\]]*\]\(<?([^)>\s]+)>?\)/gu;
@@ -3495,7 +3526,7 @@ const CROP_EDGE_BAND_PX = 6;
 const CROP_EDGE_DARK_PIXEL_THRESHOLD = 245;
 const CROP_EDGE_TOUCH_RATIO_THRESHOLD = 0.001;
 const DEFAULT_CROP_IMAGE_MARGIN_PX = 36;
-const GRADER_WORKSHEET_ASSET_MAX_DIMENSION = 512;
+const GRADER_WORKSHEET_ASSET_MAX_DIMENSION = 1500;
 const GRADER_WORKSHEET_ASSET_JPEG_QUALITY = 82;
 
 function getBlockedIntermediateWorksheetAssetMessage(
@@ -3745,7 +3776,10 @@ function collectSourceReferenceLabelsNearDisplayNumbers(
   referencePattern: RegExp,
 ): Set<string> {
   const labels = new Set<string>();
-  if (sourceReferenceMarkdown.trim().length === 0 || displayNumbers.size === 0) {
+  if (
+    sourceReferenceMarkdown.trim().length === 0 ||
+    displayNumbers.size === 0
+  ) {
     return labels;
   }
 
@@ -3832,7 +3866,9 @@ function sheetPlanHasNamedVisualOmission(markdown: string): boolean {
   return false;
 }
 
-function collectSheetPlanConsistencyIssues(sheetPlanMarkdown: string): string[] {
+function collectSheetPlanConsistencyIssues(
+  sheetPlanMarkdown: string,
+): string[] {
   const markdown = sheetPlanMarkdown.trim();
   if (markdown.length === 0) {
     return [];
@@ -3932,14 +3968,20 @@ function collectSheetPlanConsistencyIssues(sheetPlanMarkdown: string): string[] 
   return issues;
 }
 
-function collectSheetPlanDisplayNumbers(sheetPlanMarkdown: string): Set<string> {
+function collectSheetPlanDisplayNumbers(
+  sheetPlanMarkdown: string,
+): Set<string> {
   const displayNumbers = new Set<string>();
-  for (const match of sheetPlanMarkdown.matchAll(/\b0?(\d{1,2})\.(\d{1,2})\b/gu)) {
+  for (const match of sheetPlanMarkdown.matchAll(
+    /\b0?(\d{1,2})\.(\d{1,2})\b/gu,
+  )) {
     if (match[1] && match[2]) {
       displayNumbers.add(`${match[1]}.${match[2]}`);
     }
   }
-  for (const match of sheetPlanMarkdown.matchAll(/\b0?(\d{1,2})\(([^)\s]+)\)/gu)) {
+  for (const match of sheetPlanMarkdown.matchAll(
+    /\b0?(\d{1,2})\(([^)\s]+)\)/gu,
+  )) {
     if (match[1] && match[2]) {
       displayNumbers.add(`${match[1]}(${match[2]})`);
     }
@@ -4036,7 +4078,9 @@ function collectSheetPlanSourceReferenceIssues(options: {
       );
       continue;
     }
-    if (!sheetPlanHasRecordedArtifactAttempt(sheetPlanMarkdown, "Table", label)) {
+    if (
+      !sheetPlanHasRecordedArtifactAttempt(sheetPlanMarkdown, "Table", label)
+    ) {
       issues.push(
         `grader/output/sheet-plan.md mentions Table ${label} but does not assign Markdown table handling, a guarded crop path, or a recorded failed table/crop attempt`,
       );
@@ -4065,9 +4109,8 @@ function collectSourceTranscriptionStemDriftIssues(options: {
       continue;
     }
     const sourceLabel = `${match[1]}.${match[2]}`;
-    const sourceLabelPattern = createExtractedSourceDisplayNumberPattern(
-      sourceLabel,
-    );
+    const sourceLabelPattern =
+      createExtractedSourceDisplayNumberPattern(sourceLabel);
     if (sourceLabelPattern === null) {
       continue;
     }
@@ -4239,7 +4282,10 @@ function collectGraderWorksheetEarlyAssemblyIssues(
       ["theory", section.theory],
       ["infoBox", section.infoBox?.text],
     ] as const) {
-      checkVisiblePromptText(`section "${section.id}" ${fieldName}`, fieldValue);
+      checkVisiblePromptText(
+        `section "${section.id}" ${fieldName}`,
+        fieldValue,
+      );
       if (typeof fieldValue !== "string" || fieldValue.trim().length === 0) {
         continue;
       }
@@ -4289,7 +4335,9 @@ function markdownImageReferencesLabel(
     `\\b${kindPattern}[._\\-\\s]*${escapedLabel}\\b`,
     "iu",
   );
-  return explicitLabelPattern.test(altText) || explicitLabelPattern.test(target);
+  return (
+    explicitLabelPattern.test(altText) || explicitLabelPattern.test(target)
+  );
 }
 
 function hasNearbyMarkdownImage(
@@ -4307,7 +4355,9 @@ function hasNearbyMarkdownImage(
   for (const match of text.matchAll(labelPattern)) {
     const index = match.index ?? 0;
     const nearby = text.slice(Math.max(0, index - 250), index + 700);
-    for (const imageMatch of nearby.matchAll(MARKDOWN_IMAGE_OCCURRENCE_PATTERN)) {
+    for (const imageMatch of nearby.matchAll(
+      MARKDOWN_IMAGE_OCCURRENCE_PATTERN,
+    )) {
       const altText = imageMatch[1] ?? "";
       const target = imageMatch[2] ?? "";
       if (markdownImageReferencesLabel(altText, target, kind, label)) {
@@ -4573,10 +4623,14 @@ function collectRepeatedCropImageIssues(markdown: string): string[] {
     if (!target) {
       continue;
     }
-    const normalizedTarget = target.replace(/\\/gu, "/").replace(/^\/+/u, "");
-    if (!WORKSHEET_CROP_ASSET_PATH_PATTERN.test(normalizedTarget)) {
+    const parsedTarget = parseMarkdownImageTarget(target);
+    if (
+      parsedTarget === null ||
+      !WORKSHEET_CROP_ASSET_PATH_PATTERN.test(parsedTarget.path)
+    ) {
       continue;
     }
+    const normalizedTarget = parsedTarget.path;
     const occurrenceIndex = match.index ?? 0;
     const contextBefore = markdown.slice(
       Math.max(0, occurrenceIndex - 220),
@@ -5145,23 +5199,94 @@ function collectSheetMarkdown(report: SparkGraderWorksheetReport): string {
   return parts.join("\n\n");
 }
 
-function collectMarkdownImageTargets(markdown: string): string[] {
-  const paths = new Set<string>();
+type MarkdownImageTarget = {
+  readonly rawTarget: string;
+  readonly path: string;
+  readonly fragment: string;
+};
+
+function parseMarkdownImageTarget(
+  rawTarget: string,
+): MarkdownImageTarget | null {
+  const trimmed = rawTarget.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  const hashIndex = trimmed.indexOf("#");
+  const pathPart = hashIndex === -1 ? trimmed : trimmed.slice(0, hashIndex);
+  const fragment = hashIndex === -1 ? "" : trimmed.slice(hashIndex);
+  const normalizedPath = pathPart.replace(/\\/gu, "/").replace(/^\/+/u, "");
+  if (normalizedPath.length === 0) {
+    return null;
+  }
+  return {
+    rawTarget: trimmed,
+    path: normalizedPath,
+    fragment,
+  };
+}
+
+function hasSparkBboxFragment(target: MarkdownImageTarget): boolean {
+  if (!target.fragment.startsWith("#")) {
+    return false;
+  }
+  const params = new URLSearchParams(target.fragment.slice(1));
+  const rawBox = params.get("spark-bbox") ?? params.get("spark-region");
+  if (!rawBox) {
+    return false;
+  }
+  const values = rawBox
+    .split(",")
+    .map((part) => Number.parseFloat(part.trim()))
+    .filter((value) => Number.isFinite(value));
+  if (values.length !== 4) {
+    return false;
+  }
+  const [left, top, right, bottom] = values;
+  return (
+    left !== undefined &&
+    top !== undefined &&
+    right !== undefined &&
+    bottom !== undefined &&
+    right > left &&
+    bottom > top
+  );
+}
+
+function collectMarkdownImageTargetEntries(
+  markdown: string,
+): MarkdownImageTarget[] {
+  const paths = new Map<string, MarkdownImageTarget>();
   for (const match of markdown.matchAll(MARKDOWN_IMAGE_TARGET_PATTERN)) {
     const target = match[1]?.trim();
     if (!target) {
       continue;
     }
-    const normalized = target.replace(/\\/gu, "/").replace(/^\/+/u, "");
-    paths.add(normalized);
+    const parsed = parseMarkdownImageTarget(target);
+    if (parsed === null) {
+      continue;
+    }
+    paths.set(`${parsed.path}${parsed.fragment}`, parsed);
   }
-  return [...paths].sort();
+  return [...paths.values()].sort((left, right) =>
+    `${left.path}${left.fragment}`.localeCompare(
+      `${right.path}${right.fragment}`,
+    ),
+  );
+}
+
+function collectMarkdownImageTargets(markdown: string): string[] {
+  return [
+    ...new Set(
+      collectMarkdownImageTargetEntries(markdown).map((target) => target.path),
+    ),
+  ].sort();
 }
 
 function collectLinkedCropAssetPaths(markdown: string): string[] {
-  return collectMarkdownImageTargets(markdown).filter((target) =>
-    WORKSHEET_CROP_ASSET_PATH_PATTERN.test(target),
-  );
+  return collectMarkdownImageTargets(markdown).filter((target) => {
+    return WORKSHEET_CROP_ASSET_PATH_PATTERN.test(target);
+  });
 }
 
 function isJpegWorksheetAssetPath(assetPath: string): boolean {
@@ -5476,9 +5601,10 @@ function collectCropValidationAssetIssues(options: {
       );
     }
     if (
-      !matchingRecords.some((record) =>
-        hasExplicitPositiveCropValidationRecord(record) ||
-        isBenignDuplicateOnlyFailedCropValidationRecord(record),
+      !matchingRecords.some(
+        (record) =>
+          hasExplicitPositiveCropValidationRecord(record) ||
+          isBenignDuplicateOnlyFailedCropValidationRecord(record),
       )
     ) {
       issues.push(
@@ -5794,12 +5920,9 @@ async function normalizeGraderWorksheetImageAssets(options: {
       );
     }
     if (isSvgWorksheetAssetPath(assetPath)) {
-      if (metadata.format !== "svg") {
-        throw new Error(
-          `Linked worksheet image "${assetPath}" uses an .svg extension but decoded as ${metadata.format ?? "unknown"}.`,
-        );
-      }
-      continue;
+      throw new Error(
+        `Linked worksheet image "${assetPath}" is SVG. Do not publish SVG worksheet visuals; use Markdown/LaTeX only for simple horizontal/vertical grids, and use source-backed JPEG crops or source-photo viewports for diagrams, geometry, charts, photos, 3D figures, and other complex visuals.`,
+      );
     }
 
     const jpegAssetPath = resolveWorksheetJpegAssetPath(assetPath);
@@ -6922,43 +7045,66 @@ function collectGraderWorksheetPublishIssues(
   if (sheetHasLinkedFigure) {
     issues.push(...collectRepeatedCropImageIssues(renderedSheetMarkdown));
 
-    const imageTargets = collectMarkdownImageTargets(renderedSheetMarkdown);
+    const imageTargets = collectMarkdownImageTargetEntries(
+      renderedSheetMarkdown,
+    );
+    const cropImageTargets = imageTargets.filter((target) =>
+      WORKSHEET_CROP_ASSET_PATH_PATTERN.test(target.path),
+    );
     for (const target of imageTargets) {
-      if (!WORKSHEET_CROP_ASSET_PATH_PATTERN.test(target)) {
+      if (WORKSHEET_CROP_ASSET_PATH_PATTERN.test(target.path)) {
+        continue;
+      }
+      if (WORKSHEET_SOURCE_IMAGE_PATH_PATTERN.test(target.path)) {
+        if (!hasSparkBboxFragment(target)) {
+          issues.push(
+            `worksheet links source image "${target.path}" directly; source-photo/page viewport images must include a #spark-bbox=left,top,right,bottom fragment so the sheet shows the localized figure while the link opens the original image`,
+          );
+        }
+        if (!/\.jpe?g$/iu.test(target.path)) {
+          issues.push(
+            `worksheet source image "${target.path}" is not JPEG; source page/photo viewport images should be JPEG and no more than 1500px on either side`,
+          );
+        }
+        continue;
+      }
+      if (!target.rawTarget.startsWith("#")) {
         issues.push(
-          `worksheet links image "${target}" outside grader/output/assets or sheet/output/assets; crop final worksheet figures into the guarded assets directory so validation and edge checks apply`,
+          `worksheet links image "${target.path}" outside guarded worksheet asset/source image paths; use grader/output/assets for PDF crops, or a JPEG source image under grader/uploads or grader/output/source-pages with #spark-bbox for uploaded-photo localization`,
         );
       }
     }
-    const cropValidationMarkdown =
-      options?.cropValidationMarkdown?.trim() ?? "";
-    if (cropValidationMarkdown.length === 0) {
-      issues.push(
-        "worksheet contains linked crop image assets but is missing grader/output/crop-validation.md; ask a fresh-context subagent to validate final crops and record the result before publishing",
-      );
-    } else {
-      if (!hasPositiveCropValidationReport(cropValidationMarkdown)) {
+    if (cropImageTargets.length > 0) {
+      const cropValidationMarkdown =
+        options?.cropValidationMarkdown?.trim() ?? "";
+      if (cropValidationMarkdown.length === 0) {
         issues.push(
-          "grader/output/crop-validation.md must record a passing fresh-context subagent validation for linked figure/table/image crops",
+          "worksheet contains linked crop image assets but is missing grader/output/crop-validation.md; ask a fresh-context subagent to validate final crops and record the result before publishing",
+        );
+      } else {
+        if (!hasPositiveCropValidationReport(cropValidationMarkdown)) {
+          issues.push(
+            "grader/output/crop-validation.md must record a passing fresh-context subagent validation for linked figure/table/image crops",
+          );
+        }
+        issues.push(
+          ...collectCropValidationAssetIssues({
+            renderedSheetMarkdown,
+            cropValidationMarkdown,
+            agentLogMarkdown: options?.agentLogMarkdown ?? "",
+          }),
         );
       }
-      issues.push(
-        ...collectCropValidationAssetIssues({
-          renderedSheetMarkdown,
-          cropValidationMarkdown,
-          agentLogMarkdown: options?.agentLogMarkdown ?? "",
-        }),
-      );
-    }
 
-    const agentLogMarkdown = options?.agentLogMarkdown ?? "";
-    if (
-      !SPAWN_AGENT_TOOL_PATTERN.test(agentLogMarkdown) &&
-      !FRESH_CROP_REVIEW_TOOL_PATTERN.test(agentLogMarkdown)
-    ) {
-      issues.push(
-        "worksheet contains linked crop image assets but the agent log has no fresh crop-review agent call; validate important crops with a fresh-context visual agent before publishing",
-      );
+      const agentLogMarkdown = options?.agentLogMarkdown ?? "";
+      if (
+        !SPAWN_AGENT_TOOL_PATTERN.test(agentLogMarkdown) &&
+        !FRESH_CROP_REVIEW_TOOL_PATTERN.test(agentLogMarkdown)
+      ) {
+        issues.push(
+          "worksheet contains linked crop image assets but the agent log has no fresh crop-review agent call; validate important crops with a fresh-context visual agent before publishing",
+        );
+      }
     }
   }
 
@@ -7218,9 +7364,12 @@ async function validateGraderWorkspaceForPublish(options: {
   ).catch(() => "");
   const sourceReferenceMarkdown = (
     await Promise.all([
-      readFile(resolveWorkspacePath(options.rootDir, "grader/output/qp-reference.md"), {
-        encoding: "utf8",
-      }).catch(() => ""),
+      readFile(
+        resolveWorkspacePath(options.rootDir, "grader/output/qp-reference.md"),
+        {
+          encoding: "utf8",
+        },
+      ).catch(() => ""),
       readFile(
         resolveWorkspacePath(
           options.rootDir,
@@ -8175,12 +8324,17 @@ function isSupportedCropImageMimeType(
   return SUPPORTED_CROP_IMAGE_INPUT_MIME_TYPE_SET.has(normalized);
 }
 
-async function cropImageToPngBuffer(options: {
+function resolveCropImageOutputFormat(outputPath: string): "jpeg" | "png" {
+  return /\.jpe?g$/iu.test(outputPath) ? "jpeg" : "png";
+}
+
+async function cropImageToBuffer(options: {
   source: Buffer;
   left: number;
   top: number;
   right: number;
   bottom: number;
+  outputFormat: "jpeg" | "png";
   extend?: {
     top: number;
     right: number;
@@ -8191,7 +8345,7 @@ async function cropImageToPngBuffer(options: {
   const cropWidth = Math.max(1, options.right - options.left);
   const cropHeight = Math.max(1, options.bottom - options.top);
   const sharp = getSharp();
-  const image = sharp(options.source).extract({
+  let image = sharp(options.source).extract({
     left: options.left,
     top: options.top,
     width: cropWidth,
@@ -8202,15 +8356,34 @@ async function cropImageToPngBuffer(options: {
     extend &&
     (extend.top > 0 || extend.right > 0 || extend.bottom > 0 || extend.left > 0)
   ) {
+    image = image.extend({
+      top: extend.top,
+      right: extend.right,
+      bottom: extend.bottom,
+      left: extend.left,
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
+    });
+  }
+  if (options.outputFormat === "jpeg") {
+    const outputWidth = cropWidth + (extend?.left ?? 0) + (extend?.right ?? 0);
+    const outputHeight =
+      cropHeight + (extend?.top ?? 0) + (extend?.bottom ?? 0);
+    if (
+      Math.max(outputWidth, outputHeight) > GRADER_WORKSHEET_ASSET_MAX_DIMENSION
+    ) {
+      image = image.resize({
+        width: GRADER_WORKSHEET_ASSET_MAX_DIMENSION,
+        height: GRADER_WORKSHEET_ASSET_MAX_DIMENSION,
+        fit: "inside",
+        withoutEnlargement: true,
+      });
+    }
     return await image
-      .extend({
-        top: extend.top,
-        right: extend.right,
-        bottom: extend.bottom,
-        left: extend.left,
-        background: { r: 255, g: 255, b: 255, alpha: 1 },
+      .flatten({ background: "#ffffff" })
+      .jpeg({
+        quality: GRADER_WORKSHEET_ASSET_JPEG_QUALITY,
+        mozjpeg: true,
       })
-      .png()
       .toBuffer();
   }
   return await image.png().toBuffer();
@@ -10054,15 +10227,15 @@ export function buildSparkAgentSystemPrompt(options?: {
     "- Use web_fetch to retrieve NON-PDF source pages/files from URLs discovered via web_search.",
     "- For PDF URLs discovered online, search `knowledge-base/index.md` or call `kb_search_pdfs` first. If a matching shared PDF exists, call `kb_download_pdf` and use the local workspace PDF. If no match exists, classify the official PDF and call `kb_cache_pdf_from_url`; use the returned shared `storagePath` in worksheet references such as `paperStoragePath` or `markSchemeStoragePath`.",
     "- Use extract_text to transcribe workspace document files (images/PDFs) into markdown with LaTeX formulas.",
-    "- Use real Markdown line breaks in worksheet-visible text; never leave literal escaped newline text like `\\n`. For source maths layouts such as number grids, arranged arithmetic, matrices, and displayed formula blocks, prefer display LaTeX (`\\[...\\]`) using KaTeX-supported `array`/matrix/aligned environments when that is the source-faithful representation. Use Markdown tables for real tabular data, not for mathematical arrays that only look table-like.",
+    "- Use real Markdown line breaks in worksheet-visible text; never leave literal escaped newline text like `\\n`. For source maths layouts such as number grids, arranged arithmetic, matrices, and displayed formula blocks, use display LaTeX (`\\[...\\]`) only when the layout is made from simple horizontal/vertical lines, grids, boxes, text, and numbers. Use source-backed images for angles, geometry diagrams, 3D solids, graphs, charts, maps, networks, photos, apparatus, option diagrams, and other complex visuals. Use Markdown tables for real tabular data, not for mathematical arrays that only look table-like.",
     "- When passing jsonText, it must be valid JSON before the tool can reserialize it. JSON-escape every backslash in string values or avoid raw LaTeX backslash syntax; a visible Markdown string containing `\\(` must appear in jsonText as `\\\\(`.",
     "- extract_text does not automatically know source filenames/paths; include identifying details inside instructions when needed.",
     "- For multi-page extraction tasks, you can request explicit page markers in the extracted markdown.",
     "- For PDF transcription, use extract_pdf_reference_text once as a navigation/transcription aid when available. For source PDFs with named figures/diagrams/photos, use extract_pdf_images only when the extracted object includes all printed labels/context; otherwise render exact pages with pdf_to_images, draw grids, and ask fresh bbox helpers in parallel where possible. Do not look up grade boundaries or examiner reports unless the user explicitly asked for those external references; a single component paper normally cannot be converted into a full qualification grade.",
     "- For grader runs with uploaded question paper and mark scheme files, derive model answers from those uploads. Do not download optional worked-example/examiner-report PDFs or enrichment references before the source-faithful sheet is complete unless explicitly requested.",
-    "- Use extract_pdf_images as a cheap inventory when a PDF may contain embedded raster figures, maps, charts, or photos. Do not link grader/output/pdf-images/... files directly in a worksheet; if an extracted image object is the final visual, copy it into the planned final grader/output/assets/... path with crop_image fullImage=true. Do not create raw/candidate/draft/temp asset paths in grader/output/assets. extract_pdf_images does not locate vector diagrams, on-page coordinates, or labels drawn outside the image object, so use pdf_to_images plus grid/crop tools for named exam figures where labels/axes/group headings/captions matter.",
-    "- Use extract_pdf_diagrams when you need Gemini-assisted coarse diagram bounding boxes from a PDF; treat them as proposals and validate/refine crops with rendered page images and view_image. If one manual crop-and-view correction for the same target is still clipped/noisy/uncertain, call propose_crop_bbox_with_fresh_agent or extract_pdf_diagrams for that source page and target label before spending more turns on hand-tuned crop boxes.",
-    "- For figure crop refinement, do not do mask segmentation. Use a rectangular bbox workflow: inspect the selected base image and grid overlay with view_image, return or apply a single pixel bbox with origin top-left and right/bottom exclusive, prefer small safe margins over clipping, and reject surrounding question text, mark text, answer lines, page borders, next-question content, or standalone Figure/Table captions already rendered by the worksheet. Use propose_crop_bbox_with_fresh_agent when a fresh visual agent should choose the bbox, then apply the returned bbox with crop_image.",
+    "- Use extract_pdf_images as a cheap inventory when a PDF may contain embedded raster figures, maps, charts, or photos. Do not link grader/output/pdf-images/... files directly in a worksheet; if an extracted image object is the final visual, copy it into the planned final grader/output/assets/... path with crop_image fullImage=true. For PDF figures, also create a full rendered source-page JPEG no larger than 1500px on either side and use it as the click target. Do not create raw/candidate/draft/temp asset paths in grader/output/assets. extract_pdf_images does not locate vector diagrams, on-page coordinates, or labels drawn outside the image object, so use pdf_to_images plus grid/crop tools for named exam figures where labels/axes/group headings/captions matter.",
+    "- Use extract_pdf_diagrams only as a PDF coarse-bounding-box proposal path; treat returned boxes as proposals and validate/refine crops with rendered page images and view_image. Do not use SVG extraction/generation for worksheet visuals. If one manual PDF crop-and-view correction for the same target is still clipped/noisy/uncertain, call propose_crop_bbox_with_fresh_agent or extract_pdf_diagrams for that source page and target label before spending more turns on hand-tuned crop boxes.",
+    "- For PDF figure crop refinement, do not do mask segmentation. Use a rectangular bbox workflow: inspect the selected base image and grid overlay with view_image, return or apply a single pixel bbox with origin top-left and right/bottom exclusive, prefer small safe margins over clipping, and reject surrounding question text, mark text, answer lines, page borders, next-question content, or standalone Figure/Table captions already rendered by the worksheet. Use propose_crop_bbox_with_fresh_agent when a fresh visual agent should choose the bbox, then apply the returned bbox with crop_image. For uploaded photos/scans, do not run this refinement loop; use at most two simple view_image passes, then display the source JPEG with a #spark-bbox=left,top,right,bottom fragment and link to the full photo.",
     "- The workspace tools listed for this run are actually available. Never respond that you cannot read files, execute tool steps, access the PDF, or publish outputs when the relevant tool is present; call the tool instead.",
     "- If a workspace upload appears inaccessible, first inspect grader/uploads/index.json, list grader/uploads, run extract_text or pdf_to_images on the workspace-relative PDF path, and use view_image on rendered pages before declaring anything blocked.",
     "- Do NOT use web_fetch for PDFs.",
@@ -10073,7 +10246,7 @@ export function buildSparkAgentSystemPrompt(options?: {
     "You MUST write grader/output/sheet.json and grader/output/run-summary.json, then call publish_sheet({}). Use validation errors as diagnostics, repair the artifacts coherently, and retry only while you are fixing a new class of issue rather than repeating the same failed branch.",
     "For grader/output/run-summary.json, include totals.awardedMarks, totals.maxMarks, presentation.title, presentation.subtitle, presentation.summaryMarkdown, presentation.footer, and sheet.filePath exactly equal to grader/output/sheet.json.",
     "For worksheet `sheet.color`, `sheet.accent`, `sheet.light`, and `sheet.border`, use Spark's stable Apple-style subject palette: Biology green; Mathematics blue; Chemistry purple; Physics indigo; Geography teal; Science mint; English pink; History or Religious Studies orange; Economics or Business yellow; Computer Science or General gray. The publish tools normalize mismatches, but choose the right palette before publishing.",
-    "For `presentation.summaryMarkdown`, write the Sheets thumbnail body only: one compact sentence or two short fragments, specific, and not repeating title, subject, level, marks, percentage, created date, or footer. In graded runs prefer a known official grade/prize/medal/percentile outcome, common examiner mistake made/avoided, or the strongest concrete next learning target. Do not use generic lead-ins such as \"This sheet\", \"The worksheet\", \"Graded\", \"Checked\", or broad praise.",
+    'For `presentation.summaryMarkdown`, write the Sheets thumbnail body only: one compact sentence or two short fragments, specific, and not repeating title, subject, level, marks, percentage, created date, or footer. In graded runs prefer a known official grade/prize/medal/percentile outcome, common examiner mistake made/avoided, or the strongest concrete next learning target. Do not use generic lead-ins such as "This sheet", "The worksheet", "Graded", "Checked", or broad praise.',
     "When official source PDFs are discovered online, the visible sheet should link to Spark's cached shared storage path, not the third-party URL. Include `references.paperStoragePath` / `references.markSchemeStoragePath` in grader/output/sheet.json and `paperStoragePath` / `markSchemeStoragePath` in grader/output/run-summary.json whenever `kb_cache_pdf_from_url` or `kb_download_pdf` provides them. Keep the original URLs only as provenance fields.",
     "Do not copy request.json, brief.md, upload manifests, planning JSON, answer lists, or process summaries into grader/output/sheet.json or grader/output/run-summary.json. Those files must contain only the worksheet report schema and publish summary schema.",
     "For source-paper-only/no-student grader runs, do not solve the paper, derive correct options, list an answer key, or include worked solutions. Build an unanswered worksheet with blank answers and review.mode='awaiting_answers'.",
@@ -10082,12 +10255,12 @@ export function buildSparkAgentSystemPrompt(options?: {
     "For handwritten-grading papers with more than 12 answer leaves or more than 30 marks, do not score the whole paper in one long reasoning pass. After sheet-plan and visual/table handling, call score_answers_with_fresh_agent in 2-4 contiguous root/range batches that cover all answer leaves, issuing all independent calls in one parallel tool turn whenever possible, then assemble sheet.json from the returned inline scoring and modelAnswer results. Do not reread every scoring file after the helper returns; read only a named file/question if a result is missing or a validation error points to it.",
     "Use pad_image only to add a clean white border around otherwise complete source visuals. If a crop already passed fresh visual validation, do not rerun validate_crop_with_fresh_agent just because pad_image wrote the final linked path; record the final padded path in crop-validation.md and note the passed source validation. If the only failure was required content touching the edge while all content was visible, pad once and validate only the padded asset.",
     "Source problem-statement transcription must be verbatim page-by-page source wording, not a compact audit or needed-for-grading summary. Include interstitial stems, answer instructions, options, table labels/cells, figure labels, displayed formulas, and layout-critical wording. Do not summarize displayed formulas/equations as prose such as `displayed formula shown for ...`; render the actual formula as Markdown/LaTeX or plan a visible crop.",
-    "After source transcription, immediately write grader/output/sheet-plan.md with leaves, marks, visual/table placements, and scoring batches. Self-check that Total source marks equals section totals and listed leaf marks, and that Total answer-bearing leaves equals the listed leaves. For every included named figure/diagram/graph/visual option block, including shared root context that applies to later leaves, the plan must name a guarded grader/output/assets/... crop path or record a real failed render/crop attempt; never write that no crop is needed because grading is possible without the visual. Source problem-statement transcription must not be an only-visibly-answered list, and must not summarize diagram options as labels only, such as `Options: A, B, C, D shown as diagram choices` or `Options shown as diagram labels`; preserve shared source context, displayed formula setup lines, displayed formulas, and the source figure/diagram reference, then plan a visible crop when needed. Do not write `displayed formula shown for ...` as a substitute for a source formula. For long handwritten papers, call score_answers_with_fresh_agent in 2-4 contiguous root/range batches covering every answer leaf, and issue the calls in one parallel tool turn before crop validation/polishing, model-answer polishing, optional reference enrichment, or thumbnail-summary work. After required scoring helper calls return, create only missing planned final guarded image assets at their exact sheet-plan paths; do not create `-raw`, `-candidate`, `-draft`, or temp copies under grader/output/assets. Then write grader/output/sheet.json and grader/output/run-summary.json with write_json_workspace_file immediately from the returned inline results; do not first record crop-validation.md, reread scoring files, regrade, or enrich. Then run validate_grader_artifacts, fix named schema/crop/source-fidelity blockers, record crop-validation.md when linked crops exist, and publish. For requested model answers, use concise modelAnswer fields returned by the scoring helper; if they are missing, do not delay validation or publish for a separate derivation pass. Use fill only for simple one- or two-blank lines with prompt/blanks/after; use cloze for any segments/blanks question. Keep named figures/tables and image links out of section.theory; put them in the exact source question/group prompt. Do not invent bridge text such as `Figure 1 and Figure 2 are used in this question`, `planned as crop`, `shown in the source paper`, or `options shown as diagram labels`. Source problem-statement transcription must not contain placeholders such as not yet copied, TBD, or TODO.",
-    "Every final linked figure/image crop must be validated by its own validate_crop_with_fresh_agent call, except for pad_image outputs derived from an already passing validation as described above. Pass expectedContent with the exact printed/visible visual labels/axes/options/table cells/annotations that must be visible, and duplicatedTextToExclude for surrounding prompt/caption/table text rendered separately; pass `none` only when no surrounding duplicated text needs exclusion. Do not ask the reviewer to require inferred answers, mark-scheme facts, or labels/headings absent from the source visual. The fresh reviewer uses view_image, transcribes all visible text in the crop, and then judges whether those required visual elements are present, major duplicated caption/question/table text is excluded, unrelated neighbouring content outside the official target visual is absent, and required content does not touch or clip at an edge. Treat missing/clipped/wrong target content as blocking; treat related subpanels inside the same official embedded figure/table image, small duplicate caption fragments, or safe whitespace as minor issues, not reasons for endless recropping.",
+    "After source transcription, immediately write grader/output/sheet-plan.md with leaves, marks, visual/table placements, and scoring batches. Self-check that Total source marks equals section totals and listed leaf marks, and that Total answer-bearing leaves equals the listed leaves. Do not publish SVG. For simple horizontal/vertical grids, boxed arrays, and text/number layouts, plan Markdown/LaTeX; for every included named angle, geometry diagram, 3D solid, graph, chart, map, network, photo, apparatus, or visual option block, including shared root context that applies to later leaves, the plan must name a guarded PDF crop path plus full-page JPEG click target, a source-photo JPEG with #spark-bbox viewport, or a real failed render/crop attempt. Never write that no crop is needed because grading is possible without the visual. Source problem-statement transcription must not be an only-visibly-answered list, and must not summarize diagram options as labels only, such as `Options: A, B, C, D shown as diagram choices` or `Options shown as diagram labels`; preserve shared source context, displayed formula setup lines, displayed formulas, and the source figure/diagram reference, then plan a visible crop or viewport when needed. Do not write `displayed formula shown for ...` as a substitute for a source formula. For long handwritten papers, call score_answers_with_fresh_agent in 2-4 contiguous root/range batches covering every answer leaf, and issue the calls in one parallel tool turn before crop validation/polishing, model-answer polishing, optional reference enrichment, or thumbnail-summary work. After required scoring helper calls return, create only missing planned final PDF crop assets and full-page JPEG click targets at their exact sheet-plan paths; for uploaded photos/scans, reuse or normalize one JPEG source image and link it with #spark-bbox. Do not create `-raw`, `-candidate`, `-draft`, or temp copies under grader/output/assets. Then write grader/output/sheet.json and grader/output/run-summary.json with write_json_workspace_file immediately from the returned inline results; do not first record crop-validation.md, reread scoring files, regrade, or enrich. Then run validate_grader_artifacts, fix named schema/crop/source-fidelity blockers, record crop-validation.md when linked PDF crops exist, and publish. For requested model answers, use concise modelAnswer fields returned by the scoring helper; if they are missing, do not delay validation or publish for a separate derivation pass. Use fill only for simple one- or two-blank lines with prompt/blanks/after; use cloze for any segments/blanks question. Keep named figures/tables and image links out of section.theory; put them in the exact source question/group prompt. Do not invent bridge text such as `Figure 1 and Figure 2 are used in this question`, `planned as crop`, `shown in the source paper`, or `options shown as diagram labels`. Source problem-statement transcription must not contain placeholders such as not yet copied, TBD, or TODO.",
+    "Every final linked PDF figure/image crop must be validated by its own validate_crop_with_fresh_agent call, except for pad_image outputs derived from an already passing validation as described above. Uploaded-photo viewport links do not need crop-validation.md; record the source JPEG, bbox, and at most two view_image checks in the plan/source-fidelity notes. For PDF crop validation, pass expectedContent with the exact printed/visible visual labels/axes/options/table cells/annotations that must be visible, and duplicatedTextToExclude for surrounding prompt/caption/table text rendered separately; pass `none` only when no surrounding duplicated text needs exclusion. Do not ask the reviewer to require inferred answers, mark-scheme facts, or labels/headings absent from the source visual. The fresh reviewer uses view_image, transcribes all visible text in the crop, and then judges whether those required visual elements are present, major duplicated caption/question/table text is excluded, unrelated neighbouring content outside the official target visual is absent, and required content does not touch or clip at an edge. Treat missing/clipped/wrong target content as blocking; treat related subpanels inside the same official embedded figure/table image, small duplicate caption fragments, or safe whitespace as minor issues, not reasons for endless recropping.",
     "If a crop reviewer fails an otherwise complete source visual only because expectedContent named inferred or unprinted content, such as a group name, answer, placeholder, or heading absent from the figure, correct expectedContent and revalidate once instead of recropping.",
     "If you use crop_image or trim_image on a linked worksheet asset after writing grader/output/crop-validation.md, rerun the fresh-context crop check and rewrite crop-validation.md for the final asset before publishing. pad_image does not require another validation when it only adds a white border to an already passed crop.",
     "Do not publish known blocking crop failures. For uncertain crops or after validate_crop_with_fresh_agent reports clipped/missing/wrong content, a broad fallback, or confusing neighbouring content, stop hand-guessing coordinates and use the bad-crop/full-page/grid JSON workflow through propose_crop_bbox_with_fresh_agent. If the same validation problem recurs after a proposal-assisted retry, treat it as a wrong-path signal and call review_run_progress_with_fresh_agent before continuing crop polishing. If the remaining issue is only a small duplicated caption/prompt fragment and all expected content is visible, record it as minor and continue.",
-    "If an image tool reports a repeated-crop or pre-publish image-edit budget error, stop guessing boxes for that output: call review_run_progress_with_fresh_agent, switch to propose_crop_bbox_with_fresh_agent / extract_pdf_images / extract_pdf_diagrams if appropriate, and do not relabel unresolved crop failures as passing or link full-page fallbacks.",
+    "If an image tool reports a repeated-crop or pre-publish image-edit budget error for PDF sources, stop guessing boxes for that output: call review_run_progress_with_fresh_agent, switch to propose_crop_bbox_with_fresh_agent / extract_pdf_images / extract_pdf_diagrams if appropriate, and do not relabel unresolved crop failures as passing or link full-page fallbacks. Uploaded photos/scans should use the simple two-view source JPEG bbox path instead of this crop loop.",
     "Only after publish_sheet succeeds may you call done({summary}). Never end the run with a normal assistant final response before publish_sheet; continue using tools instead.",
     "",
     "Lesson creation pipeline (CRITICAL):",
@@ -10682,7 +10855,11 @@ function buildAgentTools(options: {
       return null;
     }
     const rawValue = (input as Record<string, unknown>)[field];
-    if (typeof rawValue === "number" && Number.isInteger(rawValue) && rawValue > 0) {
+    if (
+      typeof rawValue === "number" &&
+      Number.isInteger(rawValue) &&
+      rawValue > 0
+    ) {
       return rawValue;
     }
     if (typeof rawValue === "string" && rawValue.trim().length > 0) {
@@ -10861,7 +11038,8 @@ function buildAgentTools(options: {
       studentWorkTranscriptionMarkdown,
     ].join("\n");
     const studentAnswerExtractHasManyLeaves =
-      studentAnswerExtractMarkdown.trim().length > 0 && sourceLeafLabels.size > 12;
+      studentAnswerExtractMarkdown.trim().length > 0 &&
+      sourceLeafLabels.size > 12;
     const handwrittenMode =
       /\bmode\s*:\s*(?:[`*_]+)?handwritten-grading(?:[`*_]+)?\b/iu.test(
         progressMarkdown,
@@ -10943,21 +11121,21 @@ function buildAgentTools(options: {
           sourceReferenceMarkdown: sourceReferenceMarkdownForSheetPlan,
         }),
       ],
-      transcriptionIssues:
-        collectSourceTranscriptionIntegrityIssues(transcriptionMarkdown),
+      transcriptionIssues: collectSourceTranscriptionIntegrityIssues(
+        transcriptionMarkdown,
+      ),
     };
   };
-  const shouldRequireGraderPublishCriticalPath =
-    async (): Promise<boolean> => {
-      if (!isGraderPublishingRun || graderPublishCompleted) {
-        return false;
-      }
-      const [summaryExists, sheetExists] = await Promise.all([
-        workspaceFileExists("grader/output/run-summary.json"),
-        workspaceFileExists("grader/output/sheet.json"),
-      ]);
-      return summaryExists && sheetExists;
-    };
+  const shouldRequireGraderPublishCriticalPath = async (): Promise<boolean> => {
+    if (!isGraderPublishingRun || graderPublishCompleted) {
+      return false;
+    }
+    const [summaryExists, sheetExists] = await Promise.all([
+      workspaceFileExists("grader/output/run-summary.json"),
+      workspaceFileExists("grader/output/sheet.json"),
+    ]);
+    return summaryExists && sheetExists;
+  };
   const applyGraderPublishCriticalGate = (
     sourceTools: LlmToolSet,
   ): LlmToolSet => {
@@ -11074,7 +11252,7 @@ function buildAgentTools(options: {
           status: "blocked_artifact_assembly_required",
           blockedTool: toolName,
           nextAction:
-            "Bounded scoring is complete for this long handwritten-grading paper. If planned final image asset files are missing and no source image inventory exists, run one bounded source-visual prep step: extract_pdf_images to grader/output/pdf-images or pdf_to_images for the exact needed pages under grader/output/rendered-pages. Then create only final guarded grader/output/assets/... files at their exact sheet-plan paths with crop_image/fullImage or pad_image; do not create `-raw`, `-candidate`, `-draft`, or temp asset copies. Batch all missing crop/pad calls in one parallel tool turn. Immediately write grader/output/sheet.json with write_json_workspace_file; a valid sheet write can derive grader/output/run-summary.json. Preserve returned scores and teacher-review statuses. Do not crop-validate, reread, regrade, search, or enrich before first-pass artifacts. Put each figure/table in the exact question/group prompt, not section.theory. After both JSON files exist, call validate_grader_artifacts.",
+            "Bounded scoring is complete for this long handwritten-grading paper. If planned PDF final image asset files are missing and no source image inventory exists, run one bounded source-visual prep step: extract_pdf_images to grader/output/pdf-images or pdf_to_images for the exact needed pages under grader/output/rendered-pages. Then create only final guarded grader/output/assets/... PDF crops plus full-page JPEG click targets at their exact sheet-plan paths with crop_image/fullImage or pad_image; for uploaded photos/scans, reuse or normalize one JPEG source image and add #spark-bbox viewport links instead of repeated crops. Do not create `-raw`, `-candidate`, `-draft`, or temp asset copies. Batch all missing crop/pad calls in one parallel tool turn. Immediately write grader/output/sheet.json with write_json_workspace_file; a valid sheet write can derive grader/output/run-summary.json. Preserve returned scores and teacher-review statuses. Do not crop-validate, reread, regrade, search, or enrich before first-pass artifacts. Put each figure/table in the exact question/group prompt, not section.theory. After both JSON files exist, call validate_grader_artifacts.",
         };
       }
       if (await shouldRequireGraderPublishCriticalPath()) {
@@ -11096,7 +11274,7 @@ function buildAgentTools(options: {
           ...toolConfig,
           execute: async (input) =>
             runGraderPublishCriticalGate(toolName, input, () =>
-              toolConfig.execute(input),
+              toolConfig.execute(input as string),
             ),
         };
         continue;
@@ -13263,7 +13441,8 @@ function buildAgentTools(options: {
                   ...collectSheetPlanConsistencyIssues(content),
                   ...collectSheetPlanSourceReferenceIssues({
                     sheetPlanMarkdown: content,
-                    sourceReferenceMarkdown: sourceReferenceMarkdownForSheetPlan,
+                    sourceReferenceMarkdown:
+                      sourceReferenceMarkdownForSheetPlan,
                   }),
                 ]
               : [];
@@ -13357,8 +13536,7 @@ function buildAgentTools(options: {
                 filePath: normalizedFilePath,
                 error: errorAsString(repairedError),
                 originalError: errorAsString(error),
-                fix:
-                  "Pass jsonText as one complete valid JSON object. Do not pass an empty object, a partial object, markdown, comments, or surrounding code fences. Escape LaTeX backslashes in JSON strings, for example write \\\\( for visible \\(.",
+                fix: "Pass jsonText as one complete valid JSON object. Do not pass an empty object, a partial object, markdown, comments, or surrounding code fences. Escape LaTeX backslashes in JSON strings, for example write \\\\( for visible \\(.",
               };
             }
           } else {
@@ -13366,8 +13544,7 @@ function buildAgentTools(options: {
               status: "invalid_json",
               filePath: normalizedFilePath,
               error: errorAsString(error),
-              fix:
-                "Pass jsonText as one complete valid JSON object. Do not pass an empty object, a partial object, markdown, comments, or surrounding code fences. Escape LaTeX backslashes in JSON strings, for example write \\\\( for visible \\(.",
+              fix: "Pass jsonText as one complete valid JSON object. Do not pass an empty object, a partial object, markdown, comments, or surrounding code fences. Escape LaTeX backslashes in JSON strings, for example write \\\\( for visible \\(.",
             };
           }
         }
@@ -13473,8 +13650,8 @@ function buildAgentTools(options: {
         const nextAction =
           isGraderPublishingRun &&
           normalizedFilePath === "grader/output/sheet.json"
-            ? (derivedRunSummary !== null ||
-              (await workspaceFileExists("grader/output/run-summary.json")))
+            ? derivedRunSummary !== null ||
+              (await workspaceFileExists("grader/output/run-summary.json"))
               ? 'Immediately call validate_grader_artifacts({"requireSourceFidelityAudit": false}); do not enrich, reread, or inspect images before validation names the remaining fixes.'
               : "Immediately write grader/output/run-summary.json with totals matching review.score, then call validate_grader_artifacts. Do not enrich, reread, or inspect images before validation."
             : isGraderPublishingRun &&
@@ -14666,7 +14843,7 @@ function buildAgentTools(options: {
         "Use supportingInstructions to explain how supporting documents should be used for disambiguation.",
         "The model does not know filenames unless you include identifying details in instructions text.",
         "For multi-page tasks, ask for explicit page markers in instructions when needed.",
-        "For formulas/equations, output embedded LaTeX: inline '\\(...\\)', display '\\[...\\]'. Use display LaTeX when the source formula is displayed. For mathematical number grids, arranged arithmetic, matrices, and sign rows, prefer source-faithful display LaTeX arrays/matrices; reserve Markdown tables for true data tables. Use real line breaks, never literal escaped newline text like '\\n'.",
+        "For formulas/equations, output embedded LaTeX: inline '\\(...\\)', display '\\[...\\]'. Use display LaTeX when the source formula is displayed. For mathematical number grids, arranged arithmetic, matrices, sign rows, and other simple horizontal/vertical layouts, use source-faithful display LaTeX arrays/matrices; reserve Markdown tables for true data tables. Do not generate SVG for diagrams. Use real line breaks, never literal escaped newline text like '\\n'.",
       ].join("\n"),
       inputSchema: z
         .object({
@@ -15555,8 +15732,7 @@ function buildAgentTools(options: {
           return undefined;
         })();
         const missingPageNumbers =
-          resolvedPageNumbers === undefined ||
-          resolvedPageNumbers.length === 0;
+          resolvedPageNumbers === undefined || resolvedPageNumbers.length === 0;
         if (
           pageCount > PDF_PAGE_NUMBERS_REQUIRED_THRESHOLD &&
           missingPageNumbers
@@ -15684,8 +15860,9 @@ function buildAgentTools(options: {
           ...(recoveredSelectionFromOutputDir !== null
             ? { recoveredPageSelectionFromOutputDir: true }
             : {}),
-          pageSelection:
-            missingPageNumbers ? "all-pages" : "explicit-pageNumbers",
+          pageSelection: missingPageNumbers
+            ? "all-pages"
+            : "explicit-pageNumbers",
           scale: resolvedScale,
           maxDimension: resolvedMaxDimension,
           renderBatchSize,
@@ -15697,7 +15874,7 @@ function buildAgentTools(options: {
       description: [
         "Crop a workspace image (JPG/PNG/WEBP/GIF/HEIC/HEIF) using a required bboxPixels rectangle.",
         "Use bboxPixels when you have coordinates from a rendered page/crop grid: left/top/right/bottom are pixel coordinates in the selected source image, origin top-left, right/bottom exclusive.",
-        "The cropped output is written as PNG and follows the requested bbox exactly by default; when a final worksheet asset crop touches a source-image edge, the tool adds a clean white border unless you explicitly pass paddingPx.",
+        "The cropped output is written as JPEG when outputPath ends in .jpg/.jpeg and PNG otherwise; when a final worksheet asset crop touches a source-image edge, the tool adds a clean white border unless you explicitly pass paddingPx.",
         "Do not call this tool without bboxPixels; do not pass null, zero, or tiny placeholder coordinates.",
         "Use paddingPx only when you intentionally want an additional source-image margin outside bboxPixels.",
         "Use this to iteratively refine diagram crops from page images; when content touches an edge, expand the bbox outward rather than tightening it.",
@@ -15833,9 +16010,9 @@ function buildAgentTools(options: {
           pixels.bottom === sourceHeight;
         const marginPx =
           paddingPx ??
-          ((fullImage === true ||
-            (WORKSHEET_CROP_ASSET_PATH_PATTERN.test(outputPath) &&
-              requestedCropTouchesSourceEdge))
+          (fullImage === true ||
+          (WORKSHEET_CROP_ASSET_PATH_PATTERN.test(outputPath) &&
+            requestedCropTouchesSourceEdge)
             ? DEFAULT_CROP_IMAGE_MARGIN_PX
             : 0);
         const crop = expandCropPixelsWithMargin({
@@ -15844,12 +16021,14 @@ function buildAgentTools(options: {
           sourceHeight,
           marginPx,
         });
-        const croppedBytes = await cropImageToPngBuffer({
+        const outputFormat = resolveCropImageOutputFormat(outputPath);
+        const croppedBytes = await cropImageToBuffer({
           source: sourceBytes,
           left: crop.pixels.left,
           top: crop.pixels.top,
           right: crop.pixels.right,
           bottom: crop.pixels.bottom,
+          outputFormat,
           extend: crop.outputPadding,
         });
         const resolvedOutputPath = resolveWorkspacePath(rootDir, outputPath);
@@ -15877,6 +16056,7 @@ function buildAgentTools(options: {
           paddingPx: marginPx,
           outputPadding: crop.outputPadding,
           fullImage: fullImage === true,
+          outputFormat,
           outputBytes: croppedBytes.byteLength,
         };
       },
@@ -16068,7 +16248,7 @@ function buildAgentTools(options: {
     validate_grader_artifacts: tool({
       description: [
         "Validate grader/output/sheet.json and grader/output/run-summary.json before source-fidelity audit or publish.",
-        "Use this immediately after writing both grader JSON artifacts. It catches invalid JSON, schema errors, score mismatches, missing crop validation, missing bounded scoring for long handwritten papers, and publish-guard issues without publishing.",
+        "Use this immediately after writing both grader JSON artifacts. It catches invalid JSON, schema errors, score mismatches, missing PDF crop validation, missing bounded scoring for long handwritten papers, and publish-guard issues without publishing.",
         "Call with requireSourceFidelityAudit=false before running validate_source_fidelity_with_fresh_agent; call publish_sheet for the final required publish validation.",
       ].join("\n"),
       inputSchema: z
@@ -16124,8 +16304,7 @@ function buildAgentTools(options: {
           const nextAction =
             /section "[^"]+" (?:theory|infoBox) contains a named figure\/table or linked crop/iu.test(
               errorText,
-            ) ||
-            /workflow or paraphrase wording/iu.test(errorText)
+            ) || /workflow or paraphrase wording/iu.test(errorText)
               ? "Rewrite grader/output/sheet.json first. Move figures/tables/crop links out of section.theory/infoBox into the exact question or group prompt, remove source-paper/workflow placeholder phrases, then call validate_grader_artifacts again. Do not crop, crop-validate, or run source-fidelity audit until this sheet JSON placement issue is fixed."
               : "Fix the named artifact or guard issue, then call validate_grader_artifacts again before source-fidelity audit or publish.";
           return {
@@ -16265,7 +16444,9 @@ function buildAgentTools(options: {
             `score_answers_with_fresh_agent returned ids outside worksheetIds: ${unexpectedIds.join(", ")}`,
           );
         }
-        const returnedIds = new Set(parsedReview.questions.map((question) => question.id));
+        const returnedIds = new Set(
+          parsedReview.questions.map((question) => question.id),
+        );
         const missingIds = worksheetIds.filter((id) => !returnedIds.has(id));
         if (missingIds.length > 0) {
           throw new Error(
@@ -16323,7 +16504,7 @@ function buildAgentTools(options: {
               }
             : {}),
           nextAction:
-            "Use the returned questions array directly when assembling review.questions, and use any modelAnswer fields for requested model-answer/reference text. If sheet-plan names final visual asset paths that are not yet written, create only those exact guarded grader/output/assets/... paths now with crop_image/fullImage; do not create raw/candidate/draft/temp copies, and do not validate or inspect crops yet. Then write sheet.json and run-summary.json. Put every figure/table crop or Markdown table in the exact question/group prompt, never in section.theory.",
+            "Use the returned questions array directly when assembling review.questions, and use any modelAnswer fields for requested model-answer/reference text. If sheet-plan names final PDF visual asset paths that are not yet written, create only those exact guarded grader/output/assets/... paths plus full-page JPEG click targets now with crop_image/fullImage; for uploaded photos/scans, reuse or normalize one JPEG source image and add #spark-bbox viewport links. Do not create raw/candidate/draft/temp copies, and do not validate or inspect PDF crops yet. Then write sheet.json and run-summary.json. Put every figure/table crop, photo viewport, or Markdown table in the exact question/group prompt, never in section.theory.",
           modelId: DEFAULT_AGENT_MODEL_ID,
           costUsd: result.costUsd,
         };
@@ -16654,8 +16835,8 @@ function buildAgentTools(options: {
     }),
     validate_crop_with_fresh_agent: tool({
       description: [
-        "Validate one final worksheet figure/image crop with a fresh-context visual agent.",
-        "Use this once per final linked crop before writing grader/output/crop-validation.md.",
+        "Validate one final worksheet PDF figure/image crop with a fresh-context visual agent.",
+        "Use this once per final linked PDF crop before writing grader/output/crop-validation.md. Uploaded-photo #spark-bbox viewport links do not use this tool.",
         "Pass expectedContent with the exact printed/visible visual content that must be visible, and duplicatedTextToExclude for surrounding prompt/caption/table text rendered separately.",
         "The fresh agent must call view_image on the crop, transcribe visible text, and judge missing/clipped target content, edge contact, major duplicated text, and unrelated neighbouring content outside the official target visual.",
         "Do not use generic spawn_agent for grader intake or file summaries; use this dedicated tool only for final crop visual validation.",
@@ -16831,11 +17012,10 @@ function buildAgentTools(options: {
             .trim()
             .min(1)
             .default("grader/output/sheet.json"),
-          outputPath: z
-            .preprocess(
-              (value) => parseOptionalString(value),
-              z.string().trim().min(1).optional(),
-            ),
+          outputPath: z.preprocess(
+            (value) => parseOptionalString(value),
+            z.string().trim().min(1).optional(),
+          ),
           notes: z.preprocess(
             (value) => parseOptionalString(value),
             z.string().trim().min(1).optional(),
@@ -16925,9 +17105,10 @@ function buildAgentTools(options: {
             : `- sheet plan: ${resolvedSheetPlanPath} (missing; record this if it affects audit confidence)`,
           `- worksheet: ${resolvedSheetPath}`,
           resolvedSourcePaths.length > 0
-            ? ["Source paths:", ...resolvedSourcePaths.map((item) => `- ${item}`)].join(
-                "\n",
-              )
+            ? [
+                "Source paths:",
+                ...resolvedSourcePaths.map((item) => `- ${item}`),
+              ].join("\n")
             : "Source paths: none supplied; use transcription/source audit text only.",
           imageSourcePaths.length > 0
             ? [
@@ -16941,8 +17122,9 @@ function buildAgentTools(options: {
           "- Every visible answered, partially answered, selected, or blank answer-bearing source item in scope is represented in sheet.json.",
           "- Source wording is verbatim apart from minimal OCR/layout cleanup; no paraphrased or invented prompt text.",
           "- Source numbering, subquestion hierarchy, badge labels, option labels, and marks match the source.",
-          "- Named figures, tables, diagrams, graphs, grids, and column/stacked layouts are visible near the relevant prompt as Markdown tables, display math, or linked validated crops.",
-          "- Student answer evidence is attached to the right worksheet item and not collapsed into vague placeholders.",
+          "- Named figures, tables, diagrams, graphs, grids, and column/stacked layouts are visible near the relevant prompt as Markdown tables, simple display math, linked validated PDF crops, or source-photo bbox viewports.",
+          "- Student answer evidence is aligned by worksheet question id. In Spark sheet JSON, `answers[questionId]` and `review.questions[questionId]` are the expected attachment points; do not require selected answers or evidence text to be duplicated inside the visible prompt.",
+          "- Flag answer evidence only when the keyed answer/review entry is missing, attached to the wrong id, or collapsed into vague placeholders.",
           "",
           "Return concise Markdown with exactly these fields:",
           "- source-fidelity audit: <short source scope>",
@@ -17031,8 +17213,9 @@ function buildAgentTools(options: {
         }
         const passed = hasPositiveSourceFidelityAudit(reviewMarkdown);
         const blockingIssues =
-          SOURCE_FIDELITY_BLOCKING_ISSUES_FIELD_PATTERN.exec(reviewMarkdown)?.[1]
-            ?.trim() ?? "";
+          SOURCE_FIDELITY_BLOCKING_ISSUES_FIELD_PATTERN.exec(
+            reviewMarkdown,
+          )?.[1]?.trim() ?? "";
         return {
           status: passed ? "passed" : "failed",
           sourceScope,
@@ -18584,9 +18767,7 @@ export async function runSparkAgentTask(
     });
 
     progress.log(
-      `exposed tools: ${Array.from(
-        new Set(Object.keys(tools)),
-      )
+      `exposed tools: ${Array.from(new Set(Object.keys(tools)))
         .sort()
         .join(", ")}`,
     );

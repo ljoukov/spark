@@ -7,6 +7,7 @@ import {
 	isAllowedWorkspaceStoragePath,
 	normalizeStorageObjectName
 } from '@spark/llm';
+import sharp from 'sharp';
 import { z } from 'zod';
 
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
@@ -15,6 +16,7 @@ import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken
 import { downloadStorageObject } from '$lib/server/gcp/storageRest';
 import { getGraderRun } from '$lib/server/grader/repo';
 import {
+	isAllowedSourcePageImagePath,
 	isAllowedSourceAttachmentPath,
 	isAllowedWorksheetAssetPath
 } from '$lib/server/grader/sheetAssets';
@@ -29,6 +31,9 @@ const querySchema = z.object({
 	path: z.string().trim().min(1),
 	filename: z.string().trim().min(1).optional()
 });
+const SOURCE_IMAGE_RESPONSE_MAX_DIMENSION = 1500;
+const SOURCE_IMAGE_RESPONSE_JPEG_QUALITY = 85;
+const SOURCE_IMAGE_RESPONSE_CONTENT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 function isAllowedSheetAttachmentPath(filePath: string): boolean {
 	const parts = filePath.split('/').filter((part) => part.length > 0);
@@ -38,6 +43,54 @@ function isAllowedSheetAttachmentPath(filePath: string): boolean {
 		parts[1] === 'questions' &&
 		parts[3] === 'uploads'
 	);
+}
+
+function normalizeContentType(contentType: string | null | undefined): string {
+	return contentType?.split(';')[0]?.trim().toLowerCase() ?? '';
+}
+
+function withJpegExtension(filename: string): string {
+	return filename.replace(/\.[A-Za-z0-9]+$/u, '') + '.jpg';
+}
+
+async function optimizeSourceImageResponse(options: {
+	bytes: Uint8Array;
+	contentType: string;
+	filePath: string;
+	userId: string;
+	sheetId: string;
+}): Promise<{ bytes: Uint8Array; contentType: string; filenameExtension: 'jpg' | null }> {
+	const isSourceImage =
+		isAllowedSourceAttachmentPath(options.filePath) ||
+		isAllowedSourcePageImagePath(options.filePath);
+	if (!isSourceImage || !SOURCE_IMAGE_RESPONSE_CONTENT_TYPES.has(options.contentType)) {
+		return { bytes: options.bytes, contentType: options.contentType, filenameExtension: null };
+	}
+	try {
+		const optimized = await sharp(options.bytes)
+			.rotate()
+			.resize({
+				width: SOURCE_IMAGE_RESPONSE_MAX_DIMENSION,
+				height: SOURCE_IMAGE_RESPONSE_MAX_DIMENSION,
+				fit: 'inside',
+				withoutEnlargement: true
+			})
+			.jpeg({ quality: SOURCE_IMAGE_RESPONSE_JPEG_QUALITY, mozjpeg: true })
+			.toBuffer();
+		return {
+			bytes: Uint8Array.from(optimized),
+			contentType: 'image/jpeg',
+			filenameExtension: 'jpg'
+		};
+	} catch (error) {
+		console.warn('Failed to optimize source sheet image response', {
+			error,
+			userId: options.userId,
+			sheetId: options.sheetId,
+			filePath: options.filePath
+		});
+		return { bytes: options.bytes, contentType: options.contentType, filenameExtension: null };
+	}
 }
 
 export const GET: RequestHandler = async ({ request, params, url }) => {
@@ -65,6 +118,7 @@ export const GET: RequestHandler = async ({ request, params, url }) => {
 	if (!isAllowedSheetAttachmentPath(parsedQuery.path)) {
 		if (
 			!isAllowedWorksheetAssetPath(parsedQuery.path) &&
+			!isAllowedSourcePageImagePath(parsedQuery.path) &&
 			!isAllowedSourceAttachmentPath(parsedQuery.path)
 		) {
 			return json({ error: 'not_found' }, { status: 404 });
@@ -77,7 +131,9 @@ export const GET: RequestHandler = async ({ request, params, url }) => {
 	}
 
 	const isRunWorkspaceFile =
-		isAllowedWorksheetAssetPath(parsedQuery.path) || isAllowedSourceAttachmentPath(parsedQuery.path);
+		isAllowedWorksheetAssetPath(parsedQuery.path) ||
+		isAllowedSourcePageImagePath(parsedQuery.path) ||
+		isAllowedSourceAttachmentPath(parsedQuery.path);
 	const session = isRunWorkspaceFile
 		? null
 		: await findTutorSessionForSheet({
@@ -144,9 +200,23 @@ export const GET: RequestHandler = async ({ request, params, url }) => {
 		return json({ error: 'download_failed' }, { status: 502 });
 	}
 
-	const filename = (parsedQuery.filename ?? path.basename(parsedQuery.path)).replace(/"/g, '');
+	const responseContentType = normalizeContentType(
+		parsedFile.data.contentType || contentType || 'application/octet-stream'
+	);
+	const optimized = await optimizeSourceImageResponse({
+		bytes,
+		contentType: responseContentType,
+		filePath: parsedQuery.path,
+		userId,
+		sheetId: parsedParams.sheetId
+	});
+	bytes = optimized.bytes;
+
+	const rawFilename = (parsedQuery.filename ?? path.basename(parsedQuery.path)).replace(/"/g, '');
+	const filename =
+		optimized.filenameExtension === 'jpg' ? withJpegExtension(rawFilename) : rawFilename;
 	const headers = new Headers();
-	headers.set('content-type', parsedFile.data.contentType || contentType || 'application/octet-stream');
+	headers.set('content-type', optimized.contentType || 'application/octet-stream');
 	headers.set('cache-control', 'private, max-age=60');
 	headers.set('content-disposition', `inline; filename="${filename}"`);
 

@@ -196,6 +196,117 @@
 		}
 	}
 
+	type SheetImageViewport = {
+		left: number;
+		top: number;
+		right: number;
+		bottom: number;
+	};
+
+	function parseSheetImageViewport(image: HTMLImageElement): SheetImageViewport | null {
+		const rawSource = image.currentSrc || image.src;
+		if (!rawSource) {
+			return null;
+		}
+		let hash = '';
+		try {
+			hash = new URL(rawSource, window.location.href).hash;
+		} catch {
+			const hashIndex = rawSource.indexOf('#');
+			hash = hashIndex === -1 ? '' : rawSource.slice(hashIndex);
+		}
+		if (!hash.startsWith('#')) {
+			return null;
+		}
+		const params = new URLSearchParams(hash.slice(1));
+		const rawBox = params.get('spark-bbox') ?? params.get('spark-region');
+		if (!rawBox) {
+			return null;
+		}
+		const values = rawBox
+			.split(',')
+			.map((part) => Number.parseFloat(part.trim()))
+			.filter((value) => Number.isFinite(value));
+		if (values.length !== 4) {
+			return null;
+		}
+		const [left, top, right, bottom] = values;
+		if (
+			left === undefined ||
+			top === undefined ||
+			right === undefined ||
+			bottom === undefined ||
+			right <= left ||
+			bottom <= top
+		) {
+			return null;
+		}
+		return { left, top, right, bottom };
+	}
+
+	function ensureLocalizedFigureViewport(image: HTMLImageElement): HTMLElement {
+		const parent = image.parentElement;
+		if (parent?.classList.contains('paper-sheet-localized-figure__viewport')) {
+			return parent;
+		}
+		const viewport = document.createElement('span');
+		viewport.className = 'paper-sheet-localized-figure__viewport';
+		image.before(viewport);
+		viewport.append(image);
+		return viewport;
+	}
+
+	function applyLocalizedFigureViewport(
+		image: HTMLImageElement,
+		viewport: HTMLElement,
+		box: SheetImageViewport
+	): void {
+		const sourceWidth = image.naturalWidth;
+		const sourceHeight = image.naturalHeight;
+		if (sourceWidth <= 0 || sourceHeight <= 0) {
+			return;
+		}
+		const left = Math.max(0, Math.min(sourceWidth - 1, box.left));
+		const top = Math.max(0, Math.min(sourceHeight - 1, box.top));
+		const right = Math.max(left + 1, Math.min(sourceWidth, box.right));
+		const bottom = Math.max(top + 1, Math.min(sourceHeight, box.bottom));
+		const width = right - left;
+		const height = bottom - top;
+		const displayWidth = Math.min(780, Math.max(260, width));
+
+		viewport.style.aspectRatio = `${width} / ${height}`;
+		viewport.style.setProperty('--sheet-localized-figure-width', `${displayWidth}px`);
+		image.style.width = `${(sourceWidth / width) * 100}%`;
+		image.style.height = `${(sourceHeight / height) * 100}%`;
+		image.style.left = `${-(left / width) * 100}%`;
+		image.style.top = `${-(top / height) * 100}%`;
+	}
+
+	function enhanceLocalizedSheetFigures(root: HTMLElement): void {
+		for (const image of root.querySelectorAll<HTMLImageElement>('.markdown-figure__image')) {
+			const box = parseSheetImageViewport(image);
+			if (!box) {
+				continue;
+			}
+			const figure = image.closest<HTMLElement>('.markdown-figure');
+			const link = image.closest<HTMLAnchorElement>('a.markdown-figure-link');
+			const viewport = ensureLocalizedFigureViewport(image);
+			figure?.classList.add('markdown-figure--localized');
+			link?.classList.add('markdown-figure-link--localized');
+			link?.setAttribute('title', 'Open original image');
+
+			const apply = () => {
+				applyLocalizedFigureViewport(image, viewport, box);
+			};
+			if (image.complete) {
+				apply();
+			} else if (image.dataset.sheetLocalizedLoadBound !== 'true') {
+				image.dataset.sheetLocalizedLoadBound = 'true';
+				image.addEventListener('load', apply);
+			}
+		}
+	}
+
 	const FIGURE_REFERENCE_LABEL_PATTERN =
 		/\b(?:Figure|Fig\.?|Diagram)\s+(\d+(?:\.\d+)*[A-Za-z]?)\b/iu;
 	const TABLE_REFERENCE_LABEL_PATTERN = /\bTable\s+(\d+(?:\.\d+)*[A-Za-z]?)\b/iu;
@@ -1467,6 +1578,7 @@
 		const refreshSheetEnhancements = () => {
 			frame = null;
 			eagerLoadSheetFigures(root);
+			enhanceLocalizedSheetFigures(root);
 			annotateSheetArtifacts(root);
 			annotateQuestionMarkBadges(root, markLabels);
 		};
@@ -1827,6 +1939,42 @@
 	.sheet-shell {
 		overflow: auto;
 		padding-bottom: 0.2rem;
+	}
+
+	:global(.sheet-shell .markdown-figure--localized) {
+		width: min(100%, var(--sheet-localized-figure-width, 720px));
+		max-width: 100%;
+	}
+
+	:global(.sheet-shell .paper-sheet-localized-figure__viewport) {
+		position: relative;
+		display: block;
+		width: 100%;
+		overflow: hidden;
+		background: #ffffff;
+		border-radius: 6px;
+	}
+
+	:global(.sheet-shell .paper-sheet-localized-figure__viewport .markdown-figure__image) {
+		position: absolute;
+		display: block;
+		max-width: none;
+		inset: auto auto auto auto;
+	}
+
+	:global(
+		.sheet-shell
+			a.markdown-figure-link--localized:hover
+			.paper-sheet-localized-figure__viewport
+			.markdown-figure__image
+	),
+	:global(
+		.sheet-shell
+			a.markdown-figure-link--localized:focus-visible
+			.paper-sheet-localized-figure__viewport
+			.markdown-figure__image
+	) {
+		transform: none;
 	}
 
 	:global([data-theme='dark'] .sheet-shell .paper-sheet__header),
