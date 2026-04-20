@@ -308,17 +308,17 @@
 	}
 
 	function localizedFigureEnhancer(node: HTMLElement): { destroy: () => void } {
-		let frame: number | null = null;
+		let timer: number | null = null;
 		const refresh = () => {
-			frame = null;
+			timer = null;
 			eagerLoadSheetFigures(node);
 			enhanceLocalizedSheetFigures(node);
 		};
 		const schedule = () => {
-			if (frame !== null) {
+			if (timer !== null) {
 				return;
 			}
-			frame = window.requestAnimationFrame(refresh);
+			timer = window.setTimeout(refresh, 0);
 		};
 		const observer = new MutationObserver(schedule);
 		observer.observe(node, {
@@ -328,8 +328,8 @@
 		schedule();
 		return {
 			destroy: () => {
-				if (frame !== null) {
-					window.cancelAnimationFrame(frame);
+				if (timer !== null) {
+					window.clearTimeout(timer);
 				}
 				observer.disconnect();
 			}
