@@ -228,7 +228,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 
 - Env: `TASKS_SERVICE_URL` (full handler URL), `TASKS_API_KEY` (Bearer), optional `TASKS_QUEUE` (default `spark-tasks`).
 - Location: `us-central1`.
-- The Cloud Task `httpRequest` targets `TASKS_SERVICE_URL` with the Bearer token header and JSON body.
+- The Cloud Task `httpRequest` targets `TASKS_SERVICE_URL` with the Bearer token header and JSON body. Remote tasks set an explicit 30-minute dispatch deadline so long-running agent and grader jobs are not cut off by Cloud Tasks' shorter default HTTP deadline.
 - For debugging, `runAgent` tasks also include `userId`, `agentId`, and `workspaceId` as query params on the target URL (in addition to `type=runAgent`), and `findGaps` tasks include `userId` plus `forceUiData=1` when enabled (in addition to `type=findGaps`).
 - The same Bearer token also protects `GET /api/internal/tasks/info`, which returns the task runner's embedded build metadata (`buildId`, `builtAt`, platform, runtime/runtimeVersion, commit/branch, and provider-specific build identifiers when available).
 - Build metadata is generated during `web` builds and embedded into the server bundle. Every build gets a fresh `buildId` plus a `builtAt` timestamp; provider commit/build identifiers are sourced from Vercel/Cloudflare env vars directly and from Cloud Build via Docker build args so Cloud Run images retain provenance after the Docker boundary.

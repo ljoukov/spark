@@ -92,6 +92,7 @@ const CLOUD_TASKS_SCOPE = [
 
 const DEFAULT_LOCATION = "us-central1"; // per instruction
 const DEFAULT_QUEUE = "spark-tasks";
+const DEFAULT_DISPATCH_DEADLINE_SECONDS = 1800;
 export const TASKS_HANDLER_PATH = "/api/internal/tasks";
 export const TASKS_INFO_PATH = "/api/internal/tasks/info";
 
@@ -410,6 +411,7 @@ export async function createTask(
     },
     body: JSON.stringify({
       task: {
+        dispatchDeadline: `${DEFAULT_DISPATCH_DEADLINE_SECONDS.toString()}s`,
         httpRequest: {
           url: handlerUrl.toString(),
           httpMethod: "POST",
