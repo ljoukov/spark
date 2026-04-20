@@ -4907,6 +4907,108 @@ describe("Spark agent tool: publish_sheet guards", () => {
     });
   });
 
+  it("preserves linked worksheet SVG assets on publish", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+      const { resolveWorkspacePathContentType } =
+        await import("../src/agent/workspaceFileStore");
+      const assetPath = "grader/output/assets/figure-1.svg";
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "Maths worksheet",
+        awardedMarks: 1,
+        maxMarks: 1,
+        report: buildSingleImageQuestionReport(assetPath),
+      });
+      await mkdir(path.dirname(path.join(rootDir, assetPath)), {
+        recursive: true,
+      });
+      await writeFile(
+        path.join(rootDir, assetPath),
+        [
+          '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80" viewBox="0 0 200 80">',
+          '<rect x="0" y="0" width="200" height="80" fill="white"/>',
+          '<rect x="45" y="25" width="110" height="30" fill="white" stroke="black" stroke-width="3"/>',
+          '<text x="100" y="47" text-anchor="middle" font-family="Arial" font-size="18">Figure 1</text>',
+          "</svg>",
+        ].join(""),
+        { encoding: "utf8" },
+      );
+      await writeFile(
+        path.join(rootDir, "grader/output/crop-validation.md"),
+        [
+          "# Crop validation",
+          "",
+          `- crop path: ${assetPath}`,
+          "  - source label: Figure 1",
+          "  - fresh-context subagent checked: yes",
+          "  - reviewer-visible text: Figure 1",
+          "  - pass/fail: pass",
+          "  - all question-relevant content visible: yes",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+      await mkdir(path.join(rootDir, "logs/agent"), { recursive: true });
+      await appendFile(
+        path.join(rootDir, "logs/agent/agent.log"),
+        "tool=validate_crop_with_fresh_agent crop validation\n",
+        { encoding: "utf8" },
+      );
+      await writeFreshCropReviewToolCall({
+        rootDir,
+        assetPath,
+        sourceLabel: "Figure 1",
+      });
+
+      const scheduledPaths: string[] = [];
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: (filePath) => {
+            scheduledPaths.push(filePath);
+          },
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).resolves.toMatchObject({
+        status: "published",
+        awardedMarks: 1,
+        maxMarks: 1,
+      });
+
+      const jpgPath = "grader/output/assets/figure-1.jpg";
+      const sheetRaw = await readFile(
+        path.join(rootDir, "grader/output/sheet.json"),
+        { encoding: "utf8" },
+      );
+      expect(sheetRaw).toContain(assetPath);
+      expect(sheetRaw).not.toContain(jpgPath);
+      const cropValidationRaw = await readFile(
+        path.join(rootDir, "grader/output/crop-validation.md"),
+        { encoding: "utf8" },
+      );
+      expect(cropValidationRaw).toContain(assetPath);
+      expect(cropValidationRaw).not.toContain(jpgPath);
+      await expect(readFile(path.join(rootDir, jpgPath))).rejects.toThrow();
+      expect(resolveWorkspacePathContentType(assetPath)).toBe("image/svg+xml");
+      expect(scheduledPaths).not.toContain(jpgPath);
+    });
+  });
+
   it("rejects visual prompts that defer the crop to references", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =

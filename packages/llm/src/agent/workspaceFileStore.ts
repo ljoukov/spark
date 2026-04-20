@@ -75,6 +75,9 @@ export function resolveWorkspacePathContentType(
   if (ext === ".png") {
     return "image/png";
   }
+  if (ext === ".svg") {
+    return "image/svg+xml";
+  }
   if (ext === ".jpg" || ext === ".jpeg") {
     return "image/jpeg";
   }

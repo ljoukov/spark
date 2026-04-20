@@ -5168,6 +5168,10 @@ function isJpegWorksheetAssetPath(assetPath: string): boolean {
   return /\.jpe?g$/iu.test(assetPath);
 }
 
+function isSvgWorksheetAssetPath(assetPath: string): boolean {
+  return /\.svg$/iu.test(assetPath);
+}
+
 function resolveWorksheetJpegAssetPath(assetPath: string): string {
   return assetPath.replace(/\.[^/.]+$/u, ".jpg");
 }
@@ -5788,6 +5792,14 @@ async function normalizeGraderWorksheetImageAssets(options: {
       throw new Error(
         `Linked worksheet image "${assetPath}" has invalid dimensions before publish.`,
       );
+    }
+    if (isSvgWorksheetAssetPath(assetPath)) {
+      if (metadata.format !== "svg") {
+        throw new Error(
+          `Linked worksheet image "${assetPath}" uses an .svg extension but decoded as ${metadata.format ?? "unknown"}.`,
+        );
+      }
+      continue;
     }
 
     const jpegAssetPath = resolveWorksheetJpegAssetPath(assetPath);
