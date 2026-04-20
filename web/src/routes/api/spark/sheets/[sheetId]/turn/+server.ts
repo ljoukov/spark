@@ -38,6 +38,7 @@ import {
 	buildTutorReviewPreview,
 	findTutorReviewThread,
 	summarizeTutorReviewState,
+	syncTutorReviewStateWithReport,
 	updateTutorReviewThread
 } from '$lib/server/tutorSessions/reviewState';
 import {
@@ -519,10 +520,10 @@ function buildCloseGapSystemPrompt(options: {
 	const selectedQuestionPrompt = formatSelectedQuestionPrompt(options.report, options.questionId);
 	const score = questionReview?.score
 		? `${questionReview.score.got.toString()}/${questionReview.score.total.toString()} marks`
-		: questionReview?.label ?? '(not scored)';
+		: (questionReview?.label ?? '(not scored)');
 
 	return [
-		'You are Spark\'s focused close-the-gap tutor for one worksheet problem.',
+		"You are Spark's focused close-the-gap tutor for one worksheet problem.",
 		'This is a normal chat turn, not a multi-question worksheet review workflow.',
 		'Help the student repair the gap by writing the missing reasoning themselves.',
 		'Use one concise cue or guiding question at a time. Do not call it a stepping stone.',
@@ -546,7 +547,7 @@ function buildCloseGapSystemPrompt(options: {
 		'Problem shown to the student:',
 		selectedQuestionPrompt,
 		'',
-		'Student\'s submitted worksheet answer:',
+		"Student's submitted worksheet answer:",
 		formatRecordedAnswer(options.report, options.questionId),
 		'',
 		'Inline review note shown before this chat:',
@@ -726,10 +727,18 @@ export const POST: RequestHandler = async ({ request, params }) => {
 	if (!reportRaw) {
 		return json({ error: 'sheet_not_ready' }, { status: 409 });
 	}
-	const report = safeParseGraderWorksheetReport(reportRaw);
-	if (!report) {
+	const rawReport = safeParseGraderWorksheetReport(reportRaw);
+	if (!rawReport) {
 		return json({ error: 'sheet_invalid' }, { status: 500 });
 	}
+	const report = rawReport;
+	const renderableReport = {
+		...rawReport,
+		sheet: rewritePaperSheetDataAssetTargets({
+			sheetId: run.id,
+			sheet: rawReport.sheet
+		})
+	};
 
 	let preparedAttachments: PreparedReplyAttachment[];
 	try {
@@ -757,21 +766,16 @@ export const POST: RequestHandler = async ({ request, params }) => {
 
 	const now = new Date();
 	const sessionId = session?.id ?? randomUUID();
-	const baseReviewState =
-		session?.reviewState ??
-		(() => {
-			const initialState = buildInitialTutorReviewState({
-				report,
+	const baseReviewState = session?.reviewState
+		? syncTutorReviewStateWithReport({
+				reviewState: session.reviewState,
+				report: renderableReport,
+				now
+			})
+		: buildInitialTutorReviewState({
+				report: renderableReport,
 				now
 			});
-			return {
-				...initialState,
-				sheet: rewritePaperSheetDataAssetTargets({
-					sheetId: run.id,
-					sheet: initialState.sheet
-				})
-			};
-		})();
 	const currentThread = findTutorReviewThread(baseReviewState, parsedBody.questionId);
 	if (!currentThread) {
 		return json({ error: 'question_not_found' }, { status: 404 });

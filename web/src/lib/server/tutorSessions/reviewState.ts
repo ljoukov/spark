@@ -127,6 +127,35 @@ export function buildInitialTutorReviewState(options: {
 	});
 }
 
+export function syncTutorReviewStateWithReport(options: {
+	reviewState: SparkTutorReviewState;
+	report: SparkGraderWorksheetReport;
+	now: Date;
+}): SparkTutorReviewState {
+	const threads = { ...options.reviewState.threads };
+	const createdAt = options.now.toISOString();
+
+	for (const entry of listWorksheetQuestionEntries(options.report.sheet)) {
+		if (threads[entry.question.id]) {
+			continue;
+		}
+		const review = options.report.review.questions[entry.question.id];
+		const status = review?.status === 'correct' ? 'resolved' : 'open';
+		threads[entry.question.id] = createReviewThread({
+			questionId: entry.question.id,
+			status,
+			gapBand: resolveInitialGapBand(review, status),
+			createdAt
+		});
+	}
+
+	return SparkTutorReviewStateSchema.parse({
+		...options.reviewState,
+		sheet: options.report.sheet,
+		threads
+	});
+}
+
 export function buildEmptyTutorReviewState(now: Date): SparkTutorReviewState {
 	return SparkTutorReviewStateSchema.parse({
 		...EMPTY_SHEET_STATE,

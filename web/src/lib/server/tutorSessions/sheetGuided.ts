@@ -22,7 +22,8 @@ import {
 	buildInitialTutorReviewState,
 	buildTutorReviewFocusLabel,
 	buildTutorReviewPreview,
-	summarizeTutorReviewState
+	summarizeTutorReviewState,
+	syncTutorReviewStateWithReport
 } from '$lib/server/tutorSessions/reviewState';
 import {
 	createTutorSession,
@@ -369,12 +370,16 @@ export async function loadSheetGuidedContext(options: {
 		runId: run.id
 	});
 	const now = new Date();
-	const reviewState =
-		session?.reviewState ??
-		buildInitialTutorReviewState({
-			report,
-			now
-		});
+	const reviewState = session?.reviewState
+		? syncTutorReviewStateWithReport({
+				reviewState: session.reviewState,
+				report,
+				now
+			})
+		: buildInitialTutorReviewState({
+				report,
+				now
+			});
 
 	return {
 		userId: options.userId,

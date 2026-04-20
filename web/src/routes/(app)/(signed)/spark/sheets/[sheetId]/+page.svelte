@@ -880,6 +880,21 @@
 		};
 	}
 
+	function syncReviewStateWithCurrentReportSheet(
+		nextReviewState: SparkTutorReviewState
+	): SparkTutorReviewState {
+		if (!report) {
+			return nextReviewState;
+		}
+		if (JSON.stringify(nextReviewState.sheet) === JSON.stringify(report.sheet)) {
+			return nextReviewState;
+		}
+		return {
+			...nextReviewState,
+			sheet: report.sheet
+		};
+	}
+
 	function applySheetPageState(next: SparkSheetPageState): void {
 		run = next.run;
 		if (next.draft) {
@@ -893,7 +908,7 @@
 		}
 		const nextReviewState = next.interaction?.reviewState ?? next.initialReviewState ?? null;
 		if (nextReviewState) {
-			reviewState = nextReviewState;
+			reviewState = syncReviewStateWithCurrentReportSheet(nextReviewState);
 		}
 		if (next.interaction?.id) {
 			interactionSessionId = next.interaction.id;
@@ -1382,6 +1397,16 @@
 		}
 		const nextReviewState = data.interaction?.reviewState ?? data.initialReviewState ?? null;
 		if (nextReviewState) {
+			reviewState = syncReviewStateWithCurrentReportSheet(nextReviewState);
+		}
+	});
+
+	$effect(() => {
+		if (!report || !reviewState) {
+			return;
+		}
+		const nextReviewState = syncReviewStateWithCurrentReportSheet(reviewState);
+		if (nextReviewState !== reviewState) {
 			reviewState = nextReviewState;
 		}
 	});
@@ -1615,7 +1640,7 @@
 					return;
 				}
 				if (parsed.data.reviewState) {
-					reviewState = parsed.data.reviewState;
+					reviewState = syncReviewStateWithCurrentReportSheet(parsed.data.reviewState);
 				}
 			},
 			(error) => {

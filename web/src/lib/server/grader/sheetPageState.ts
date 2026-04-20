@@ -18,7 +18,10 @@ import {
 	getGraderRun,
 	getWorkspaceTextFile
 } from '$lib/server/grader/repo';
-import { buildInitialTutorReviewState } from '$lib/server/tutorSessions/reviewState';
+import {
+	buildInitialTutorReviewState,
+	syncTutorReviewStateWithReport
+} from '$lib/server/tutorSessions/reviewState';
 import { findTutorSessionForSheet } from '$lib/server/tutorSessions/repo';
 
 const uploadManifestSchema = z.object({
@@ -296,12 +299,16 @@ export async function loadSparkSheetPageState(options: {
 
 	let interaction = null as SparkSheetPageState['interaction'];
 	if (session && report) {
-		const currentReviewState =
-			session.reviewState ??
-			buildInitialTutorReviewState({
-				report,
-				now: session.updatedAt
-			});
+		const currentReviewState = session.reviewState
+			? syncTutorReviewStateWithReport({
+					reviewState: session.reviewState,
+					report,
+					now: session.updatedAt
+				})
+			: buildInitialTutorReviewState({
+					report,
+					now: session.updatedAt
+				});
 		const renderableReviewState = currentReviewState
 			? {
 					...currentReviewState,

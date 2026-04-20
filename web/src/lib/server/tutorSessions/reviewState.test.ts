@@ -9,6 +9,7 @@ import {
 	buildTutorReviewPreview,
 	findTutorReviewThread,
 	summarizeTutorReviewState,
+	syncTutorReviewStateWithReport,
 	updateTutorReviewThread
 } from './reviewState';
 
@@ -122,5 +123,63 @@ describe('worksheet tutor review state', () => {
 		expect(summary.allResolved).toBe(true);
 		expect(buildTutorReviewFocusLabel(nextState)).toBe('Resolved');
 		expect(buildTutorReviewPreview(nextState)).toBe('All 2 worksheet comments resolved.');
+	});
+
+	it('refreshes stale session sheet content from the latest report', () => {
+		const initialState = buildInitialTutorReviewState({
+			report: worksheetReport,
+			now: new Date('2026-03-17T13:00:00.000Z')
+		});
+		const staleState = {
+			...initialState,
+			sheet: {
+				...initialState.sheet,
+				sections: initialState.sheet.sections.map((section) =>
+					'id' in section
+						? {
+								...section,
+								questions: section.questions?.map((question) =>
+									question.id === 'q2'
+										? {
+												...question,
+												prompt: 'Old image: grader/output/assets/q2-diagram.jpg'
+											}
+										: question
+								)
+							}
+						: section
+				)
+			}
+		};
+		const updatedReport: SparkGraderWorksheetReport = {
+			...worksheetReport,
+			sheet: {
+				...worksheetReport.sheet,
+				sections: worksheetReport.sheet.sections.map((section) =>
+					'id' in section
+						? {
+								...section,
+								questions: section.questions?.map((question) =>
+									question.id === 'q2'
+										? {
+												...question,
+												prompt: 'New image: grader/output/assets/q2-diagram.svg'
+											}
+										: question
+								)
+							}
+						: section
+				)
+			}
+		};
+
+		const nextState = syncTutorReviewStateWithReport({
+			reviewState: staleState,
+			report: updatedReport,
+			now: new Date('2026-03-17T13:05:00.000Z')
+		});
+
+		expect(nextState.sheet.sections).toEqual(updatedReport.sheet.sections);
+		expect(nextState.threads.q2?.status).toBe('open');
 	});
 });
