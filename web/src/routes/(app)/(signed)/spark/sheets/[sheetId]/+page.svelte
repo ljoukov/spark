@@ -307,13 +307,33 @@
 		}
 	}
 
-	function refreshLocalizedSheetFigures(): void {
-		const root = sheetShellElement ?? document.querySelector<HTMLElement>('.sheet-shell');
-		if (!root) {
-			return;
-		}
-		eagerLoadSheetFigures(root);
-		enhanceLocalizedSheetFigures(root);
+	function localizedFigureEnhancer(node: HTMLElement): { destroy: () => void } {
+		let frame: number | null = null;
+		const refresh = () => {
+			frame = null;
+			eagerLoadSheetFigures(node);
+			enhanceLocalizedSheetFigures(node);
+		};
+		const schedule = () => {
+			if (frame !== null) {
+				return;
+			}
+			frame = window.requestAnimationFrame(refresh);
+		};
+		const observer = new MutationObserver(schedule);
+		observer.observe(node, {
+			childList: true,
+			subtree: true
+		});
+		schedule();
+		return {
+			destroy: () => {
+				if (frame !== null) {
+					window.cancelAnimationFrame(frame);
+				}
+				observer.disconnect();
+			}
+		};
 	}
 
 	const FIGURE_REFERENCE_LABEL_PATTERN =
@@ -1480,45 +1500,6 @@
 		};
 	});
 
-	onMount(() => {
-		if (!browser) {
-			return;
-		}
-		let frame: number | null = null;
-		let observedRoot: HTMLElement | null = null;
-		const observer = new MutationObserver(() => {
-			schedule();
-		});
-		const schedule = () => {
-			if (frame !== null) {
-				return;
-			}
-			frame = window.requestAnimationFrame(() => {
-				frame = null;
-				const root = sheetShellElement ?? document.querySelector<HTMLElement>('.sheet-shell');
-				if (root && root !== observedRoot) {
-					observer.disconnect();
-					observer.observe(root, {
-						childList: true,
-						subtree: true
-					});
-					observedRoot = root;
-				}
-				refreshLocalizedSheetFigures();
-				if (!root) {
-					schedule();
-				}
-			});
-		};
-		schedule();
-		return () => {
-			if (frame !== null) {
-				window.cancelAnimationFrame(frame);
-			}
-			observer.disconnect();
-		};
-	});
-
 	$effect(() => {
 		if (sameRunState(lastSyncedDataRun, data.run)) {
 			return;
@@ -1845,10 +1826,10 @@
 	{/if}
 
 	{#if report && reviewState && reviewSheetDocument}
-		<div bind:this={sheetShellElement} class="sheet-shell">
-			<PaperSheet
-				document={reviewSheetDocument}
-				answers={reviewState.answers}
+			<div bind:this={sheetShellElement} class="sheet-shell" use:localizedFigureEnhancer>
+				<PaperSheet
+					document={reviewSheetDocument}
+					answers={reviewState.answers}
 				review={awaitingAnswersReport ? null : reviewState.review}
 				mode={awaitingAnswersReport ? 'readonly' : 'review'}
 				allowReplies={!awaitingAnswersReport}
@@ -1858,10 +1839,10 @@
 			/>
 		</div>
 	{:else if draft && draftSheetDocument}
-		<div bind:this={sheetShellElement} class="sheet-shell">
-			<PaperSheet
-				document={draftSheetDocument}
-				answers={draftAnswers}
+			<div bind:this={sheetShellElement} class="sheet-shell" use:localizedFigureEnhancer>
+				<PaperSheet
+					document={draftSheetDocument}
+					answers={draftAnswers}
 				mode={canEditDraftSheet() ? 'interactive' : 'readonly'}
 				grading={isDraftGradingInProgress()}
 				footerLabel={sheetFooterLabel}
