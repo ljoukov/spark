@@ -123,7 +123,7 @@ const sparkGraderRunSchema = z.object({
 	completedAt: firestoreTimestampSchema.optional()
 });
 
-type SparkGraderRun = z.infer<typeof sparkGraderRunSchema>;
+export type SparkGraderRun = z.infer<typeof sparkGraderRunSchema>;
 
 function requireServiceAccountJson(): string {
 	const value = env.GOOGLE_SERVICE_ACCOUNT_JSON;

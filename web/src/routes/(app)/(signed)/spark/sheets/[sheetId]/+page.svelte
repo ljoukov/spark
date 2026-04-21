@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import { invalidateAll } from '$app/navigation';
-	import { getFirebaseApp } from '$lib/utils/firebaseClient';
 	import { Sheet as PaperSheet, type SheetDocument } from '@ljoukov/sheet';
 	import type {
 		PaperSheetAnswers,
@@ -10,7 +9,6 @@
 		SparkGraderWorksheetReport,
 		SparkSheetPageState,
 		SparkSolveSheetDraft,
-		SparkSolveSheetAnswers,
 		SparkTutorGuidedPhase,
 		SparkTutorGuidedState,
 		SparkTutorReviewGapBand,
@@ -18,26 +16,16 @@
 	} from '@spark/schemas';
 	import {
 		applyPaperSheetSubjectTheme,
-		SparkGraderRunSchema,
 		SparkSheetPageStateSchema,
-		SparkAgentWorkspaceFileSchema,
-		SparkGraderWorksheetReportSchema,
-		SparkSolveSheetAnswersSchema,
-		SparkSolveSheetDraftSchema,
-		SparkTutorReviewStateSchema,
-		SparkTutorSessionSchema
+		SparkTutorReviewStateSchema
 	} from '@spark/schemas';
-	import { doc, getFirestore, onSnapshot, type Unsubscribe } from 'firebase/firestore';
-	import { getAuth, onIdTokenChanged } from 'firebase/auth';
-	import { getContext, onMount, untrack } from 'svelte';
-	import { fromStore, type Readable } from 'svelte/store';
+	import { onMount, untrack } from 'svelte';
 	import CloseGapResponseModal from '$lib/components/spark/sheets/CloseGapResponseModal.svelte';
 
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
 
-	type ClientUser = NonNullable<PageData['user']> | null;
 	type PaperSheetSection = SheetDocument['sections'][number];
 	type PaperSheetContentSection = Extract<PaperSheetSection, { id: string }>;
 	type PaperSheetQuestionEntry = NonNullable<PaperSheetContentSection['questions']>[number];
@@ -64,10 +52,6 @@
 		guidedState: SparkTutorGuidedState | null;
 	};
 
-	const userStore = getContext<Readable<ClientUser> | undefined>('spark:user');
-	const userSnapshot = userStore ? fromStore(userStore) : null;
-	const user = $derived(userSnapshot?.current ?? data.user ?? null);
-	const userId = $derived(user?.uid ?? null);
 	const initialRun = untrack(() => data.run);
 	const initialDraft = untrack(() => data.draft);
 	const initialDraftAnswers = untrack(() => data.draftAnswers);
@@ -77,7 +61,6 @@
 	);
 	const initialInteractionSessionId = untrack(() => data.interaction?.id ?? null);
 
-	let authReady = $state(false);
 	let run = $state<PageData['run']>(initialRun);
 	let lastSyncedDataRun = $state<PageData['run']>(initialRun);
 	let draft = $state<SparkSolveSheetDraft | null>(initialDraft);
@@ -102,70 +85,10 @@
 	let artifactRefreshAttempts = $state(0);
 	let sheetShellElement = $state<HTMLElement | null>(null);
 
-	const ARTIFACT_REFRESH_MAX_ATTEMPTS = 120;
-	const ARTIFACT_REFRESH_MAX_DELAY_MS = 5000;
+	const ARTIFACT_REFRESH_FAST_DELAY_MS = 5000;
+	const ARTIFACT_REFRESH_STEADY_DELAY_MS = 15000;
+	const ARTIFACT_REFRESH_SLOW_DELAY_MS = 30000;
 	const ARTIFACT_REFRESH_REQUEST_TIMEOUT_MS = 4000;
-
-	function resolveSnapshotSheetPhase(
-		status: PageData['run']['status'],
-		explicitPhase: PageData['run']['sheetPhase'] | undefined
-	): PageData['run']['sheetPhase'] {
-		if (explicitPhase) {
-			return explicitPhase;
-		}
-		if (report) {
-			return 'graded';
-		}
-		if (draft) {
-			return 'solving';
-		}
-		if (status === 'done') {
-			return 'graded';
-		}
-		return 'grading';
-	}
-
-	function encodeWorkspaceFileId(filePath: string): string {
-		return encodeURIComponent(filePath);
-	}
-
-	function parseWorkspaceTextFile(
-		filePath: string,
-		raw: Record<string, unknown> | undefined
-	): string | null {
-		if (!raw) {
-			return null;
-		}
-		const parsed = SparkAgentWorkspaceFileSchema.safeParse({
-			...raw,
-			path: filePath
-		});
-		if (!parsed.success) {
-			return null;
-		}
-		const file = parsed.data;
-		if (!('content' in file) || typeof file.content !== 'string') {
-			return null;
-		}
-		return file.content;
-	}
-
-	function applyWorkspaceJson<T>(
-		filePath: string,
-		raw: Record<string, unknown> | undefined,
-		parse: (value: unknown) => T,
-		apply: (value: T) => void
-	): void {
-		const text = parseWorkspaceTextFile(filePath, raw);
-		if (!text) {
-			return;
-		}
-		try {
-			apply(parse(JSON.parse(text)));
-		} catch {
-			// Ignore transient partial writes.
-		}
-	}
 
 	function isDraftGradingInProgress(): boolean {
 		if (gradingDraft) {
@@ -1109,7 +1032,6 @@
 				signal: controller.signal
 			});
 			if (!response.ok) {
-				await invalidateAll();
 				return;
 			}
 			const payload = SparkSheetPageStateSchema.parse(await response.json());
@@ -1121,11 +1043,36 @@
 			if (!(error instanceof DOMException && error.name === 'AbortError')) {
 				console.warn('Failed to refresh sheet artifacts', error);
 			}
-			await invalidateAll();
 		} finally {
 			clearTimeout(timeout);
 			artifactRefreshInFlight = false;
 		}
+	}
+
+	function shouldPollSheetState(): boolean {
+		if (report !== null) {
+			return false;
+		}
+		if (run.status === 'failed' || run.status === 'stopped') {
+			return false;
+		}
+		if (draft === null) {
+			return true;
+		}
+		return run.sheetPhase === 'grading';
+	}
+
+	function resolveArtifactRefreshDelay(attempts: number): number {
+		if (attempts === 0) {
+			return 0;
+		}
+		if (attempts < 24) {
+			return ARTIFACT_REFRESH_FAST_DELAY_MS;
+		}
+		if (attempts < 96) {
+			return ARTIFACT_REFRESH_STEADY_DELAY_MS;
+		}
+		return ARTIFACT_REFRESH_SLOW_DELAY_MS;
 	}
 
 	function sameRunTotals(
@@ -1503,28 +1450,6 @@
 		if (!browser) {
 			return;
 		}
-		try {
-			const auth = getAuth(getFirebaseApp());
-			if (auth.currentUser) {
-				authReady = true;
-			} else {
-				const stopAuth = onIdTokenChanged(auth, (firebaseUser) => {
-					if (!firebaseUser) {
-						return;
-					}
-					authReady = true;
-					stopAuth();
-				});
-			}
-		} catch (error) {
-			console.warn('Failed to initialize sheet auth guard', error);
-		}
-	});
-
-	onMount(() => {
-		if (!browser) {
-			return;
-		}
 		syncCloseGapFromLocation();
 		window.addEventListener('popstate', syncCloseGapFromLocation);
 		window.addEventListener('hashchange', syncCloseGapFromLocation);
@@ -1595,22 +1520,11 @@
 		if (!browser) {
 			return;
 		}
-		const shouldRefreshPendingArtifacts =
-			report === null &&
-			run.status !== 'failed' &&
-			run.status !== 'stopped' &&
-			(draft === null || run.sheetPhase === 'grading');
-		if (!shouldRefreshPendingArtifacts) {
+		if (!shouldPollSheetState()) {
 			artifactRefreshAttempts = 0;
 			return;
 		}
-		if (artifactRefreshAttempts >= ARTIFACT_REFRESH_MAX_ATTEMPTS) {
-			return;
-		}
-		const delayMs =
-			artifactRefreshAttempts === 0
-				? 0
-				: Math.min(ARTIFACT_REFRESH_MAX_DELAY_MS, artifactRefreshAttempts * 500);
+		const delayMs = resolveArtifactRefreshDelay(artifactRefreshAttempts);
 		const timer = setTimeout(() => {
 			artifactRefreshAttempts += 1;
 			void refreshSheetArtifacts();
@@ -1663,165 +1577,6 @@
 			}
 			observer.disconnect();
 		};
-	});
-
-	$effect(() => {
-		if (!browser || !authReady || !userId) {
-			return;
-		}
-		const db = getFirestore(getFirebaseApp());
-		const uid = userId;
-		const runRef = doc(db, 'spark', uid, 'graderRuns', run.id);
-		return onSnapshot(
-			runRef,
-			(snapshot) => {
-				if (!snapshot.exists()) {
-					return;
-				}
-				const parsed = SparkGraderRunSchema.safeParse({
-					id: run.id,
-					...snapshot.data()
-				});
-				if (!parsed.success) {
-					return;
-				}
-				const nextSheetPhase = resolveSnapshotSheetPhase(
-					parsed.data.status,
-					parsed.data.sheetPhase
-				);
-				run = {
-					...run,
-					status: parsed.data.status,
-					sheetPhase: nextSheetPhase,
-					error: parsed.data.error ?? null,
-					updatedAt: parsed.data.updatedAt.toISOString()
-				};
-				if (parsed.data.status !== 'executing') {
-					gradingDraft = false;
-				}
-				const shouldReloadCompletedBuild =
-					draft === null && report === null && parsed.data.status === 'done';
-				const shouldReloadForReport =
-					report === null && parsed.data.status === 'done' && nextSheetPhase === 'graded';
-				if (shouldReloadCompletedBuild || shouldReloadForReport) {
-					void refreshSheetArtifacts();
-				}
-			},
-			(error) => {
-				console.warn('Sheet run subscription failed', error);
-			}
-		);
-	});
-
-	$effect(() => {
-		if (!browser || !authReady || !userId) {
-			return;
-		}
-		const db = getFirestore(getFirebaseApp());
-		const uid = userId;
-		const workspaceId = run.workspaceId;
-		const stops: Unsubscribe[] = [];
-		const subscribeWorkspaceFile = (
-			filePath: string,
-			apply: (raw: Record<string, unknown> | undefined) => void
-		) => {
-			const fileRef = doc(
-				db,
-				'users',
-				uid,
-				'workspace',
-				workspaceId,
-				'files',
-				encodeWorkspaceFileId(filePath)
-			);
-			stops.push(
-				onSnapshot(
-					fileRef,
-					(snapshot) => {
-						apply(snapshot.exists() ? (snapshot.data() as Record<string, unknown>) : undefined);
-					},
-					(error) => {
-						console.warn(`Sheet artifact subscription failed (${filePath})`, error);
-					}
-				)
-			);
-		};
-		subscribeWorkspaceFile(data.artifactPaths.draft, (raw) => {
-			applyWorkspaceJson(
-				data.artifactPaths.draft,
-				raw,
-				(value) => SparkSolveSheetDraftSchema.parse(value),
-				(value) => {
-					draft = value;
-					if (run.sheetPhase === 'building') {
-						run = {
-							...run,
-							sheetPhase: 'solving'
-						};
-					}
-				}
-			);
-		});
-		subscribeWorkspaceFile(data.artifactPaths.draftAnswers, (raw) => {
-			applyWorkspaceJson(
-				data.artifactPaths.draftAnswers,
-				raw,
-				(value) => SparkSolveSheetAnswersSchema.parse(value),
-				(value: SparkSolveSheetAnswers) => {
-					draftAnswers = value.answers;
-					lastSavedDraftSignature = JSON.stringify(value.answers);
-					draftSaveError = null;
-				}
-			);
-		});
-		subscribeWorkspaceFile(data.artifactPaths.report, (raw) => {
-			applyWorkspaceJson(
-				data.artifactPaths.report,
-				raw,
-				(value) => SparkGraderWorksheetReportSchema.parse(value),
-				(_value) => {
-					if (report === null) {
-						void refreshSheetArtifacts();
-					}
-				}
-			);
-		});
-		return () => {
-			for (const stop of stops) {
-				stop();
-			}
-		};
-	});
-
-	$effect(() => {
-		if (!browser || !authReady || !userId || !interactionSessionId) {
-			return;
-		}
-		const db = getFirestore(getFirebaseApp());
-		const uid = userId;
-		const sessionId = interactionSessionId;
-		const sessionRef = doc(db, 'spark', uid, 'tutorSessions', sessionId);
-		return onSnapshot(
-			sessionRef,
-			(snapshot) => {
-				if (!snapshot.exists()) {
-					return;
-				}
-				const parsed = SparkTutorSessionSchema.safeParse({
-					id: interactionSessionId,
-					...snapshot.data()
-				});
-				if (!parsed.success) {
-					return;
-				}
-				if (parsed.data.reviewState) {
-					reviewState = syncReviewStateWithCurrentReportSheet(parsed.data.reviewState);
-				}
-			},
-			(error) => {
-				console.warn('Sheet tutor session subscription failed', error);
-			}
-		);
 	});
 
 	const awaitingAnswersReport = $derived(report?.review.mode === 'awaiting_answers');

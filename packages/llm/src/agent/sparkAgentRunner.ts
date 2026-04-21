@@ -7689,6 +7689,12 @@ async function patchGraderRunStatus(options: {
   });
 }
 
+function isTransientAgentServiceFailureMessage(message: string): boolean {
+  return /\b(?:ChatGPT Codex request failed \((?:500|502|503|504|529)\)|upstream connect error|disconnect\/reset|connection termination|temporarily unavailable|service unavailable|overloaded|gateway timeout)\b/iu.test(
+    message,
+  );
+}
+
 function resolveTutorSessionDocPath(userId: string, sessionId: string): string {
   return `spark/${userId}/tutorSessions/${sessionId}`;
 }
@@ -19143,6 +19149,81 @@ export async function runSparkAgentTask(
     logSync?.append(`error: ${message}`);
     await workspaceSync?.flushAll().catch(() => undefined);
     await logSync?.flushAll().catch(() => undefined);
+    if (
+      graderRunId &&
+      workspaceRoot &&
+      isTransientAgentServiceFailureMessage(message)
+    ) {
+      try {
+        const publication = await validateGraderWorkspaceForPublish({
+          rootDir: workspaceRoot,
+          summaryPath: graderSummaryPath,
+          sheetPath: graderSheetPath,
+          onWorkspaceFileChanged: (filePath) => {
+            workspaceSync?.scheduleUpdate(filePath);
+          },
+        });
+        await workspaceSync?.flushAll().catch(() => undefined);
+        const now = new Date();
+        const resultSummary = publication.resultSummary;
+        await updateAgentStatus({
+          serviceAccountJson,
+          agentDocPath,
+          status: "done",
+          ...(resultSummary ? { resultSummary } : {}),
+        });
+        let patchedGraderRun = false;
+        await patchGraderRunStatus({
+          serviceAccountJson,
+          userId: options.userId,
+          runId: graderRunId,
+          updates: {
+            status: "done",
+            sheetPhase: "graded",
+            updatedAt: now,
+            completedAt: now,
+            ...(resultSummary ? { resultSummary } : {}),
+            ...(publication.paper ? { paper: publication.paper } : {}),
+            presentation: publication.presentation,
+            totals: publication.totals,
+            sheet: publication.sheet,
+            summaryPath: publication.summaryPath,
+            sheetPath: publication.sheetPath,
+          },
+        });
+        patchedGraderRun = true;
+        if (!disableAutoGapsFinder) {
+          await launchSparkGapsFinderForRun({
+            serviceAccountJson,
+            userId: options.userId,
+            runId: graderRunId,
+            completedAt: now,
+            enqueue: false,
+          }).catch((gapsError) => {
+            logSync?.append(
+              `warn: failed to queue gaps finder after transient recovery: ${errorAsString(gapsError)}`,
+            );
+          });
+        } else {
+          logSync?.append(
+            "info: auto gap finder disabled for transiently recovered grader run",
+          );
+        }
+        if (patchedGraderRun) {
+          agentMetricStatus = "ok";
+          logSync?.append(
+            "recovered: published validated grader artifacts after transient model-service failure",
+          );
+          await logSync?.flushAll().catch(() => undefined);
+          return;
+        }
+      } catch (recoveryError) {
+        logSync?.append(
+          `warn: transient failure recovery skipped: ${errorAsString(recoveryError)}`,
+        );
+        await logSync?.flushAll().catch(() => undefined);
+      }
+    }
     const statusUpdated = await updateAgentStatus({
       serviceAccountJson,
       agentDocPath,

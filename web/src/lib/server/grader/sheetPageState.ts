@@ -18,6 +18,7 @@ import {
 	getGraderRun,
 	getWorkspaceTextFile
 } from '$lib/server/grader/repo';
+import { recoverTransientFailedGraderRunFromArtifacts } from '$lib/server/grader/recovery';
 import {
 	buildInitialTutorReviewState,
 	syncTutorReviewStateWithReport
@@ -258,10 +259,15 @@ export async function loadSparkSheetPageState(options: {
 	userId: string;
 	sheetId: string;
 }): Promise<SparkSheetPageState | null> {
-	const run = await getGraderRun(options.userId, options.sheetId);
-	if (!run) {
+	const initialRun = await getGraderRun(options.userId, options.sheetId);
+	if (!initialRun) {
 		return null;
 	}
+	const recovery = await recoverTransientFailedGraderRunFromArtifacts({
+		userId: options.userId,
+		run: initialRun
+	});
+	const run = recovery.run;
 
 	const reportPath = run.sheet?.filePath ?? run.sheetPath;
 	const artifactRaw = await getWorkspaceTextFile(options.userId, run.workspaceId, reportPath);

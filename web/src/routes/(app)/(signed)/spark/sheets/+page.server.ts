@@ -7,6 +7,7 @@ import {
 } from '$lib/server/grader/problemReport';
 import { listLearningGaps } from '$lib/server/gaps/repo';
 import { buildGraderRunDisplay } from '$lib/server/grader/presentation';
+import { recoverTransientFailedGraderRunFromArtifacts } from '$lib/server/grader/recovery';
 import { getWorkspaceTextFile, listGraderRuns } from '$lib/server/grader/repo';
 import { getSheetRunAnalyses } from '$lib/server/grader/sheetRunAnalysisRepo';
 import {
@@ -66,6 +67,11 @@ async function loadSheetDashboard(userId: string) {
 	const analysisByRunId = new Map(runAnalyses.map((analysis) => [analysis.runId, analysis]));
 	const sheets = await Promise.all(
 		runs.map(async (run) => {
+			const recovery = await recoverTransientFailedGraderRunFromArtifacts({
+				userId,
+				run
+			});
+			run = recovery.run;
 			const reportPath = run.sheet?.filePath ?? run.sheetPath;
 			const artifactRaw = await getWorkspaceTextFile(userId, run.workspaceId, reportPath);
 			const report = artifactRaw ? safeParseGraderWorksheetReport(artifactRaw) : null;
