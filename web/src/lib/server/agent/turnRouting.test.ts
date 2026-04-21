@@ -81,6 +81,27 @@ describe('resolveForcedSparkChatToolForTurn', () => {
 		).toBe('create_grader');
 	});
 
+	it('does not force grading for model-answer requests that mention mark schemes or full marks', () => {
+		expect(
+			resolveForcedSparkChatToolForTurn({
+				text: 'Please give modal answers to these questions using mark scheme, please make them as short as possible but full marks',
+				hasAttachmentContext: true
+			})
+		).toBeNull();
+		expect(
+			resolveForcedSparkChatToolForTurn({
+				text: "No I didn't want you to mark, I want you to give model answers using papers and mark schemes, as short as possible and full marks.",
+				hasAttachmentContext: true
+			})
+		).toBeNull();
+		expect(
+			resolveForcedSparkChatToolForTurn({
+				text: 'Please give a full-mark answer key for the uploaded paper.',
+				hasAttachmentContext: true
+			})
+		).toBeNull();
+	});
+
 	it('does not force routing without attachment context or explicit action phrasing', () => {
 		expect(
 			resolveForcedSparkChatToolForTurn({

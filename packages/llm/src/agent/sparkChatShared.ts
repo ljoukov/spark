@@ -240,6 +240,8 @@ export const SPARK_CHAT_CREATE_GRADER_TOOL_DESCRIPTION = [
   "Creates a grader workspace, seeds grader/task.md, and launches a background agent.",
   "Use this when the learner asks to mark or grade uploaded answers, submissions, scripts, or related reference documents.",
   "If the current user turn clearly asks to grade uploaded work, call this tool instead of answering with grading feedback directly in chat.",
+  "Do not use this tool for requests to produce model answers, full-mark answers, answer keys, worked solutions, or short mark-scheme-based answers unless the learner explicitly asks to grade submitted/student work.",
+  "Do not treat the noun phrase \"mark scheme\" or \"full marks\" as a grading request by itself.",
   "Uploads can include student handwriting, problem statements, answer booklets, rubrics, and optional official solutions/mark schemes.",
   "Set referenceSourcePolicy based on learner instructions: use allow-official-references by default so official answer keys/mark schemes can be checked for identified public papers; use uploaded-only only when the learner explicitly forbids online lookup.",
   "When uploads include a printed question sheet or exam page, the grader must preserve original numbering, shared stems, tables, MCQ structure, and essential figures instead of flattening them into prose or synthetic per-question sections.",

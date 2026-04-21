@@ -21,7 +21,9 @@ const worksheetSolveableConversionPattern =
 	/\b(turn|convert|make|create|build|generate|prepare|produce)\b[\s\S]{0,100}\b(attached|uploaded|upload|pdf|document|material|file|paper|this|that)\b[\s\S]{0,60}\b(into|to)\b[\s\S]{0,60}\b(something (i|we|students?) can solve|practice questions?|questions? to solve|problems? to solve|practice paper|worksheet)\b/;
 const worksheetReuseUploadPattern =
 	/\buse\b[\s\S]{0,40}\b(this|that|the)?\b[\s\S]{0,40}\b(attached|uploaded|upload|pdf|document|material|file|paper)\b[\s\S]{0,60}\b(as|for)\b[\s\S]{0,40}\b(a )?(worksheet|sheet|practice paper|question sheet)\b/;
-const graderVerbPattern = /\b(grade|mark|remark|assess|check)\b/;
+const modelAnswerRequestPattern =
+	/\b(?:model|modal|sample|exemplar|full[-\s]?marks?|mark[-\s]?scheme[-\s]?based)\s+answers?\b|\banswer\s+key\b|\bworked\s+solutions?\b/;
+const graderVerbPattern = /\b(grade|remark|assess|check)\b|\bmark\b(?!\s+schemes?\b)/;
 const graderObjectPattern =
 	/\b(work|worksheet|sheet|submission|answer|answers|solution|solutions|paper|script|attempt|attempts)\b/;
 
@@ -34,6 +36,9 @@ export function resolveForcedSparkChatToolForTurn(options: {
 	}
 	const normalized = normalizeTurnText(options.text);
 	if (normalized.length === 0) {
+		return null;
+	}
+	if (modelAnswerRequestPattern.test(normalized)) {
 		return null;
 	}
 	if (graderVerbPattern.test(normalized) && graderObjectPattern.test(normalized)) {

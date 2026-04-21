@@ -27,6 +27,13 @@ describe('spark chat system prompt', () => {
 		expect(sparkChatSystemPrompt).toContain('call create_grader immediately in that same response');
 	});
 
+	it('does not route model-answer requests to grading', () => {
+		expect(sparkChatSystemPrompt).toContain(
+			'Requests for model answers, full-mark answers, answer keys, worked solutions'
+		);
+		expect(sparkChatSystemPrompt).toContain('Do not treat the noun phrase "mark scheme"');
+	});
+
 	it('allows official grading references unless the learner forbids online lookup', () => {
 		expect(sparkChatSystemPrompt).toContain('referenceSourcePolicy="allow-official-references"');
 		expect(sparkChatSystemPrompt).toContain('explicitly says not to search online');
