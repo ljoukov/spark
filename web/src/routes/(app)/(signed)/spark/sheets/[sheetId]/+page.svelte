@@ -201,6 +201,8 @@
 		top: number;
 		right: number;
 		bottom: number;
+		sourceWidth: number | null;
+		sourceHeight: number | null;
 	};
 
 	function parseSheetImageViewport(image: HTMLImageElement): SheetImageViewport | null {
@@ -241,7 +243,21 @@
 		) {
 			return null;
 		}
-		return { left, top, right, bottom };
+		const rawSourceSize = params.get('spark-source-size');
+		const sourceSizeValues = rawSourceSize
+			? rawSourceSize
+					.split(',')
+					.map((part) => Number.parseFloat(part.trim()))
+					.filter((value) => Number.isFinite(value) && value > 0)
+			: [];
+		return {
+			left,
+			top,
+			right,
+			bottom,
+			sourceWidth: sourceSizeValues[0] ?? null,
+			sourceHeight: sourceSizeValues[1] ?? null
+		};
 	}
 
 	function ensureLocalizedFigureViewport(image: HTMLImageElement): HTMLElement {
@@ -266,10 +282,23 @@
 		if (sourceWidth <= 0 || sourceHeight <= 0) {
 			return;
 		}
-		const left = Math.max(0, Math.min(sourceWidth - 1, box.left));
-		const top = Math.max(0, Math.min(sourceHeight - 1, box.top));
-		const right = Math.max(left + 1, Math.min(sourceWidth, box.right));
-		const bottom = Math.max(top + 1, Math.min(sourceHeight, box.bottom));
+		const scaleX = box.sourceWidth ? sourceWidth / box.sourceWidth : 1;
+		const scaleY = box.sourceHeight ? sourceHeight / box.sourceHeight : 1;
+		const scaledBox = {
+			left: box.left * scaleX,
+			top: box.top * scaleY,
+			right: box.right * scaleX,
+			bottom: box.bottom * scaleY
+		};
+		const isOutOfBounds =
+			scaledBox.left < 0 ||
+			scaledBox.top < 0 ||
+			scaledBox.right > sourceWidth ||
+			scaledBox.bottom > sourceHeight;
+		const left = isOutOfBounds ? 0 : scaledBox.left;
+		const top = isOutOfBounds ? 0 : scaledBox.top;
+		const right = isOutOfBounds ? sourceWidth : scaledBox.right;
+		const bottom = isOutOfBounds ? sourceHeight : scaledBox.bottom;
 		const width = right - left;
 		const height = bottom - top;
 		const displayWidth = Math.min(780, Math.max(260, width));
@@ -277,9 +306,14 @@
 		viewport.style.aspectRatio = `${width} / ${height}`;
 		viewport.style.setProperty('--sheet-localized-figure-width', `${displayWidth}px`);
 		image.style.width = `${(sourceWidth / width) * 100}%`;
-		image.style.height = `${(sourceHeight / height) * 100}%`;
-		image.style.left = `${-(left / width) * 100}%`;
-		image.style.top = `${-(top / height) * 100}%`;
+		image.style.height = 'auto';
+		image.style.left = '0';
+		image.style.top = '0';
+		image.style.setProperty(
+			'--sheet-localized-figure-transform',
+			`translate(${-(left / sourceWidth) * 100}%, ${-(top / sourceHeight) * 100}%)`
+		);
+		image.style.transform = 'var(--sheet-localized-figure-transform)';
 	}
 
 	function enhanceLocalizedSheetFigures(root: HTMLElement): void {
@@ -1988,6 +2022,8 @@
 		position: absolute;
 		display: block;
 		max-width: none;
+		max-height: none;
+		object-fit: initial;
 		inset: auto auto auto auto;
 	}
 
@@ -2003,7 +2039,7 @@
 			.paper-sheet-localized-figure__viewport
 			.markdown-figure__image
 	) {
-		transform: none;
+		transform: var(--sheet-localized-figure-transform, none);
 	}
 
 	:global([data-theme='dark'] .sheet-shell .paper-sheet__header),
@@ -2262,6 +2298,12 @@
 		display: block;
 		max-height: min(70vh, 760px);
 		object-fit: contain;
+	}
+
+	.sheet-shell
+		:global(.markdown-content .paper-sheet-localized-figure__viewport .markdown-figure__image) {
+		max-height: none;
+		object-fit: initial;
 	}
 
 	.sheet-shell :global(.markdown-content .markdown-figure__caption) {
