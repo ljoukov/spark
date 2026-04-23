@@ -68,11 +68,16 @@ function buildGraderTaskWithDraftContext(): string {
 	return [
 		renderSparkGraderTask(graderTaskTemplate).trim(),
 		'',
-		'## Existing worksheet draft (must follow)',
+		'## Digital worksheet-answer grading (must follow)',
+		'- This is `sheet-answer-grading`, not handwritten/source transcription.',
 		'- Read `sheet/output/draft.json` before you build the final graded worksheet.',
-		'- Preserve that worksheet structure, numbering, tables, cloze blanks, and flow-chart layout unless a validation error forces a minimal repair.',
 		'- Read `sheet/state/answers.json` and use those recorded answers as the student submission.',
-		'- Keep the final graded worksheet aligned to the draft sheet the student saw.'
+		'- Do not transcribe, OCR, crop, render source pages, or run a source-fidelity audit just to capture the student answers; the answers are already digital.',
+		'- Preserve the draft worksheet structure, numbering, marks, tables, cloze blanks, and flow-chart layout exactly unless a validation error forces a minimal schema repair.',
+		'- For `mcq` answers, grade the selected option id. For `answer_bank`, `fill`, `cloze`, `match`, `spelling`, and `flow`, grade the saved object values. For `lines` and `calc`, grade the saved string value.',
+		'- Use draft `references.officialSolutionMarkdown` or `references.gradingMarkdown` as the answer key when present. If no key exists, solve from the visible draft prompt at the stated student level.',
+		'- Write `grader/output/sheet.json` and `grader/output/run-summary.json`, then call `validate_grader_artifacts({"requireSourceFidelityAudit": false})` and `publish_sheet({})`.',
+		'- `grader/output/transcription.md` is not required for this digital-answer path.'
 	]
 		.join('\n')
 		.trim()
@@ -205,7 +210,9 @@ export const POST: RequestHandler = async ({ request, params }) => {
 		const seedEmptyUploadManifest = uploadsRaw === null;
 		const agentId = randomUUID();
 		const input = {
-			referenceSourcePolicy: 'allow-official-references' as const,
+			referenceSourcePolicy: gradeFromDraft
+				? ('uploaded-only' as const)
+				: ('allow-official-references' as const),
 			...(sourcePaperOnlyNoStudent
 				? {
 						sourcePaperOnlyNoStudent: true,
@@ -214,7 +221,7 @@ export const POST: RequestHandler = async ({ request, params }) => {
 					}
 				: {
 						notes: gradeFromDraft
-							? 'The worksheet draft already exists in sheet/output/draft.json and the recorded answers are in sheet/state/answers.json. Preserve that student-facing structure when building the graded sheet.'
+							? 'Digital-answer grading: the worksheet draft already exists in sheet/output/draft.json and the recorded answers are in sheet/state/answers.json. Do not transcribe or OCR student answers; preserve the draft structure and grade the saved answer values.'
 							: 'Rerun the grader for the existing worksheet using the original uploaded material and linked workspace artifacts.'
 					})
 		};

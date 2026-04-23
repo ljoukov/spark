@@ -80,11 +80,16 @@
 	let lastSavedGuidedStateSignatures = $state<Record<string, string>>({});
 	let suppressNextUrlPhaseUpdate = $state(false);
 	let draftSaveTimer = $state<ReturnType<typeof setTimeout> | null>(null);
+	let pendingDraftAnswers = $state<PaperSheetAnswers | null>(null);
+	let pendingDraftSignature = $state<string | null>(null);
 	let lastSavedDraftSignature = $state(JSON.stringify(initialDraftAnswers));
 	let artifactRefreshInFlight = $state(false);
 	let artifactRefreshAttempts = $state(0);
 	let sheetShellElement = $state<HTMLElement | null>(null);
+	let draftSaveInFlight: Promise<boolean> | null = null;
 
+	const DRAFT_AUTOSAVE_DELAY_MS = 10_000;
+	const DRAFT_AUTOSAVE_RETRY_DELAY_MS = 10_000;
 	const ARTIFACT_REFRESH_FAST_DELAY_MS = 5000;
 	const ARTIFACT_REFRESH_STEADY_DELAY_MS = 15000;
 	const ARTIFACT_REFRESH_SLOW_DELAY_MS = 30000;
@@ -999,6 +1004,12 @@
 		}
 		draftAnswers = next.draftAnswers;
 		lastSavedDraftSignature = JSON.stringify(next.draftAnswers);
+		pendingDraftAnswers = null;
+		pendingDraftSignature = null;
+		if (draftSaveTimer) {
+			clearTimeout(draftSaveTimer);
+			draftSaveTimer = null;
+		}
 		draftSaveError = null;
 		if (next.report) {
 			report = next.report;
@@ -1116,9 +1127,26 @@
 		);
 	}
 
+	function clearDraftSaveTimer(): void {
+		if (!draftSaveTimer) {
+			return;
+		}
+		clearTimeout(draftSaveTimer);
+		draftSaveTimer = null;
+	}
+
+	function hasPendingDraftSave(): boolean {
+		return Boolean(
+			pendingDraftAnswers &&
+				pendingDraftSignature &&
+				pendingDraftSignature !== lastSavedDraftSignature
+		);
+	}
+
 	async function persistDraftAnswers(
 		answers: PaperSheetAnswers,
-		signature: string
+		signature: string,
+		options: { keepalive?: boolean } = {}
 	): Promise<boolean> {
 		draftAnswers = answers;
 		if (signature === lastSavedDraftSignature) {
@@ -1133,7 +1161,8 @@
 				headers: {
 					'content-type': 'application/json'
 				},
-				body: JSON.stringify({ answers })
+				body: JSON.stringify({ answers }),
+				keepalive: options.keepalive === true
 			});
 			const payload = (await response.json().catch(() => null)) as {
 				error?: string;
@@ -1147,6 +1176,10 @@
 				return false;
 			}
 			lastSavedDraftSignature = signature;
+			if (pendingDraftSignature === signature) {
+				pendingDraftAnswers = null;
+				pendingDraftSignature = null;
+			}
 			return true;
 		} catch {
 			draftSaveError = 'Unable to save your worksheet answers.';
@@ -1156,27 +1189,86 @@
 		}
 	}
 
+	function scheduleDraftSave(delayMs = DRAFT_AUTOSAVE_DELAY_MS): void {
+		if (draftSaveTimer) {
+			return;
+		}
+		draftSaveTimer = setTimeout(() => {
+			draftSaveTimer = null;
+			void flushPendingDraftSave();
+		}, delayMs);
+	}
+
 	function queueDraftSave(answers: PaperSheetAnswers): void {
 		draftAnswers = answers;
 		const signature = JSON.stringify(answers);
-		if (draftSaveTimer) {
-			clearTimeout(draftSaveTimer);
+		if (signature === lastSavedDraftSignature) {
+			pendingDraftAnswers = null;
+			pendingDraftSignature = null;
+			draftSaveError = null;
+			clearDraftSaveTimer();
+			return;
 		}
-		draftSaveTimer = setTimeout(() => {
-			void persistDraftAnswers(answers, signature);
-		}, 500);
+		pendingDraftAnswers = answers;
+		pendingDraftSignature = signature;
+		scheduleDraftSave();
+	}
+
+	async function runSerializedDraftSave(
+		answers: PaperSheetAnswers,
+		signature: string,
+		options: { keepalive?: boolean } = {}
+	): Promise<boolean> {
+		if (draftSaveInFlight) {
+			await draftSaveInFlight;
+			if (signature === lastSavedDraftSignature) {
+				return true;
+			}
+		}
+		const save = persistDraftAnswers(answers, signature, options);
+		draftSaveInFlight = save;
+		try {
+			return await save;
+		} finally {
+			if (draftSaveInFlight === save) {
+				draftSaveInFlight = null;
+			}
+		}
+	}
+
+	async function flushPendingDraftSave(
+		options: { keepalive?: boolean; retryOnFailure?: boolean } = {}
+	): Promise<boolean> {
+		clearDraftSaveTimer();
+		if (!hasPendingDraftSave() || !pendingDraftAnswers || !pendingDraftSignature) {
+			return true;
+		}
+
+		const answers = pendingDraftAnswers;
+		const signature = pendingDraftSignature;
+		const saved = await runSerializedDraftSave(answers, signature, {
+			keepalive: options.keepalive
+		});
+		if (!saved) {
+			if (options.retryOnFailure !== false) {
+				scheduleDraftSave(DRAFT_AUTOSAVE_RETRY_DELAY_MS);
+			}
+			return false;
+		}
+		if (pendingDraftSignature && pendingDraftSignature !== lastSavedDraftSignature) {
+			return flushPendingDraftSave(options);
+		}
+		return true;
 	}
 
 	async function submitSheetForGrading(answers: PaperSheetAnswers): Promise<boolean> {
 		if (!draft) {
 			return false;
 		}
-		if (draftSaveTimer) {
-			clearTimeout(draftSaveTimer);
-			draftSaveTimer = null;
-		}
 		const signature = JSON.stringify(answers);
-		const saved = await persistDraftAnswers(answers, signature);
+		pendingDraftAnswers = answers;
+		pendingDraftSignature = signature;
+		const saved = await flushPendingDraftSave();
 		if (!saved) {
 			return false;
 		}
@@ -1214,6 +1306,22 @@
 			requestError = 'Unable to start grading for this sheet.';
 			gradingDraft = false;
 			return false;
+		}
+	}
+
+	function flushDraftAnswersForPageExit(): void {
+		if (!hasPendingDraftSave()) {
+			return;
+		}
+		void flushPendingDraftSave({
+			keepalive: true,
+			retryOnFailure: false
+		});
+	}
+
+	function handleDocumentVisibilityChange(): void {
+		if (document.visibilityState === 'hidden') {
+			flushDraftAnswersForPageExit();
 		}
 	}
 
@@ -1453,9 +1561,18 @@
 		syncCloseGapFromLocation();
 		window.addEventListener('popstate', syncCloseGapFromLocation);
 		window.addEventListener('hashchange', syncCloseGapFromLocation);
+		window.addEventListener('blur', flushDraftAnswersForPageExit);
+		window.addEventListener('pagehide', flushDraftAnswersForPageExit);
+		window.addEventListener('beforeunload', flushDraftAnswersForPageExit);
+		document.addEventListener('visibilitychange', handleDocumentVisibilityChange);
 		return () => {
+			flushDraftAnswersForPageExit();
 			window.removeEventListener('popstate', syncCloseGapFromLocation);
 			window.removeEventListener('hashchange', syncCloseGapFromLocation);
+			window.removeEventListener('blur', flushDraftAnswersForPageExit);
+			window.removeEventListener('pagehide', flushDraftAnswersForPageExit);
+			window.removeEventListener('beforeunload', flushDraftAnswersForPageExit);
+			document.removeEventListener('visibilitychange', handleDocumentVisibilityChange);
 		};
 	});
 
@@ -1576,6 +1693,22 @@
 				window.cancelAnimationFrame(frame);
 			}
 			observer.disconnect();
+		};
+	});
+
+	$effect(() => {
+		if (!browser || !sheetShellElement || !draft) {
+			return;
+		}
+		const root = sheetShellElement;
+		const handleFocusOut = (event: FocusEvent) => {
+			if (event.target instanceof Node && root.contains(event.target)) {
+				void flushPendingDraftSave();
+			}
+		};
+		root.addEventListener('focusout', handleFocusOut);
+		return () => {
+			root.removeEventListener('focusout', handleFocusOut);
 		};
 	});
 

@@ -74,8 +74,12 @@ When grading starts from a generated draft sheet:
 
 - read `sheet/output/draft.json` before building the final graded worksheet,
 - read `sheet/state/answers.json` and use those recorded answers as the student submission,
+- do not use OCR, transcription, source rendering, cropping, or source-fidelity audit to capture answers because the student answers are already digital,
 - preserve the student-facing sheet structure, numbering, tables, cloze blanks, and flow-chart layout unless a validation error forces a minimal repair,
-- keep the final graded worksheet aligned to the sheet the student saw.
+- keep the final graded worksheet aligned to the sheet the student saw,
+- treat `mcq` values as option ids, object-valued question answers as keyed blank/field values, and `lines`/`calc` answers as strings,
+- use draft `references.officialSolutionMarkdown` or `references.gradingMarkdown` as the answer key when present; otherwise solve from the visible draft prompt at the stated student level,
+- write the full graded worksheet report, validate with `validate_grader_artifacts({"requireSourceFidelityAudit": false})`, then publish.
 
 ## Source-Paper-Only Mode
 

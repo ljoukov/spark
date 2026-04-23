@@ -25,19 +25,32 @@ Classify before expensive work:
 - `sheet-answer-grading`: generated sheet and answers. Preserve structure and grade recorded answers.
 - `source-paper-only`: no answers. Produce an unanswered sheet.
 
+## Sheet Answer Grading Workflow
+
+Use this path for `sheet-answer-grading`, when the workspace contains `sheet/output/draft.json` and `sheet/state/answers.json`.
+
+1. Read `sheet/output/draft.json` and `sheet/state/answers.json` directly with workspace file tools. Do not use OCR, transcription, source rendering, cropping, or source-fidelity audit to capture the student's answers.
+2. Preserve the draft `sheet` structure exactly: ids, numbering, marks, tables, cloze blanks, flow layout, options, and sections. Make only minimal schema repairs if validation names a blocker.
+3. Treat saved answer values as the submission: `mcq` values are option ids; `answer_bank`, `fill`, `cloze`, `match`, `spelling`, and `flow` values are keyed objects; `lines` and `calc` values are strings. Blank or missing values are blank answers, not inferred selections.
+4. Use `references.officialSolutionMarkdown` or `references.gradingMarkdown` from the draft as the answer key when present. If no key exists, solve from the visible draft prompt at the stated student level.
+5. Write `grader/output/sheet.json` as the full graded worksheet report, with the draft sheet copied into `sheet`, saved answers copied into top-level `answers`, and scored `review.questions` for every answer-bearing leaf. Write `grader/output/run-summary.json` if the sheet write does not derive it.
+6. The next non-repair tool call after writing valid JSON must be `validate_grader_artifacts({"requireSourceFidelityAudit": false})`, then `publish_sheet({})`.
+7. `grader/output/transcription.md`, `grader/output/sheet-plan.md`, crop validation, scoring helpers, and source-fidelity audits are not required for this digital-answer path unless validation reports a specific source-reconstruction blocker.
+
 ## Required Workflow
 
+For `handwritten-grading` and `source-paper-only` runs that need source reconstruction:
+
 1. Inventory uploads and assign roles: student, source, scheme, or context.
-2. For text-selectable source papers/schemes, run `extract_pdf_reference_text` once, then grep/read targeted lines. Use `extract_text` only for visual/non-text pages.
-3. Run one primary `extract_text` pass for remaining transcription targets. Write `grader/output/transcription.md`. Include `## Source problem-statement transcription` with assessed stems, context, labels, figures/tables, formulas, and marks. Do not make an only-visibly-answered list or flatten visual options into prose. Preserve command words exactly: if the paper says `Explain the results.`, do not rewrite it as `Describe and explain the results.`
-4. If online references are allowed and required official solutions/schemes are missing, make a bounded official-source lookup. Do not look up examiner reports or grade thresholds unless asked.
-5. Build `grader/output/sheet-plan.md` before a large sheet or crop refinement. Source transcription must be verbatim, not an audit, visible-answered list, crop plan, or placeholder. List leaves, ids, marks, totals, scoring batches, exclusions, and each named figure/table/layout with handling. Plan guarded `grader/output/assets/...` crops for every included visual block, or record a real failed crop attempt. If included leaf lines name a figure/table, include it even when scoring does not need it. Self-check totals/leaves.
-6. Once `transcription.md`, refs, and `sheet-plan.md` exist, stop broad reading/searching and assemble. Use targeted reads only for a named missing item or publish error.
-7. For handwritten papers >12 leaves or >30 marks, call `score_answers_with_fresh_agent` after the minimal sheet plan. Use 2-4 contiguous root/range batches in one parallel turn. Use returned question/modelAnswer results directly, preserving `teacher-review`. After scoring, create missing PDF-source final crops at `sheet-plan.md` paths and matching full-page JPEG click targets under `grader/output/source-pages/...`; batch crop/pad calls in parallel. For uploaded photos/scans, use one JPEG source image with `#spark-bbox=left,top,right,bottom` viewport links instead of creating repeated crop files; measure bbox coordinates on the EXIF-oriented JPEG resized to fit within 1500px on each side. Never link `grader/output/pdf-images/...`, never publish SVG, and do not make intermediate assets. Then write JSON. Do not hand-score. Do not reread every scoring file. Put each figure/table in the exact prompt, never `section.theory`; no source bridge text or figure/table labels as group `displayNumber`s.
-8. Write `grader/output/sheet.json` with `write_json_workspace_file` after scoring. Pass complete `jsonText`; never pass `{}`. MCQs need displayMode `"full_options"` or `"labels_only"`. A valid sheet write may derive `grader/output/run-summary.json`. The next non-repair tool call must be `validate_grader_artifacts({"requireSourceFidelityAudit": false})`; if validation reports a missing summary, write it and validate again. Preserve returned scores/statuses. Fix named blockers, record linked-crop validation, and omit optional enrichment.
-9. Call `validate_grader_artifacts({"requireSourceFidelityAudit": false})`. Fix invalid JSON/schema/score/crop/scoring-helper issues before any source-fidelity audit.
-10. Before publishing source/PDF/photo sheets, call `validate_source_fidelity_with_fresh_agent`; split long material by source page or root question and pass refs plus rendered pages in `sourcePaths`. Check only transfer: verbatim text, visible items, numbering/badges, figures/tables/layouts, and answer evidence.
-11. Call `publish_sheet({})`. Repair coherent validation errors; do not repeat a failed branch. Call `review_run_progress_with_fresh_agent` when repeated tool loops suggest the run is off-track.
+2. Extract reference text first for text-selectable source papers/schemes; use `extract_text` only for student work or visual/non-text pages that need OCR.
+3. Write `grader/output/transcription.md`, including a verbatim `## Source problem-statement transcription` when grading against source material. Preserve command words and visible figure/table/formula references.
+4. If allowed and needed, make a bounded official-source lookup; do not look up examiner reports, grade thresholds, or enrichment unless asked.
+5. For large or visual source work, build `grader/output/sheet-plan.md` before crop refinement or scoring. List leaves, ids, marks, totals, scoring batches, exclusions, and every named figure/table/layout with final handling. Self-check totals/leaves.
+6. For handwritten papers >12 leaves or >30 marks, call `score_answers_with_fresh_agent` after the minimal plan in 2-4 contiguous root/range batches. Use returned question/modelAnswer results directly, preserving `teacher-review`. Do not hand-score. Do not reread every scoring file.
+7. Create only missing final guarded crops/source-page click targets named in the plan. Never link `grader/output/pdf-images/...`, never publish SVG, and put each figure/table in the exact prompt, never `section.theory`.
+8. Write `grader/output/sheet.json` with complete `jsonText`; never pass `{}`. A valid write may derive `grader/output/run-summary.json`. The next non-repair tool call must be `validate_grader_artifacts({"requireSourceFidelityAudit": false})`; if validation reports a missing summary, write it and validate again. Preserve returned scores/statuses. Fix named blockers, record linked-crop validation, and omit optional enrichment.
+9. Before publishing source/PDF/photo sheets, call `validate_source_fidelity_with_fresh_agent`; split long material by source page or root question and pass refs plus rendered pages in `sourcePaths`.
+10. Call `publish_sheet({})`. Repair coherent validation errors; do not repeat a failed branch. Call `review_run_progress_with_fresh_agent` when repeated tool loops suggest the run is off-track.
 
 ## Output Contract
 
@@ -67,8 +80,7 @@ If you include `year`, write it as a string such as `"2024"`.
 - `answers` contains one captured value per answer-bearing leaf; answers belong only in the top-level `answers` object,
 - `review` contains `mode`, `score`, `label`, `message`, `note`, and `questions`,
 - completed grading uses `review.mode: "graded"`; unanswered sheets use `"awaiting_answers"`,
-- scores use `{ "got": number, "total": number }`; each `review.questions[id]` uses `status`, `score`, `note`, optional `replyPlaceholder`, and optional `modelAnswer` for unresolved/incorrect items when a concise mark-scheme answer is available,
-- use `group` only for real multipart source questions; for decimal labels like `01.1` inside `Question 1`, put plain root text in `section.theory` only when it has no figures/tables/crops; otherwise put the shared stem plus artifact in the first source-faithful prompt and render leaves with short `badgeLabel`s,
+- scores use `{ "got": number, "total": number }`; each `review.questions[id]` uses `status`, `score`, `note`, optional `replyPlaceholder`, and optional `modelAnswer`,
 - every answer-bearing source item must have an answer value and review entry; every scored review entry must include `status` and `score`,
 - use `status: "correct"` only for full marks; use `"incorrect"` for partial, blank, or unresolved answers,
 - `score.total` must equal the leaf `marks` so the UI can render `[got/total mark(s)]`; do not add review entries for parent `group` ids,
@@ -85,8 +97,8 @@ If you include `year`, write it as a string such as `"2024"`.
 - Write grader JSON with `write_json_workspace_file`; `jsonText` must be valid JSON, so escape LaTeX backslashes or use Unicode/plain Markdown. Do not flatten displayed formulas, sign rows, arrays, matrices, or grids.
 - After a large extracted reference returns only an outline or `content omitted`, use grep or exact line ranges.
 - Generic subagents may be used only for bounded lookup/verification or visual localization; pre-publish source-fidelity audits must use `validate_source_fidelity_with_fresh_agent`. Reviewers compare source with `sheet-plan.md`/`sheet.json` and must not grade, solve, or assemble. Use `validate_crop_with_fresh_agent` for final crop validation.
-- Before downloading official PDFs found online, check `knowledge-base/index.md` and call `kb_search_pdfs`; use `kb_download_pdf` for matches or `kb_cache_pdf_from_url` for misses. Carry `storagePath` into worksheet references.
-- For source PDFs/photos with figures/diagrams, use real source pixels. Do not publish SVG. Use LaTeX only for simple horizontal/vertical grids, boxed arrays, and text/number layouts; for angles, geometry, 3D, graphs, charts, maps, photos, apparatus, and other complex visuals, use a source-backed image. For PDFs, display a guarded crop and link it to a full rendered source-page JPEG. For uploaded photos/scans, reuse one JPEG source image with a `#spark-bbox=left,top,right,bottom` viewport measured on the 1500px-normalized displayed JPEG and at most two simple `view_image` checks; do not run the PDF-style crop-refinement loop. Do not use linked-PDF fallback unless source pixels/table text are unavailable after a recorded attempt.
+- Before downloading official PDFs found online, check `knowledge-base/index.md` and call `kb_search_pdfs`; use `kb_download_pdf` for matches or `kb_cache_pdf_from_url` for misses.
+- For source PDFs/photos with figures/diagrams, use real source pixels. Do not publish SVG. For PDFs, display a guarded crop and link it to a full rendered source-page JPEG. For uploaded photos/scans, reuse one 1500px-normalized JPEG source image with a `#spark-bbox=left,top,right,bottom` viewport.
 - `grader/output/transcription.md` must not contain "not yet copied", "TBD", or "TODO" placeholders in source problem statements.
 - Validate final linked visuals only; `expectedContent` is printed/visible source content, not inferred answers/unprinted labels. Render text/numeric tables/formulas as Markdown/LaTeX instead of crop-chasing. After one failed crop correction for the same visual, switch representation or call `review_run_progress_with_fresh_agent`.
 - In handwritten-grading mode, compact does not mean paraphrased. Preserve the exact printed wording for answered source items, and render source tables/figures visibly when the question text names them.
