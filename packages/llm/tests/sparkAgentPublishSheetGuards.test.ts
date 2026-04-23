@@ -4035,6 +4035,141 @@ describe("Spark agent tool: publish_sheet guards", () => {
     });
   });
 
+  it("rejects handwritten grading reports that summarize submitted answers", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "Hamilton Olympiad 2026",
+        awardedMarks: 3,
+        maxMarks: 10,
+        subtitle: "Question 1 checked against the official paper.",
+        summaryMarkdown:
+          "The proof has a promising start but needs a complete case check.",
+        footer: "Official paper and student submission",
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Mathematics",
+            level: "Olympiad",
+            title: "Hamilton Olympiad 2026",
+            subtitle: "Question 1",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "q1-section",
+                label: "Question 1",
+                questions: [
+                  {
+                    id: "q1",
+                    type: "lines",
+                    displayNumber: "1",
+                    marks: 10,
+                    prompt: "Find, with proof, the required integer.",
+                    lines: 6,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q1: "Part (a): the student works mainly on 2027 using case splits, rules out some forms, and leaves the proof unfinished.",
+          },
+          review: {
+            score: {
+              got: 3,
+              total: 10,
+            },
+            label: "3/10",
+            message: "A start on the proof, but not complete.",
+            note: "",
+            questions: {
+              q1: {
+                status: "incorrect",
+                score: {
+                  got: 3,
+                  total: 10,
+                },
+                note: "Keep the case split, but finish every possible form.",
+              },
+            },
+          },
+        },
+      });
+      await writeFile(
+        path.join(rootDir, "request.json"),
+        JSON.stringify(
+          {
+            createdAt: new Date(0).toISOString(),
+            sourceText:
+              "Please grade my handwritten work against the uploaded paper and mark scheme.",
+            input: {},
+            attachments: [
+              {
+                id: "student-page",
+                contentType: "image/png",
+                sizeBytes: 100,
+                filename: "student-page.png",
+              },
+              {
+                id: "source-paper",
+                contentType: "application/pdf",
+                sizeBytes: 1000,
+                filename: "source-paper.pdf",
+              },
+            ],
+          },
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+      await writeSourceProblemStatementTranscription(
+        rootDir,
+        [
+          "# Transcription",
+          "",
+          "## Student answer transcription",
+          "",
+          "**Question 1** The visible handwritten proof is transcribed here.",
+          "",
+          "## Source problem-statement transcription",
+          "",
+          "**Question 1** Find, with proof, the required integer.",
+          "",
+        ].join("\n"),
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).rejects.toThrow(
+        /answers\.q1|third-person summary/iu,
+      );
+    });
+  });
+
   it("rejects handwritten grading reports with many answer leaves that skip bounded scoring", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =

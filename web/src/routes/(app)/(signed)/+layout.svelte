@@ -112,8 +112,15 @@
 	const brandCopy = $derived(resolveBrandCopy(experience));
 	const canAccessAdmin = $derived(Boolean(data.isAdmin));
 	const logoutLabel = $derived(user?.isAnonymous ? 'Delete guest account' : 'Log out');
+	const currentPathname = $derived(page.url.pathname);
 	const navigatingToPathname = $derived(navigating.to?.url.pathname ?? null);
-	const showSparkRouteLoading = $derived(isSparkLoadingTarget(navigatingToPathname));
+	let routeLoadingTarget = $state<string | null>(null);
+	let routeLoadingTimedOut = $state(false);
+	const showSparkRouteLoading = $derived(
+		isSparkLoadingTarget(navigatingToPathname) &&
+			navigatingToPathname !== currentPathname &&
+			!routeLoadingTimedOut
+	);
 	const sparkLoadingTitle = $derived(resolveSparkLoadingTitle(navigatingToPathname));
 	const sparkLoadingDetail = $derived(resolveSparkLoadingDetail(navigatingToPathname));
 	let theme = $state<ThemePreference>('auto');
@@ -127,6 +134,25 @@
 		{ label: 'Light', value: 'light' },
 		{ label: 'Dark', value: 'dark' }
 	];
+
+	$effect(() => {
+		const target = navigatingToPathname;
+		if (!isSparkLoadingTarget(target) || target === currentPathname) {
+			routeLoadingTarget = null;
+			routeLoadingTimedOut = false;
+			return;
+		}
+		routeLoadingTarget = target;
+		routeLoadingTimedOut = false;
+		const timer = window.setTimeout(() => {
+			if (routeLoadingTarget === target) {
+				routeLoadingTimedOut = true;
+			}
+		}, 10_000);
+		return () => {
+			window.clearTimeout(timer);
+		};
+	});
 
 	function getIdentityCopyValue(): string | null {
 		if (!user?.uid || user.uid.trim().length === 0) {
@@ -385,6 +411,24 @@
 	async function handleLogout(): Promise<void> {
 		await goto('/logout');
 	}
+
+	function isPlainLeftClick(event: MouseEvent): boolean {
+		return (
+			event.button === 0 &&
+			!event.metaKey &&
+			!event.ctrlKey &&
+			!event.shiftKey &&
+			!event.altKey
+		);
+	}
+
+	function handleSheetCloseClick(event: MouseEvent): void {
+		if (!isPlainLeftClick(event)) {
+			return;
+		}
+		event.preventDefault();
+		window.location.assign('/spark/sheets');
+	}
 </script>
 
 <div class="app-page">
@@ -407,6 +451,7 @@
 				href="/spark/sheets"
 				aria-label="Back to all sheets"
 				title="Back to all sheets"
+				onclick={handleSheetCloseClick}
 			>
 				<XIcon class="sheet-close-button__icon" />
 			</a>
@@ -977,7 +1022,7 @@
 		position: fixed;
 		top: calc(env(safe-area-inset-top, 0px) + 0.9rem);
 		right: calc(env(safe-area-inset-right, 0px) + 1rem);
-		z-index: 30;
+		z-index: 90;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;

@@ -1597,6 +1597,7 @@
 	const sheetFooterLabel = $derived(run.display.footer?.trim() || null);
 	const sourceLinks = $derived(data.sourceLinks ?? []);
 	const hasSourceChatLink = $derived(sourceLinks.some((sourceLink) => sourceLink.kind === 'chat'));
+	const shouldShowSourceLinks = $derived((report !== null || draft !== null) && sourceLinks.length > 0);
 </script>
 
 <svelte:head>
@@ -1694,7 +1695,7 @@
 		/>
 	{/if}
 
-	{#if sourceLinks.length > 0}
+	{#if shouldShowSourceLinks}
 		<section class="sheet-source-card" aria-labelledby="sheet-source-card-title">
 			<div class="sheet-source-card__heading">
 				<p class="sheet-source-card__eyebrow">Original materials</p>

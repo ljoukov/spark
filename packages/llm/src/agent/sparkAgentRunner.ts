@@ -3473,6 +3473,12 @@ const SCORE_ONLY_REVIEW_MESSAGE_PATTERN =
 const SCORE_FRACTION_PATTERN = /\b(\d{1,3})\s*\/\s*(\d{1,3})\b/gu;
 const NO_STUDENT_ANSWERS_REQUEST_PATTERN =
   /\b(?:no\s+student\s+answers?\s+(?:were\s+)?provided|no\s+student\s+submission|no\s+submitted\s+answers?|unanswered\s+worksheet|leave\s+answers?\s+blank|awaiting\s+student\s+work)\b/iu;
+const STUDENT_ANSWER_SUMMARY_NARRATOR_PATTERN =
+  /\b(?:the\s+)?student\s+(?:begins|writes|works|states|says|claims|uses|derives|lists|counts|attempts|shows|introduces|concludes|gestures|leaves|gives|finds|calculates|sets|tries|starts|notes|argues|asserts|mentions|draws)\b/iu;
+const STUDENT_ANSWER_SUMMARY_OPENING_PATTERN =
+  /^(?:Part\s+\([a-z0-9]+\):\s*)?(?:Uses|Counts|Claims|Shows|Attempts|States|Derives|Lists|Introduces|Concludes|Works|Gives|Finds|Calculates|Sets|Tries|Starts|Notes|Argues|Mentions|Draws)\b/u;
+const STUDENT_ANSWER_EVALUATIVE_SUMMARY_PATTERN =
+  /\b(?:leaves?\s+(?:the\s+)?proof\s+unfinished|does\s+not\s+give\s+a\s+complete|without\s+a\s+complete|gestures?\s+toward|inconsistent\s+variables|eventually\s+concluding|mainly\s+on\s+\d{3,})\b/iu;
 const QUESTION_STRUCTURE_REQUEST_PATTERN =
   /\b(?:question\s+paper|problem\s+statement|printed\s+paper|source\s+paper|preserve\s+(?:question\s+)?structure|root\s+stems?|subquestion\s+numbering|whole\s+graded\s+sheet|unanswered\s+worksheet|render\s+(?:the\s+)?source)\b/iu;
 const PROBLEM_STATEMENT_TRANSCRIPTION_HEADING_PATTERN =
@@ -4943,6 +4949,23 @@ function isBlankWorksheetAnswer(
     return answer.trim().length === 0;
   }
   return Object.values(answer).every((value) => value.trim().length === 0);
+}
+
+function studentAnswerLooksLikeNarrativeSummary(
+  answer: SparkGraderWorksheetReport["answers"][string] | undefined,
+): boolean {
+  if (answer === undefined || typeof answer !== "string") {
+    return false;
+  }
+  const normalized = answer.trim().replace(/\s+/gu, " ");
+  if (normalized.length < 40) {
+    return false;
+  }
+  return (
+    STUDENT_ANSWER_SUMMARY_NARRATOR_PATTERN.test(normalized) ||
+    STUDENT_ANSWER_SUMMARY_OPENING_PATTERN.test(normalized) ||
+    STUDENT_ANSWER_EVALUATIVE_SUMMARY_PATTERN.test(normalized)
+  );
 }
 
 function collectObjectiveOptionLabels(promptText: string): number {
@@ -6726,8 +6749,17 @@ function collectGraderWorksheetPublishIssues(
         .join("\n\n");
       const review = report.review.questions[question.id];
       const score = review?.score;
+      const answer = report.answers[question.id];
+      if (
+        compactHandwrittenGrading &&
+        !sourcePaperOnlyNoStudent &&
+        studentAnswerLooksLikeNarrativeSummary(answer)
+      ) {
+        issues.push(
+          `question "${question.id}" answer reads like a third-person summary of the submitted work; copy the student's submitted work verbatim into answers.${question.id}, preserving equations and wording, and keep judgement in review.questions.${question.id}`,
+        );
+      }
       if (sourcePaperOnlyNoStudent) {
-        const answer = report.answers[question.id];
         if (!isBlankWorksheetAnswer(answer)) {
           issues.push(
             `source-paper-only request has no student answers, but question "${question.id}" records a submitted answer`,

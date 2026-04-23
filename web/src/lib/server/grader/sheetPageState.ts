@@ -29,6 +29,7 @@ const uploadManifestSchema = z.object({
 	attachments: z.array(
 		z.object({
 			workspacePath: z.string().trim().min(1),
+			storagePath: z.string().trim().min(1).optional(),
 			contentType: z.string().trim().min(1).optional(),
 			filename: z.string().trim().min(1).optional()
 		})
@@ -69,10 +70,22 @@ function classifySourcePdfUpload(attachment: { workspacePath: string; filename?:
 	label: string;
 } {
 	const labelText = `${attachment.filename ?? ''} ${attachment.workspacePath}`.toLowerCase();
+	if (/markers?[-_\s]?report|examiner[-_\s]?report/.test(labelText)) {
+		return {
+			kind: 'upload',
+			label: "Markers' report PDF"
+		};
+	}
 	if (/(?:^|[-_\s])ms(?:[-_\s.]|$)|mark[-_\s]?scheme|marking[-_\s]?scheme/.test(labelText)) {
 		return {
 			kind: 'mark_scheme',
 			label: 'Mark scheme PDF'
+		};
+	}
+	if (/\bsolutions?\b|worked[-_\s]?solutions?/.test(labelText)) {
+		return {
+			kind: 'mark_scheme',
+			label: 'Official solutions PDF'
 		};
 	}
 	if (/(?:^|[-_\s])qp(?:[-_\s.]|$)|question[-_\s]?paper|paper/.test(labelText)) {
@@ -85,6 +98,11 @@ function classifySourcePdfUpload(attachment: { workspacePath: string; filename?:
 		kind: 'upload',
 		label: 'Original PDF'
 	};
+}
+
+function normalizeSourceStoragePath(value: string | undefined): string | null {
+	const trimmed = value?.trim();
+	return trimmed && trimmed.length > 0 ? trimmed : null;
 }
 
 async function loadSourceLinks(options: {
@@ -103,10 +121,15 @@ async function loadSourceLinks(options: {
 	referenceMarkSchemeStoragePath?: string | undefined;
 }): Promise<SparkSheetPageState['sourceLinks']> {
 	const links: SparkSheetPageState['sourceLinks'] = [];
+	const uploadStoragePaths = new Set<string>();
+	const seenSemanticLinks = new Set<string>();
 	const addLink = (link: SparkSheetPageState['sourceLinks'][number]): void => {
-		if (!links.some((existing) => existing.href === link.href)) {
-			links.push(link);
+		const key = `${link.kind}:${link.label.trim().toLowerCase()}`;
+		if (seenSemanticLinks.has(key)) {
+			return;
 		}
+		seenSemanticLinks.add(key);
+		links.push(link);
 	};
 
 	const uploadedManifestRaw = await getWorkspaceTextFile(
@@ -125,6 +148,10 @@ async function loadSourceLinks(options: {
 		if (parsedManifest?.success) {
 			const pdfUploads = parsedManifest.data.attachments.filter(isPdfUpload);
 			for (const [index, attachment] of pdfUploads.entries()) {
+				const uploadStoragePath = normalizeSourceStoragePath(attachment.storagePath);
+				if (uploadStoragePath) {
+					uploadStoragePaths.add(uploadStoragePath);
+				}
 				const filename =
 					attachment.filename ?? attachment.workspacePath.split('/').at(-1) ?? 'source.pdf';
 				const classification = classifySourcePdfUpload(attachment);
@@ -163,14 +190,16 @@ async function loadSourceLinks(options: {
 
 	const paperStoragePath = options.paperStoragePath ?? options.referencePaperStoragePath;
 	if (paperStoragePath) {
-		addLink({
-			kind: 'paper',
-			label: 'Question paper PDF',
-			href: buildSharedPdfUrl({
-				storagePath: paperStoragePath,
-				filename: paperStoragePath.split('/').at(-1) ?? 'question-paper.pdf'
-			})
-		});
+		if (!uploadStoragePaths.has(paperStoragePath)) {
+			addLink({
+				kind: 'paper',
+				label: 'Question paper PDF',
+				href: buildSharedPdfUrl({
+					storagePath: paperStoragePath,
+					filename: paperStoragePath.split('/').at(-1) ?? 'question-paper.pdf'
+				})
+			});
+		}
 	} else {
 		const paperUrl = options.paperUrl ?? options.referencePaperUrl;
 		if (paperUrl) {
@@ -184,14 +213,16 @@ async function loadSourceLinks(options: {
 	const markSchemeStoragePath =
 		options.markSchemeStoragePath ?? options.referenceMarkSchemeStoragePath;
 	if (markSchemeStoragePath) {
-		addLink({
-			kind: 'mark_scheme',
-			label: 'Mark scheme PDF',
-			href: buildSharedPdfUrl({
-				storagePath: markSchemeStoragePath,
-				filename: markSchemeStoragePath.split('/').at(-1) ?? 'mark-scheme.pdf'
-			})
-		});
+		if (!uploadStoragePaths.has(markSchemeStoragePath)) {
+			addLink({
+				kind: 'mark_scheme',
+				label: 'Mark scheme PDF',
+				href: buildSharedPdfUrl({
+					storagePath: markSchemeStoragePath,
+					filename: markSchemeStoragePath.split('/').at(-1) ?? 'mark-scheme.pdf'
+				})
+			});
+		}
 	} else {
 		const markSchemeUrl = options.markSchemeUrl ?? options.referenceMarkSchemeUrl;
 		if (markSchemeUrl) {
@@ -269,8 +300,12 @@ export async function loadSparkSheetPageState(options: {
 	});
 	const run = recovery.run;
 
-	const reportPath = run.sheet?.filePath ?? run.sheetPath;
-	const artifactRaw = await getWorkspaceTextFile(options.userId, run.workspaceId, reportPath);
+	const publishedArtifactPath =
+		run.sheet?.filePath ?? (run.status === 'done' ? run.sheetPath : null);
+	const reportPath = publishedArtifactPath ?? run.sheetPath;
+	const artifactRaw = publishedArtifactPath
+		? await getWorkspaceTextFile(options.userId, run.workspaceId, publishedArtifactPath)
+		: null;
 	const parsedReport = artifactRaw ? safeParseGraderWorksheetReport(artifactRaw) : null;
 	const report = parsedReport
 		? rewriteGraderWorksheetReportAssetTargets({
