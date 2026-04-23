@@ -1,8 +1,12 @@
-Create one student-facing worksheet draft from the uploaded material.
+Create one student-facing worksheet draft from uploaded material or from the learner's requested curricular context.
 
 Requirements:
 
-1. Inspect every uploaded file before deciding the worksheet structure.
+1. Inspect the available source context before deciding the worksheet structure.
+   - If uploads are present, inspect every uploaded file.
+   - If the request has no uploads, read `student-sheets/index.md` and the relevant `summary.md`, `sheet.json`, and `answers.json` files before drafting.
+   - Use the existing sheets to avoid duplicating a topic unless the learner explicitly asked to remake or practise it again.
+   - For a "next sheet" request, choose the next useful unit/topic from the existing sheet history and the learner's stated curriculum direction.
 2. If the uploads are already a question sheet or exam page:
 - preserve section headings, numbering, subpart labels, blanks, option sets, tables, and diagram/flow layouts as closely as possible;
 - keep formulas and wording verbatim except for minimal OCR cleanup.
@@ -15,7 +19,16 @@ Requirements:
 3. If the uploads are notes, revision material, or exposition rather than a ready-made sheet:
    - build a concise worksheet grounded only in those uploads;
    - keep the topic coverage and difficulty faithful to the source.
-4. Use only the supported worksheet question shapes:
+4. If the request is a new curricular sheet without uploads, follow this unit-sheet structure unless the learner asks otherwise:
+   - learning objectives;
+   - short concept/theory block and a worked example where useful;
+   - a misconception frame;
+   - Section A: multiple-choice questions, usually 5;
+   - Section B: fill in the blanks, usually 6, including easier former challenge ideas where helpful;
+   - challenge and extension questions;
+   - review and remember / retrieval planner.
+   One unit is one sheet, sized for roughly 30-45 minutes.
+5. Use only the supported worksheet question shapes:
    - `group`
    - `answer_bank`
    - `fill`
@@ -26,20 +39,20 @@ Requirements:
    - `match`
    - `spelling`
    - `flow`
-5. Use Markdown for prompt text, theory text, hint text, and tables. Use LaTeX for maths expressions.
-6. If a source question has subparts, keep the original numbering visible through `displayNumber` such as `9(a)` or `10(b)`.
+6. Use Markdown for prompt text, theory text, hint text, and tables. Use LaTeX for maths expressions.
+7. If a source question has subparts, keep the original numbering visible through `displayNumber` such as `9(a)` or `10(b)`.
    - When a question should show a shorter circular badge than its full source label, also set `badgeLabel`.
    - Example: use `displayNumber: "10(a)"` together with `badgeLabel: "a"`.
-7. If one numbered source question carries shared context such as a stem, table, diagram, or “use the table below” instruction before subparts, encode that numbered parent as a `group` entry and place the shared Markdown/table in `group.prompt`. Do not move shared question context into `section.theory`.
-8. Every printed question or subpart visible in the source must become a question object in the matching section. Do not leave a titled section empty when the source page contains questions there.
-9. For `flow` questions:
+8. If one numbered source question carries shared context such as a stem, table, diagram, or “use the table below” instruction before subparts, encode that numbered parent as a `group` entry and place the shared Markdown/table in `group.prompt`. Do not move shared question context into `section.theory`.
+9. Every printed question or subpart visible in the source must become a question object in the matching section. Do not leave a titled section empty when the source page contains questions there.
+10. For `flow` questions:
    - keep the printed box/arrow sequence faithful to the source;
    - store each editable box under a stable box id;
    - use `initialValue` for any fixed box that is already given in the source.
    - list each `rows[].items` array in the same left-to-right visual order the student sees on the page.
    - use `direction: "rtl"` only when the arrows point right-to-left; do not reverse the item order in the JSON.
    - when a top row drops into a lower row, use `connectors` to link the relevant box ids vertically.
-10. Write `sheet/output/draft.json` with this shape:
+11. Write `sheet/output/draft.json` with this shape:
 
 ```json
 {

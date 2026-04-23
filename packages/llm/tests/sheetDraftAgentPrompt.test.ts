@@ -29,6 +29,8 @@ describe("sheet draft prompt", () => {
     expect(prompt).toContain("stable Apple-style sheet palette");
     expect(prompt).toContain("Do not invent custom sheet colors");
     expect(prompt).toContain("one compact sentence or two short fragments");
+    expect(prompt).toContain("student-sheets/index.md");
+    expect(prompt).toContain("learning objectives; short concept/theory");
     expect(prompt).toContain("publish_sheet_draft({})");
     expect(prompt).not.toContain("## Extraction workflow");
   });
@@ -42,7 +44,7 @@ describe("sheet draft prompt", () => {
     expect(skills).toContain("sheet/output/assets/...");
     expect(skills).toContain("placeholder ovals");
     expect(skills).toContain(
-      "[![Figure 1](grader/output/assets/q1-figure-1.jpg)](grader/output/assets/q1-figure-1.jpg)",
+      "[![Figure 1](grader/output/assets/q1-figure-1.jpg)](grader/output/source-pages/page-0003.jpg)",
     );
   });
 
@@ -57,6 +59,12 @@ describe("sheet draft prompt", () => {
   it("tells the chat tool to reuse earlier uploads for worksheet requests", () => {
     expect(SPARK_CHAT_CREATE_SHEET_TOOL_DESCRIPTION).toContain(
       "If the request refers to an earlier upload in the same conversation",
+    );
+    expect(SPARK_CHAT_CREATE_SHEET_TOOL_DESCRIPTION).toContain(
+      "new sheet, next sheet, another sheet, revision sheet, or practice sheet without uploads",
+    );
+    expect(SPARK_CHAT_CREATE_SHEET_TOOL_DESCRIPTION).toContain(
+      "inspect the student's existing sheets first",
     );
   });
 
@@ -75,5 +83,6 @@ describe("sheet draft prompt", () => {
     );
     expect(plan.skillFiles[0]?.content).toContain("---");
     expect(plan.skillFiles[0]?.content).toContain("name: paper-to-sheet");
+    expect(plan.brief).toContain("student-sheets/");
   });
 });

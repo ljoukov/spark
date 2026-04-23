@@ -83,10 +83,10 @@ export const DEFAULT_SPARK_SHEET_RUN_LABEL = "Student worksheet" as const;
 export const SparkChatCreateSheetInputSchema = z
   .object({
     title: nullableOptionalString().describe(
-      "Optional short worksheet title override. Set this only when the uploaded material already makes a concise student-facing title clear.",
+      "Optional short worksheet title override. Set this only when the source material or requested topic already makes a concise student-facing title clear.",
     ),
     notes: nullableOptionalString().describe(
-      "Optional worksheet-generation focus or constraint (for example: keep the worksheet strictly faithful to the uploaded exam layout).",
+      "Optional worksheet-generation focus or constraint. Use this to pass the learner's requested topic, next-sheet curriculum reasoning, existing-sheet context to avoid duplicating, or source-fidelity constraints for uploads.",
     ),
   })
   .strict();
@@ -130,14 +130,17 @@ export type SparkSheetDraftLaunchPlan = {
 };
 
 export const SPARK_CHAT_CREATE_SHEET_TOOL_DESCRIPTION = [
-  "Create a student worksheet from the learner's uploaded material.",
+  "Create a student worksheet from uploaded material or from the learner's existing Spark sheet history plus a requested topic/next step.",
   "Creates a worksheet workspace, seeds sheet/task.md, and launches a background agent that publishes a solveable sheet under /spark/sheets.",
   "Use this when the learner asks Spark to turn uploads into a worksheet or sheet to solve.",
+  "Also use this when the learner asks for a new sheet, next sheet, another sheet, revision sheet, or practice sheet without uploads.",
+  "For next-sheet requests, inspect the student's existing sheets first, choose the next useful unit or topic, and pass concise curriculum reasoning in notes.",
   "If the current user turn clearly asks for a worksheet from uploaded material, call this tool instead of answering directly in chat.",
   "If the request refers to an earlier upload in the same conversation, those earlier uploads still define the worksheet source unless the learner replaced them.",
   "If the uploaded material is already a worksheet or exam paper, treat it as the canonical source and preserve the question wording, numbering, marks, and structure as closely as possible.",
   "Do not simplify, reorder, paraphrase, or redesign an uploaded question sheet into a nicer worksheet format.",
   "If the uploaded material is notes or teaching content, synthesize a worksheet grounded only in those uploads.",
+  "If no uploads are present, synthesize a concise worksheet grounded in the explicit request and existing-sheet filesystem context, not as a generic chat answer.",
   "If uploads are present, they are attached to the sheet-draft agent context automatically.",
 ].join("\n");
 
@@ -241,7 +244,7 @@ export const SPARK_CHAT_CREATE_GRADER_TOOL_DESCRIPTION = [
   "Use this when the learner asks to mark or grade uploaded answers, submissions, scripts, or related reference documents.",
   "If the current user turn clearly asks to grade uploaded work, call this tool instead of answering with grading feedback directly in chat.",
   "Do not use this tool for requests to produce model answers, full-mark answers, answer keys, worked solutions, or short mark-scheme-based answers unless the learner explicitly asks to grade submitted/student work.",
-  "Do not treat the noun phrase \"mark scheme\" or \"full marks\" as a grading request by itself.",
+  'Do not treat the noun phrase "mark scheme" or "full marks" as a grading request by itself.',
   "Uploads can include student handwriting, problem statements, answer booklets, rubrics, and optional official solutions/mark schemes.",
   "Set referenceSourcePolicy based on learner instructions: use allow-official-references by default so official answer keys/mark schemes can be checked for identified public papers; use uploaded-only only when the learner explicitly forbids online lookup.",
   "When uploads include a printed question sheet or exam page, the grader must preserve original numbering, shared stems, tables, MCQ structure, and essential figures instead of flattening them into prose or synthetic per-question sections.",
@@ -355,7 +358,7 @@ export function buildSparkSheetDraftBrief(options: {
   lines.push(
     "",
     "## Objectives",
-    "- Identify whether the uploads are already a worksheet / exam sheet or whether Spark must synthesize a new worksheet from teaching material.",
+    "- Identify whether the uploads are already a worksheet / exam sheet, whether Spark must synthesize a worksheet from uploaded teaching material, or whether this is a new curricular worksheet request grounded in the learner's existing Spark sheets.",
     "- If the uploads are already a worksheet / exam sheet, preserve numbering, structure, blanks, options, tables, and flow-chart style layouts as closely as possible.",
     "- Treat uploaded question sheets as canonical source material: do not simplify, reorder, paraphrase, or rewrite them into a nicer worksheet format.",
     "- Default to source-faithful transcription when the uploads are already printed worksheet pages; do not merge or drop questions, marks, labels, blanks, or answer cues.",
@@ -363,6 +366,8 @@ export function buildSparkSheetDraftBrief(options: {
     "- Use Markdown and LaTeX for prompts so the worksheet surface can render tables, formulas, and structured statements cleanly.",
     "- When writing worksheet JSON directly, either avoid LaTeX backslash syntax in prompt strings or JSON-escape every backslash as `\\\\` so the file remains valid JSON.",
     "- If the uploads are notes rather than a ready-made sheet, build a concise worksheet grounded only in the uploaded material.",
+    "- If there are no uploads, use the learner's request plus the `student-sheets/` workspace files to choose a next or requested curricular sheet. Do not duplicate an existing sheet unless the learner explicitly asked for a remake.",
+    "- For new curricular sheets without uploads, prefer a one-unit sheet with learning objectives, concept/theory, misconception frame, Section A MCQs, Section B fill-in-the-blanks, challenge/extension questions, and a review/remember retrieval planner.",
     "- Keep the run summary student-facing: concise title + summary, no IDs, file paths, or process narration.",
   );
   return lines.join("\n").trim().concat("\n");

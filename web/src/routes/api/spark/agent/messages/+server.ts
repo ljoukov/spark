@@ -54,6 +54,14 @@ import {
 	saveSession,
 	setCurrentSessionId
 } from '$lib/server/session/repo';
+import {
+	grepStudentSheetVirtualFiles,
+	listStudentSheetVirtualDirectory,
+	loadStudentSheetVirtualFiles,
+	readStudentSheetVirtualFile,
+	renderStudentSheetWorkspaceBrief,
+	STUDENT_SHEETS_ROOT
+} from '$lib/server/grader/studentSheetFiles';
 import { getSessionState } from '$lib/server/sessionState/repo';
 import sparkChatSystemPrompt from '$lib/server/agent/spark-chat-system-prompt.md?raw';
 import {
@@ -1246,6 +1254,11 @@ function buildSparkChatTools(options: {
 			sizeBytes: attachment.sizeBytes,
 			pageCount: attachment.pageCount
 		}));
+	let studentSheetFilesPromise: ReturnType<typeof loadStudentSheetVirtualFiles> | null = null;
+	const getStudentSheetFiles = (): ReturnType<typeof loadStudentSheetVirtualFiles> => {
+		studentSheetFilesPromise ??= loadStudentSheetVirtualFiles(userId, { limit: 100 });
+		return studentSheetFilesPromise;
+	};
 	return {
 		list_lessons: tool({
 			description: 'List the user’s lessons (sessions), newest first, with status and progress.',
@@ -1302,6 +1315,70 @@ function buildSparkChatTools(options: {
 					completed,
 					total,
 					href: `/spark/lesson/${session.id}`
+				};
+			}
+		}),
+		list_sheet_files: tool({
+			description:
+				"List the learner's existing Spark sheet virtual filesystem under student-sheets/. Use this before creating a new, next, another, practice, or revision sheet without uploads.",
+			inputSchema: z
+				.object({
+					path: z.string().trim().min(1).optional()
+				})
+				.strict(),
+			execute: async ({ path }) => {
+				const files = await getStudentSheetFiles();
+				const resolvedPath = path?.trim() || STUDENT_SHEETS_ROOT;
+				return {
+					root: STUDENT_SHEETS_ROOT,
+					path: resolvedPath,
+					entries: listStudentSheetVirtualDirectory({ files, path: resolvedPath })
+				};
+			}
+		}),
+		read_sheet_file: tool({
+			description:
+				'Read one file from the learner sheet virtual filesystem. Start with student-sheets/index.md, then summaries before large sheet.json files.',
+			inputSchema: z
+				.object({
+					path: z.string().trim().min(1),
+					maxChars: z.number().int().min(1_000).max(100_000).optional()
+				})
+				.strict(),
+			execute: async ({ path, maxChars }) => {
+				const files = await getStudentSheetFiles();
+				const file = readStudentSheetVirtualFile({ files, path, maxChars });
+				if (!file) {
+					return {
+						found: false,
+						path
+					};
+				}
+				return {
+					found: true,
+					path: file.path,
+					contentType: file.contentType,
+					truncated: file.content.endsWith('\n[truncated]\n'),
+					content: file.content
+				};
+			}
+		}),
+		grep_sheet_files: tool({
+			description:
+				"Search the learner's existing Spark sheet virtual filesystem for a topic, unit name, question phrase, or misconception before deciding what sheet to create next.",
+			inputSchema: z
+				.object({
+					query: z.string().trim().min(1),
+					path: z.string().trim().min(1).optional(),
+					maxResults: z.number().int().min(1).max(100).optional()
+				})
+				.strict(),
+			execute: async ({ query, path, maxResults }) => {
+				const files = await getStudentSheetFiles();
+				return {
+					root: STUDENT_SHEETS_ROOT,
+					query,
+					matches: grepStudentSheetVirtualFiles({ files, query, path, maxResults })
 				};
 			}
 		}),
@@ -1677,6 +1754,12 @@ function buildSparkChatTools(options: {
 				const tasksEnv = requireTasksEnv();
 				let runCreated = false;
 				try {
+					const studentSheetFiles = await getStudentSheetFiles();
+					const sheetWorkspaceBrief = renderStudentSheetWorkspaceBrief(studentSheetFiles);
+					const brief = [plan.brief.trim(), sheetWorkspaceBrief.trim()]
+						.filter((section) => section.length > 0)
+						.join('\n\n')
+						.concat('\n');
 					await createGraderRun(userId, {
 						id: plan.runId,
 						agentId: plan.agentId,
@@ -1712,7 +1795,7 @@ function buildSparkChatTools(options: {
 							userId,
 							workspaceId: plan.workspaceId,
 							path: 'brief.md',
-							content: plan.brief,
+							content: brief,
 							now: plan.createdAt
 						}),
 						writeWorkspaceTextFile({
@@ -1771,6 +1854,16 @@ function buildSparkChatTools(options: {
 								now: plan.createdAt
 							})
 						),
+						...studentSheetFiles.map((file) =>
+							writeWorkspaceTextFile({
+								serviceAccountJson,
+								userId,
+								workspaceId: plan.workspaceId,
+								path: file.path,
+								content: file.content,
+								now: plan.createdAt
+							})
+						),
 						...plan.runWorkspaceAttachments.map((attachment) =>
 							writeWorkspaceStorageLinkFile({
 								serviceAccountJson,
@@ -1796,6 +1889,7 @@ function buildSparkChatTools(options: {
 							sheetSummaryPath: plan.summaryPath,
 							sheetDraftPath: plan.sheetPath,
 							sheetDraftAnswersPath: plan.answersPath,
+							studentSheetFiles: studentSheetFiles.map((file) => file.path),
 							inputAttachments: plan.runAttachments,
 							createdAt: plan.createdAt,
 							updatedAt: plan.createdAt,

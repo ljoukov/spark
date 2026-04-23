@@ -78,7 +78,7 @@ function buildFallbackTitle(options: { paperName: string | null }): string {
 	if (options.paperName) {
 		return options.paperName;
 	}
-	return 'Uploaded worksheet';
+	return 'Student worksheet';
 }
 
 function buildMetaLine(options: {
@@ -108,11 +108,11 @@ function buildFallbackSubtitle(options: {
 	}
 	if (options.sheetPhase === 'building') {
 		return options.status === 'created'
-			? 'Queued from the uploaded material.'
-			: 'Preparing a worksheet from the uploaded material.';
+			? 'Queued for sheet generation.'
+			: 'Preparing your worksheet.';
 	}
 	if (options.sheetPhase === 'solving') {
-		return 'Worksheet draft prepared from the uploaded material.';
+		return 'Worksheet draft prepared.';
 	}
 	if (options.sheetPhase === 'grading') {
 		return options.status === 'created'
@@ -120,10 +120,10 @@ function buildFallbackSubtitle(options: {
 			: 'Submitted answers are being graded.';
 	}
 	if (options.sheetPhase === 'graded' || options.status === 'done') {
-		return 'Worksheet review prepared from the uploaded material.';
+		return 'Worksheet review prepared.';
 	}
 	if (options.status === 'created') {
-		return 'Queued from the uploaded material.';
+		return 'Queued for sheet generation.';
 	}
 	if (options.status === 'executing') {
 		return 'Submitted answers are being graded.';
@@ -134,7 +134,7 @@ function buildFallbackSubtitle(options: {
 	if (options.status === 'failed') {
 		return 'Worksheet processing could not be completed.';
 	}
-	return 'Uploaded material.';
+	return 'Worksheet.';
 }
 
 function buildFallbackSummary(options: {
@@ -152,7 +152,7 @@ function buildFallbackSummary(options: {
 		if (options.status === 'stopped') {
 			return 'This sheet was stopped before generation finished.';
 		}
-		return 'The worksheet draft could not be prepared from the uploaded material.';
+		return 'The worksheet draft could not be prepared.';
 	}
 	if (options.sheetPhase === 'solving') {
 		return 'This sheet is ready to solve.';
@@ -179,7 +179,7 @@ function buildFallbackSummary(options: {
 		!getMeaningfulText(options.paper?.paperName) &&
 		!getMeaningfulText(options.paper?.contextLabel)
 	) {
-		return 'The worksheet source could not be confidently identified from the uploaded materials alone.';
+		return 'The worksheet source could not be confidently identified.';
 	}
 	return null;
 }
@@ -228,9 +228,7 @@ function buildFooter(options: {
 
 export function buildGraderRunDisplay(input: GraderRunDisplayInput): GraderRunDisplay {
 	const paperName = getMeaningfulText(input.paper?.paperName);
-	const title =
-		getMeaningfulText(input.presentation?.title) ??
-		buildFallbackTitle({ paperName });
+	const title = getMeaningfulText(input.presentation?.title) ?? buildFallbackTitle({ paperName });
 	const metaLine = buildMetaLine({
 		title,
 		paper: input.paper
