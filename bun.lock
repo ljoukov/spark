@@ -100,7 +100,7 @@
         "@connectrpc/connect-node": "^2.1.1",
         "@connectrpc/connect-web": "^2.1.1",
         "@ljoukov/llm": "7.0.9",
-        "@ljoukov/sheet": "0.3.6",
+        "@ljoukov/sheet": "0.3.7",
         "@spark/llm": "workspace:*",
         "@spark/proto": "workspace:*",
         "@spark/schemas": "workspace:*",
@@ -479,7 +479,7 @@
 
     "@ljoukov/llm": ["@ljoukov/llm@7.0.9", "", { "dependencies": { "@alcyone-labs/zod-to-json-schema": "^4.0.10", "@google-cloud/storage": "^7.19.0", "@google/genai": "^1.45.0", "ajv": "^8.18.0", "ajv-formats": "^3.0.1", "google-auth-library": "^10.5.0", "mime": "^4.1.0", "openai": "^6.29.0", "undici": "^7.21.0", "ws": "^8.19.0", "zod": "^4.3.6" } }, "sha512-LHtRTRfm0WxsbdRdSVzqOoopiY40rvpgpPB+1jvGHOnBtOatP7pKMmaASbxc3+GE55GbcBcu09f5nqachzX02Q=="],
 
-    "@ljoukov/sheet": ["@ljoukov/sheet@0.3.6", "", { "dependencies": { "@lucide/svelte": "^0.562.0", "esm-env": "^1.2.2", "highlight.js": "^11.11.1", "katex": "^0.16.27", "marked": "^17.0.5", "marked-katex-extension": "^5.1.7", "zod": "^4.3.6" }, "peerDependencies": { "svelte": "^5.0.0" } }, "sha512-unO81WUFYu+FWRuzALcysG0Od4UYpPj+C+PWdTbhocUAapQ741HdViOf4oaUKKhFmmyiTMTrHOlet1fRk45h4A=="],
+    "@ljoukov/sheet": ["@ljoukov/sheet@0.3.7", "", { "dependencies": { "@lucide/svelte": "^0.562.0", "esm-env": "^1.2.2", "highlight.js": "^11.11.1", "katex": "^0.16.27", "marked": "^17.0.5", "marked-katex-extension": "^5.1.7", "zod": "^4.3.6" }, "peerDependencies": { "svelte": "^5.0.0" } }, "sha512-Bg95P7Md6WGjOu0F9IfktAkRc2Hq7SpLH2s/C5UWiOLj0Ile4PI8c01wEDKTQ211XFCe6GtI3DUMOTUDYJSM0Q=="],
 
     "@lucide/svelte": ["@lucide/svelte@0.562.0", "", { "peerDependencies": { "svelte": "^5" } }, "sha512-wDMULwtTFN2Sc/TFBm6gfuVCNb4Y5P9LDrwxNnUbV52+IEU7NXZmvxwXoz+vrrpad6Xupq+Hw5eUlqIHEGhouw=="],
 
