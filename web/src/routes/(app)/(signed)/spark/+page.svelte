@@ -90,6 +90,7 @@
 	const userSnapshot = userStore ? fromStore(userStore) : null;
 	const user = $derived(userSnapshot?.current ?? data.user ?? null);
 	const userId = $derived(user?.uid ?? null);
+	const authBypassActive = $derived(data.authMode === 'forced');
 
 	let conversationId = $state<string | null>(null);
 	let conversation = $state<SparkAgentConversation | null>(null);
@@ -1638,6 +1639,12 @@
 			openFilePicker(attachmentInputRef);
 		};
 		window.addEventListener('keydown', handleKeydown);
+		if (authBypassActive) {
+			authReady = true;
+			return () => {
+				window.removeEventListener('keydown', handleKeydown);
+			};
+		}
 		const auth = getAuth(getFirebaseApp());
 		if (auth.currentUser) {
 			authReady = true;
@@ -1690,6 +1697,10 @@
 		if (!activeUserId || !activeConversationId || !authReady) {
 			conversation = null;
 			conversationLoadState = activeConversationId ? 'loading' : 'idle';
+			return;
+		}
+		if (authBypassActive) {
+			conversationLoadState = activeConversationId ? 'ready' : 'idle';
 			return;
 		}
 		const normalizedUserId: string = activeUserId;

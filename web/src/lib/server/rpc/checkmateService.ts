@@ -1,4 +1,5 @@
 import { extractBearerToken } from '$lib/server/auth/apiAuth';
+import { getForcedAppUser } from '$lib/server/auth/forcedUser';
 import { CheckMateWaitUntilContextKey } from '$lib/server/rpc/checkmateContext';
 import { verifyFirebaseIdToken } from '$lib/server/utils/firebaseServer';
 import { logServerEvent } from '$lib/server/utils/logger';
@@ -15,12 +16,7 @@ import {
 } from '$proto';
 import { create } from '@bufbuild/protobuf';
 import { TimestampSchema } from '$proto/gen/google/protobuf/timestamp_pb';
-import {
-	generateText,
-	type LlmContent,
-	type LlmTextDelta,
-	type LlmTextModelId
-} from '@spark/llm';
+import { generateText, type LlmContent, type LlmTextDelta, type LlmTextModelId } from '@spark/llm';
 import type { ConnectRouter, HandlerContext } from '@connectrpc/connect';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { randomUUID } from 'node:crypto';
@@ -73,6 +69,11 @@ function requireServiceAccountJson(): string {
 }
 
 async function requireAuth(context: HandlerContext): Promise<string> {
+	const forcedUser = await getForcedAppUser();
+	if (forcedUser) {
+		return forcedUser.uid;
+	}
+
 	const authHeader = context.requestHeader.get('authorization');
 	const token = extractBearerToken(authHeader);
 	if (!token) {
@@ -428,7 +429,8 @@ export function registerCheckMateRoutes(router: ConnectRouter): void {
 					data?.lastMessageAt ?? data?.updatedAt ?? data?.createdAt,
 					new Date()
 				);
-				const conversationId = doc.documentPath.split('/').filter(Boolean).pop() ?? doc.documentPath;
+				const conversationId =
+					doc.documentPath.split('/').filter(Boolean).pop() ?? doc.documentPath;
 				chats.push(toConversationSummaryProto(conversationId, messages, lastMessageAt, status));
 			}
 			logServerEvent({

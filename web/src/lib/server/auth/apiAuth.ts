@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import { verifyFirebaseIdToken } from '$lib/server/utils/firebaseServer';
 import { AUTH_SESSION_COOKIE_NAME, AUTH_TOKEN_COOKIE_NAME } from '$lib/auth/constants';
 import { readAppSessionCookieValue } from '$lib/server/auth/sessionCookie';
+import { getForcedAppUser } from '$lib/server/auth/forcedUser';
 
 export type VerifiedFirebaseToken = Awaited<ReturnType<typeof verifyFirebaseIdToken>>;
 
@@ -50,6 +51,18 @@ function extractCookieValue(header: string | null, name: string): string | null 
 }
 
 export async function authenticateApiRequest(request: Request): Promise<ApiAuthResult> {
+	const forcedUser = await getForcedAppUser();
+	if (forcedUser) {
+		return {
+			ok: true,
+			user: {
+				uid: forcedUser.uid,
+				token: null,
+				decodedToken: null
+			}
+		};
+	}
+
 	const cookieHeader = request.headers.get('cookie');
 
 	const bearerToken = extractBearerToken(request.headers.get('authorization'));

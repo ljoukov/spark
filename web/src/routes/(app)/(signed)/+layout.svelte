@@ -100,6 +100,8 @@
 	setContext('spark:user', userStore);
 	const userSnapshot = fromStore(userStore);
 	const user = $derived(userSnapshot.current);
+	const authMode = $derived(data.authMode);
+	const authBypassActive = $derived(authMode === 'forced');
 
 	$effect(() => {
 		userStore.set(data.user ?? null);
@@ -248,6 +250,12 @@
 		let lastSyncedSignature: string | null = null;
 		let redirectingToLogin = false;
 		let bootAuthTimer: number | null = null;
+
+		if (authBypassActive) {
+			return () => {
+				unsubscribeTheme();
+			};
+		}
 
 		async function syncProfileFrom(firebaseUser: User): Promise<void> {
 			if (syncingProfile) {

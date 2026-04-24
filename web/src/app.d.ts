@@ -4,6 +4,7 @@ declare global {
 	namespace App {
 		// interface Error {}
 		interface Locals {
+			authMode: 'firebase' | 'forced' | null;
 			appUser: {
 				uid: string;
 				email: string | null;

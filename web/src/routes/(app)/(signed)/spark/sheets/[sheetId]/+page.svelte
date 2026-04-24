@@ -1138,8 +1138,8 @@
 	function hasPendingDraftSave(): boolean {
 		return Boolean(
 			pendingDraftAnswers &&
-				pendingDraftSignature &&
-				pendingDraftSignature !== lastSavedDraftSignature
+			pendingDraftSignature &&
+			pendingDraftSignature !== lastSavedDraftSignature
 		);
 	}
 
@@ -1730,7 +1730,9 @@
 	const sheetFooterLabel = $derived(run.display.footer?.trim() || null);
 	const sourceLinks = $derived(data.sourceLinks ?? []);
 	const hasSourceChatLink = $derived(sourceLinks.some((sourceLink) => sourceLink.kind === 'chat'));
-	const shouldShowSourceLinks = $derived((report !== null || draft !== null) && sourceLinks.length > 0);
+	const shouldShowSourceLinks = $derived(
+		(report !== null || draft !== null) && sourceLinks.length > 0
+	);
 </script>
 
 <svelte:head>
@@ -1749,10 +1751,10 @@
 	{/if}
 
 	{#if report && reviewState && reviewSheetDocument}
-			<div bind:this={sheetShellElement} class="sheet-shell" use:localizedFigureEnhancer>
-				<PaperSheet
-					document={reviewSheetDocument}
-					answers={reviewState.answers}
+		<div bind:this={sheetShellElement} class="sheet-shell" use:localizedFigureEnhancer>
+			<PaperSheet
+				document={reviewSheetDocument}
+				answers={reviewState.answers}
 				review={awaitingAnswersReport ? null : reviewState.review}
 				mode={awaitingAnswersReport ? 'readonly' : 'review'}
 				allowReplies={!awaitingAnswersReport}
@@ -1762,10 +1764,10 @@
 			/>
 		</div>
 	{:else if draft && draftSheetDocument}
-			<div bind:this={sheetShellElement} class="sheet-shell" use:localizedFigureEnhancer>
-				<PaperSheet
-					document={draftSheetDocument}
-					answers={draftAnswers}
+		<div bind:this={sheetShellElement} class="sheet-shell" use:localizedFigureEnhancer>
+			<PaperSheet
+				document={draftSheetDocument}
+				answers={draftAnswers}
 				mode={canEditDraftSheet() ? 'interactive' : 'readonly'}
 				grading={isDraftGradingInProgress()}
 				footerLabel={sheetFooterLabel}

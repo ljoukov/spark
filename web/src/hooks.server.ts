@@ -1,6 +1,7 @@
 import { isUserAdmin } from '$lib/server/utils/admin';
 import { AUTH_SESSION_COOKIE_NAME, AUTH_TOKEN_COOKIE_NAME } from '$lib/auth/constants';
 import { verifyFirebaseIdToken } from '$lib/server/utils/firebaseServer';
+import { getForcedAppUser } from '$lib/server/auth/forcedUser';
 import { readAppSessionCookieValue, setAppSessionCookie } from '$lib/server/auth/sessionCookie';
 import {
 	flushPendingCloudLogWrites,
@@ -53,10 +54,7 @@ function readQueryParam(url: URL, name: string): string | undefined {
 	return value.length > 0 ? value : undefined;
 }
 
-function readParam(
-	params: Partial<Record<string, string>>,
-	name: string
-): string | undefined {
+function readParam(params: Partial<Record<string, string>>, name: string): string | undefined {
 	const value = params[name]?.trim() ?? '';
 	return value.length > 0 ? value : undefined;
 }
@@ -116,6 +114,7 @@ export const handle = (async ({ event, resolve }) => {
 
 	// Initialize app user locals to a known state
 	event.locals.appUser = null;
+	event.locals.authMode = null;
 	const pathname = event.url.pathname;
 	const internalTasksPrefix = '/api/internal/tasks';
 	const internalTasksInfoPath = '/api/internal/tasks/info';
@@ -210,14 +209,22 @@ export const handle = (async ({ event, resolve }) => {
 		}
 	};
 
-	if (shouldHydrateAppUser(pathname)) {
+	const forcedAppUser = await getForcedAppUser();
+	if (forcedAppUser) {
+		event.locals.appUser = forcedAppUser;
+		event.locals.authMode = 'forced';
+	}
+
+	if (shouldHydrateAppUser(pathname) && !forcedAppUser) {
 		const sessionUser = await verifySession();
 		if (sessionUser) {
 			event.locals.appUser = sessionUser;
+			event.locals.authMode = 'firebase';
 		} else {
 			const verified = await verifyCookie('app-auth');
 			if (verified) {
 				event.locals.appUser = verified.appUser;
+				event.locals.authMode = 'firebase';
 				try {
 					await setAppSessionCookie(event.cookies, event.url, verified.appUser);
 				} catch (err) {
@@ -230,21 +237,28 @@ export const handle = (async ({ event, resolve }) => {
 	if (pathname.startsWith('/admin')) {
 		let hasValidToken = false;
 		let isAdmin = false;
-		const sessionUser = await verifySession();
-		if (sessionUser) {
-			event.locals.appUser = sessionUser;
+		if (forcedAppUser) {
 			hasValidToken = true;
-			isAdmin = isUserAdmin({ userId: sessionUser.uid } as { userId: string });
+			isAdmin = isUserAdmin({ userId: forcedAppUser.uid });
 		} else {
-			const verified = await verifyCookie('admin-auth');
-			if (verified) {
-				event.locals.appUser = verified.appUser;
+			const sessionUser = await verifySession();
+			if (sessionUser) {
+				event.locals.appUser = sessionUser;
+				event.locals.authMode = 'firebase';
 				hasValidToken = true;
-				isAdmin = isUserAdmin({ userId: verified.payload.sub } as { userId: string });
-				try {
-					await setAppSessionCookie(event.cookies, event.url, verified.appUser);
-				} catch (err) {
-					console.log('[admin-auth] failed to issue session cookie', err);
+				isAdmin = isUserAdmin({ userId: sessionUser.uid });
+			} else {
+				const verified = await verifyCookie('admin-auth');
+				if (verified) {
+					event.locals.appUser = verified.appUser;
+					event.locals.authMode = 'firebase';
+					hasValidToken = true;
+					isAdmin = isUserAdmin({ userId: verified.payload.sub });
+					try {
+						await setAppSessionCookie(event.cookies, event.url, verified.appUser);
+					} catch (err) {
+						console.log('[admin-auth] failed to issue session cookie', err);
+					}
 				}
 			}
 		}

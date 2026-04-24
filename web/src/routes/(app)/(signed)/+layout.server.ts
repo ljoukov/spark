@@ -16,5 +16,5 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 		admin = false;
 	}
 
-	return { user, isAdmin: admin };
+	return { user, isAdmin: admin, authMode: locals.authMode };
 };
