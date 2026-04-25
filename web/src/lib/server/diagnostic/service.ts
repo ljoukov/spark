@@ -1,6 +1,7 @@
 import { env } from '$env/dynamic/private';
 import {
 	isDiagnosticLevelForCountry,
+	resolveDiagnosticCountryLabel,
 	resolveDiagnosticPaperSubject,
 	resolveDiagnosticTopicLabel,
 	type DiagnosticCountry,
@@ -75,6 +76,12 @@ const diagnosticTopicSchema = z.enum(['olympiad_math', 'physics', 'biology', 'ch
 const diagnosticCountrySchema = z.enum(['UK', 'USA', 'Canada', 'Australia', 'Singapore']);
 const schoolYearSchema = z.string().trim().min(1).max(40);
 const diagnosticStartModeSchema = z.enum(['fresh', 'progress']);
+const diagnosticSubjectIdSchema = z.string().trim().min(1).max(80);
+const diagnosticBirthYearSchema = z
+	.number()
+	.int()
+	.min(1990)
+	.max(new Date().getFullYear());
 
 const trimmedString = z.string().trim().min(1);
 const maybeEmptyString = z.string().trim();
@@ -230,9 +237,39 @@ const diagnosticSheetSchema = z.object({
 	runId: trimmedString.optional()
 });
 
+const diagnosticSubjectInputSchema = z.object({
+	id: diagnosticSubjectIdSchema.optional(),
+	topic: diagnosticTopicSchema,
+	country: diagnosticCountrySchema,
+	schoolYear: schoolYearSchema,
+	course: trimmedString.max(100),
+	board: trimmedString.max(100),
+	notes: maybeEmptyString.max(240).optional()
+});
+
+const diagnosticSubjectProfileSchema = diagnosticSubjectInputSchema.extend({
+	id: diagnosticSubjectIdSchema,
+	topicLabel: trimmedString,
+	subjectLabel: trimmedString,
+	countryLabel: trimmedString,
+	createdAt: firestoreTimestampSchema,
+	updatedAt: firestoreTimestampSchema
+});
+
+export const DiagnosticProfileDocSchema = z.object({
+	id: z.literal('main'),
+	birthYear: diagnosticBirthYearSchema.optional(),
+	subjects: z.array(diagnosticSubjectProfileSchema).max(12).default([]),
+	createdAt: firestoreTimestampSchema,
+	updatedAt: firestoreTimestampSchema
+});
+
 export const DiagnosticTestDocSchema = z.object({
 	id: trimmedString,
 	status: z.enum(['in_progress', 'complete']),
+	subjectId: diagnosticSubjectIdSchema.optional(),
+	subjectCourse: trimmedString.max(100).optional(),
+	subjectBoard: trimmedString.max(100).optional(),
 	topic: diagnosticTopicSchema,
 	topicLabel: trimmedString,
 	subjectLabel: trimmedString,
@@ -248,6 +285,8 @@ export const DiagnosticTestDocSchema = z.object({
 	results: diagnosticResultsSchema.optional()
 });
 
+export type DiagnosticProfileDoc = z.infer<typeof DiagnosticProfileDocSchema>;
+export type DiagnosticSubjectProfile = z.infer<typeof diagnosticSubjectProfileSchema>;
 export type DiagnosticAnswers = z.infer<typeof diagnosticAnswersSchema>;
 export type DiagnosticTestDoc = z.infer<typeof DiagnosticTestDocSchema>;
 type DiagnosticSheet = z.infer<typeof diagnosticSheetSchema>;
@@ -268,17 +307,61 @@ const extensionGradingPayloadSchema = z.object({
 type ExtensionGradingPayload = z.infer<typeof extensionGradingPayloadSchema>;
 
 export const DiagnosticStartRequestSchema = z.object({
-	topic: diagnosticTopicSchema,
-	country: diagnosticCountrySchema,
-	schoolYear: schoolYearSchema,
+	subjectId: diagnosticSubjectIdSchema.optional(),
+	topic: diagnosticTopicSchema.optional(),
+	country: diagnosticCountrySchema.optional(),
+	schoolYear: schoolYearSchema.optional(),
 	mode: diagnosticStartModeSchema.optional().default('fresh')
 }).superRefine((input, ctx) => {
-	if (!isDiagnosticLevelForCountry(input.country, input.schoolYear)) {
+	if (input.subjectId) {
+		return;
+	}
+	if (!input.topic) {
+		ctx.addIssue({
+			code: 'custom',
+			path: ['topic'],
+			message: 'Topic is required when no saved subject is selected'
+		});
+	}
+	if (!input.country) {
+		ctx.addIssue({
+			code: 'custom',
+			path: ['country'],
+			message: 'Country is required when no saved subject is selected'
+		});
+	}
+	if (!input.schoolYear) {
+		ctx.addIssue({
+			code: 'custom',
+			path: ['schoolYear'],
+			message: 'School stage is required when no saved subject is selected'
+		});
+	}
+	if (
+		input.country &&
+		input.schoolYear &&
+		!isDiagnosticLevelForCountry(input.country, input.schoolYear)
+	) {
 		ctx.addIssue({
 			code: 'custom',
 			path: ['schoolYear'],
 			message: 'Unsupported school stage for the selected country'
 		});
+	}
+});
+
+export const DiagnosticProfileSaveRequestSchema = z.object({
+	birthYear: diagnosticBirthYearSchema.optional(),
+	subjects: z.array(diagnosticSubjectInputSchema).max(12)
+}).superRefine((input, ctx) => {
+	for (const [index, subject] of input.subjects.entries()) {
+		if (!isDiagnosticLevelForCountry(subject.country, subject.schoolYear)) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['subjects', index, 'schoolYear'],
+				message: 'Unsupported school stage for the selected country'
+			});
+		}
 	}
 });
 
@@ -330,6 +413,10 @@ function diagnosticTestsCollectionPath(userId: string): string {
 
 function diagnosticTestDocPath(userId: string, testId: string): string {
 	return `${diagnosticTestsCollectionPath(userId)}/${testId}`;
+}
+
+function diagnosticProfileDocPath(userId: string): string {
+	return `spark/${userId}/diagnosticProfiles/main`;
 }
 
 function nowIso(date: Date): string {
@@ -606,7 +693,15 @@ function summarizeDiagnosticHistory(test: DiagnosticTestDoc): string {
 function buildDiagnosticGenerationPrompt(options: {
 	test: Pick<
 		DiagnosticTestDoc,
-		'topic' | 'topicLabel' | 'subjectLabel' | 'country' | 'schoolYear' | 'mode' | 'priorEvidence'
+		| 'topic'
+		| 'topicLabel'
+		| 'subjectLabel'
+		| 'subjectCourse'
+		| 'subjectBoard'
+		| 'country'
+		| 'schoolYear'
+		| 'mode'
+		| 'priorEvidence'
 	>;
 	sheetIndex: number;
 	history: string;
@@ -618,6 +713,8 @@ function buildDiagnosticGenerationPrompt(options: {
 		'Return only data matching the schema.',
 		'',
 		`Topic: ${topicLabel}.`,
+		options.test.subjectCourse ? `Course/detail: ${options.test.subjectCourse}.` : null,
+		options.test.subjectBoard ? `Board/syllabus: ${options.test.subjectBoard}.` : null,
 		`School year: ${options.test.schoolYear}.`,
 		`Country: ${options.test.country}.`,
 		`Start mode: ${options.test.mode}.`,
@@ -657,6 +754,8 @@ async function generateDiagnosticSheet(options: {
 		| 'topic'
 		| 'topicLabel'
 		| 'subjectLabel'
+		| 'subjectCourse'
+		| 'subjectBoard'
 		| 'country'
 		| 'schoolYear'
 		| 'mode'
@@ -754,6 +853,8 @@ function buildExtensionGradingPrompt(options: {
 		'Grade the extension responses for this diagnostic. Return only data matching the schema.',
 		'',
 		`Topic: ${resolveDiagnosticTopicLabel(options.test.topic)}.`,
+		options.test.subjectCourse ? `Course/detail: ${options.test.subjectCourse}.` : null,
+		options.test.subjectBoard ? `Board/syllabus: ${options.test.subjectBoard}.` : null,
 		`School year: ${options.test.schoolYear}.`,
 		`Country: ${options.test.country}.`,
 		`Sheet: ${options.sheet.index} of 3.`,
@@ -1093,6 +1194,8 @@ async function publishDiagnosticSheetRun(options: {
 		`# Diagnostic sheet ${options.sheet.index}`,
 		'',
 		`Topic: ${resolveDiagnosticTopicLabel(options.test.topic)}`,
+		options.test.subjectCourse ? `Course/detail: ${options.test.subjectCourse}` : null,
+		options.test.subjectBoard ? `Board/syllabus: ${options.test.subjectBoard}` : null,
 		`School year: ${options.test.schoolYear}`,
 		`Country: ${options.test.country}`,
 		`Score: ${options.grading.totalScore}/${options.grading.maxScore} (${options.grading.percentage}%)`,
@@ -1154,7 +1257,7 @@ async function publishDiagnosticSheetRun(options: {
 		id: runId,
 		agentId,
 		workspaceId,
-		userPrompt: `Diagnostic for ${resolveDiagnosticTopicLabel(options.test.topic)}, ${options.test.schoolYear}, ${options.test.country}`,
+		userPrompt: `Diagnostic for ${resolveDiagnosticTopicLabel(options.test.topic)}, ${options.test.subjectCourse ?? options.test.schoolYear}, ${options.test.country}`,
 		olympiadKey: 'diagnostic_test',
 		olympiadLabel: 'Diagnostic',
 		summaryPath,
@@ -1166,7 +1269,7 @@ async function publishDiagnosticSheetRun(options: {
 		},
 		presentation: {
 			title: `Diagnostic sheet ${options.sheet.index}`,
-			subtitle: `${resolveDiagnosticTopicLabel(options.test.topic)} - ${options.test.schoolYear} - ${options.test.country}`,
+			subtitle: `${resolveDiagnosticTopicLabel(options.test.topic)} - ${options.test.subjectCourse ?? options.test.schoolYear} - ${options.test.country}`,
 			summaryMarkdown: options.grading.summary,
 			footer: 'Spark diagnostic'
 		},
@@ -1254,6 +1357,87 @@ export async function getLatestDiagnosticTest(userId: string): Promise<Diagnosti
 	return latest ?? null;
 }
 
+function buildSubjectProfile(
+	input: z.infer<typeof diagnosticSubjectInputSchema>,
+	existing: DiagnosticSubjectProfile | undefined,
+	now: Date
+): DiagnosticSubjectProfile {
+	const id = input.id ?? existing?.id ?? randomUUID();
+	return diagnosticSubjectProfileSchema.parse({
+		id,
+		topic: input.topic,
+		topicLabel: resolveDiagnosticTopicLabel(input.topic),
+		subjectLabel: resolveDiagnosticPaperSubject(input.topic),
+		country: input.country,
+		countryLabel: resolveDiagnosticCountryLabel(input.country),
+		schoolYear: input.schoolYear,
+		course: input.course,
+		board: input.board,
+		notes: input.notes ?? '',
+		createdAt: existing?.createdAt ?? now,
+		updatedAt: now
+	});
+}
+
+export async function loadDiagnosticProfile(userId: string): Promise<DiagnosticProfileDoc> {
+	const snapshot = await getFirestoreDocument({
+		serviceAccountJson: requireServiceAccountJson(),
+		documentPath: diagnosticProfileDocPath(userId)
+	});
+	if (!snapshot.exists || !snapshot.data) {
+		const now = new Date();
+		return DiagnosticProfileDocSchema.parse({
+			id: 'main',
+			subjects: [],
+			createdAt: now,
+			updatedAt: now
+		});
+	}
+	const parsed = DiagnosticProfileDocSchema.safeParse({
+		id: 'main',
+		...snapshot.data
+	});
+	if (!parsed.success) {
+		console.warn('[diagnostic] invalid diagnostic profile document', {
+			userId,
+			issues: parsed.error.issues
+		});
+		const now = new Date();
+		return DiagnosticProfileDocSchema.parse({
+			id: 'main',
+			subjects: [],
+			createdAt: now,
+			updatedAt: now
+		});
+	}
+	return parsed.data;
+}
+
+export async function saveDiagnosticProfile(
+	userId: string,
+	input: z.infer<typeof DiagnosticProfileSaveRequestSchema>
+): Promise<DiagnosticProfileDoc> {
+	const existing = await loadDiagnosticProfile(userId);
+	const now = new Date();
+	const existingById = new Map(existing.subjects.map((subject) => [subject.id, subject]));
+	const subjects = input.subjects.map((subject) =>
+		buildSubjectProfile(subject, subject.id ? existingById.get(subject.id) : undefined, now)
+	);
+	const profile = DiagnosticProfileDocSchema.parse({
+		id: 'main',
+		birthYear: input.birthYear,
+		subjects,
+		createdAt: existing.createdAt,
+		updatedAt: now
+	});
+	await setFirestoreDocument({
+		serviceAccountJson: requireServiceAccountJson(),
+		documentPath: diagnosticProfileDocPath(userId),
+		data: profile as unknown as Record<string, unknown>
+	});
+	return profile;
+}
+
 export async function getDiagnosticStatus(userId: string): Promise<{
 	hasCompleted: boolean;
 	latest: DiagnosticTestClientState | null;
@@ -1269,6 +1453,10 @@ export async function getDiagnosticStatus(userId: string): Promise<{
 async function buildPriorLearnerEvidence(options: {
 	userId: string;
 	mode: DiagnosticStartMode;
+	subjectId: string | undefined;
+	topic: DiagnosticTopic;
+	country: DiagnosticCountry;
+	schoolYear: string;
 }): Promise<string> {
 	if (options.mode === 'fresh') {
 		return 'Fresh diagnostic requested. Do not use previous performance to choose the first sheet; use only the selected country, topic, and school stage.';
@@ -1287,6 +1475,16 @@ async function buildPriorLearnerEvidence(options: {
 
 	const diagnosticLines = diagnostics
 		.filter((test) => test.status === 'complete')
+		.filter((test) => {
+			if (options.subjectId && test.subjectId) {
+				return test.subjectId === options.subjectId;
+			}
+			return (
+				test.topic === options.topic &&
+				test.country === options.country &&
+				test.schoolYear === options.schoolYear
+			);
+		})
 		.slice(0, 3)
 		.map((test) => {
 			const scoreLine = test.sheets
@@ -1368,6 +1566,8 @@ function buildDiagnosticResultsPrompt(test: DiagnosticTestDoc): string {
 		'Return only data matching the schema. Do not call the output a report.',
 		'',
 		`Topic: ${test.topicLabel}.`,
+		test.subjectCourse ? `Course/detail: ${test.subjectCourse}.` : null,
+		test.subjectBoard ? `Board/syllabus: ${test.subjectBoard}.` : null,
 		`School year: ${test.schoolYear}.`,
 		`Country: ${test.country}.`,
 		`Start mode: ${test.mode}.`,
@@ -1426,24 +1626,80 @@ async function generateDiagnosticResults(options: {
 	}
 }
 
+type DiagnosticStartSelection = {
+	subjectId: string | undefined;
+	subjectCourse: string | undefined;
+	subjectBoard: string | undefined;
+	topic: DiagnosticTopic;
+	topicLabel: string;
+	subjectLabel: string;
+	country: DiagnosticCountry;
+	schoolYear: string;
+};
+
+async function resolveDiagnosticStartSelection(options: {
+	userId: string;
+	input: z.infer<typeof DiagnosticStartRequestSchema>;
+}): Promise<DiagnosticStartSelection> {
+	if (options.input.subjectId) {
+		const profile = await loadDiagnosticProfile(options.userId);
+		const subject = profile.subjects.find((entry) => entry.id === options.input.subjectId);
+		if (!subject) {
+			throw new Error('diagnostic_subject_not_found');
+		}
+		return {
+			subjectId: subject.id,
+			subjectCourse: subject.course,
+			subjectBoard: subject.board,
+			topic: subject.topic,
+			topicLabel: subject.topicLabel,
+			subjectLabel: subject.subjectLabel,
+			country: subject.country,
+			schoolYear: subject.schoolYear
+		};
+	}
+
+	if (!options.input.topic || !options.input.country || !options.input.schoolYear) {
+		throw new Error('diagnostic_start_selection_incomplete');
+	}
+	return {
+		subjectId: undefined,
+		subjectCourse: undefined,
+		subjectBoard: undefined,
+		topic: options.input.topic,
+		topicLabel: resolveDiagnosticTopicLabel(options.input.topic),
+		subjectLabel: resolveDiagnosticPaperSubject(options.input.topic),
+		country: options.input.country,
+		schoolYear: options.input.schoolYear
+	};
+}
+
 export async function startDiagnosticTest(options: {
 	userId: string;
 	input: z.infer<typeof DiagnosticStartRequestSchema>;
 }): Promise<DiagnosticTestDoc> {
 	const now = new Date();
 	const testId = randomUUID();
+	const selection = await resolveDiagnosticStartSelection(options);
 	const priorEvidence = await buildPriorLearnerEvidence({
 		userId: options.userId,
-		mode: options.input.mode
+		mode: options.input.mode,
+		subjectId: selection.subjectId,
+		topic: selection.topic,
+		country: selection.country,
+		schoolYear: selection.schoolYear
 	});
 	const base = {
 		id: testId,
 		status: 'in_progress' as const,
-		topic: options.input.topic,
-		topicLabel: resolveDiagnosticTopicLabel(options.input.topic),
-		subjectLabel: resolveDiagnosticPaperSubject(options.input.topic),
-		country: options.input.country,
-		schoolYear: options.input.schoolYear,
+		subjectId: selection.subjectId,
+		subjectCourse: selection.subjectCourse,
+		subjectBoard: selection.subjectBoard,
+		topic: selection.topic,
+		topicLabel: selection.topicLabel,
+		subjectLabel: selection.subjectLabel,
+		country: selection.country,
+		schoolYear: selection.schoolYear,
 		mode: options.input.mode,
 		priorEvidence,
 		currentSheetIndex: 1,
@@ -1575,6 +1831,9 @@ type ClientExtensionQuestion = {
 export type DiagnosticTestClientState = {
 	id: string;
 	status: DiagnosticTestDoc['status'];
+	subjectId: string | null;
+	subjectCourse: string | null;
+	subjectBoard: string | null;
 	topic: DiagnosticTopic;
 	topicLabel: string;
 	subjectLabel: string;
@@ -1620,10 +1879,59 @@ export type DiagnosticTestClientState = {
 	}>;
 };
 
+export type DiagnosticProfileClientState = {
+	id: string;
+	birthYear: number | null;
+	subjects: Array<{
+		id: string;
+		topic: DiagnosticTopic;
+		topicLabel: string;
+		subjectLabel: string;
+		country: DiagnosticCountry;
+		countryLabel: string;
+		schoolYear: string;
+		course: string;
+		board: string;
+		notes: string;
+		createdAt: string;
+		updatedAt: string;
+	}>;
+	createdAt: string;
+	updatedAt: string;
+};
+
+export function serializeDiagnosticProfileForClient(
+	profile: DiagnosticProfileDoc
+): DiagnosticProfileClientState {
+	return {
+		id: profile.id,
+		birthYear: profile.birthYear ?? null,
+		subjects: profile.subjects.map((subject) => ({
+			id: subject.id,
+			topic: subject.topic,
+			topicLabel: subject.topicLabel,
+			subjectLabel: subject.subjectLabel,
+			country: subject.country,
+			countryLabel: subject.countryLabel,
+			schoolYear: subject.schoolYear,
+			course: subject.course,
+			board: subject.board,
+			notes: subject.notes ?? '',
+			createdAt: nowIso(subject.createdAt),
+			updatedAt: nowIso(subject.updatedAt)
+		})),
+		createdAt: nowIso(profile.createdAt),
+		updatedAt: nowIso(profile.updatedAt)
+	};
+}
+
 export function serializeDiagnosticTestForClient(test: DiagnosticTestDoc): DiagnosticTestClientState {
 	return {
 		id: test.id,
 		status: test.status,
+		subjectId: test.subjectId ?? null,
+		subjectCourse: test.subjectCourse ?? null,
+		subjectBoard: test.subjectBoard ?? null,
 		topic: test.topic,
 		topicLabel: test.topicLabel,
 		subjectLabel: test.subjectLabel,

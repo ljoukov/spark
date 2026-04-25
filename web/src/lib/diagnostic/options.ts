@@ -79,9 +79,38 @@ export const DIAGNOSTIC_LEVEL_OPTIONS_BY_COUNTRY = {
 	]
 } as const;
 
+const SCIENCE_COURSES_BY_COUNTRY = {
+	UK: ['GCSE Triple Science', 'GCSE Combined Science', 'A-level', 'School enrichment'],
+	USA: ['School course', 'Honors', 'AP', 'Olympiad enrichment'],
+	Canada: ['School course', 'Honors', 'AP / advanced', 'Olympiad enrichment'],
+	Australia: ['School course', 'Senior secondary', 'Olympiad enrichment'],
+	Singapore: ['Lower secondary', 'Upper secondary', 'Junior College', 'Olympiad enrichment']
+} as const;
+
+const MATH_COURSES_BY_COUNTRY = {
+	UK: ['UKMT / Olympiad enrichment', 'GCSE Mathematics', 'GCSE Further Mathematics', 'A-level Mathematics'],
+	USA: ['Math olympiad enrichment', 'Algebra / Geometry', 'Precalculus', 'AP Calculus'],
+	Canada: ['Math contest enrichment', 'School mathematics', 'Precalculus', 'Calculus'],
+	Australia: ['Math olympiad enrichment', 'School mathematics', 'Mathematical Methods', 'Specialist Mathematics'],
+	Singapore: ['Math olympiad enrichment', 'Elementary Mathematics', 'Additional Mathematics', 'H2 Mathematics']
+} as const;
+
+const BOARDS_BY_COUNTRY = {
+	UK: ['AQA', 'Edexcel', 'OCR', 'WJEC', 'CCEA', 'UKMT', 'School set'],
+	USA: ['College Board', 'State course', 'School set', 'Olympiad'],
+	Canada: ['Provincial course', 'School set', 'College Board', 'Olympiad'],
+	Australia: ['State syllabus', 'School set', 'Australian Science Olympiads', 'AMT'],
+	Singapore: ['SEAB', 'School set', 'Singapore Mathematical Olympiad', 'Singapore Junior Science Olympiad']
+} as const;
+
 export type DiagnosticTopic = (typeof DIAGNOSTIC_TOPICS)[number]['value'];
 export type DiagnosticCountry = (typeof DIAGNOSTIC_COUNTRIES)[number]['value'];
 export type DiagnosticStartMode = 'fresh' | 'progress';
+
+export type DiagnosticSubjectDetailOptions = {
+	courses: readonly string[];
+	boards: readonly string[];
+};
 
 export function resolveDiagnosticTopicLabel(topic: DiagnosticTopic): string {
 	return DIAGNOSTIC_TOPICS.find((entry) => entry.value === topic)?.label ?? 'Diagnostic';
@@ -105,4 +134,45 @@ export function getDiagnosticLevelOptions(country: DiagnosticCountry): readonly 
 
 export function isDiagnosticLevelForCountry(country: DiagnosticCountry, level: string): boolean {
 	return getDiagnosticLevelOptions(country).includes(level);
+}
+
+function formatScienceCourse(
+	country: DiagnosticCountry,
+	course: string,
+	subject: string
+): string {
+	if (country === 'UK') {
+		if (course === 'GCSE Triple Science' || course === 'GCSE Combined Science') {
+			return `${course} ${subject}`;
+		}
+		if (course === 'A-level') {
+			return `A-level ${subject}`;
+		}
+	}
+	if ((country === 'USA' || country === 'Canada') && course === 'AP') {
+		return `AP ${subject}`;
+	}
+	if (country === 'Australia' && course === 'Senior secondary') {
+		return `Senior secondary ${subject}`;
+	}
+	if (country === 'Singapore' && course === 'Junior College') {
+		return `Junior College ${subject}`;
+	}
+	return course;
+}
+
+export function getDiagnosticSubjectDetailOptions(
+	country: DiagnosticCountry,
+	topic: DiagnosticTopic
+): DiagnosticSubjectDetailOptions {
+	const courses =
+		topic === 'olympiad_math'
+			? MATH_COURSES_BY_COUNTRY[country]
+			: SCIENCE_COURSES_BY_COUNTRY[country].map((course) =>
+					formatScienceCourse(country, course, resolveDiagnosticPaperSubject(topic))
+				);
+	return {
+		courses,
+		boards: BOARDS_BY_COUNTRY[country]
+	};
 }

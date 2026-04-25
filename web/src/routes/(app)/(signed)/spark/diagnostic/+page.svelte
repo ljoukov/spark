@@ -1,17 +1,23 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import ArrowRightIcon from '@lucide/svelte/icons/arrow-right';
-	import CheckIcon from '@lucide/svelte/icons/check';
+	import BookOpenIcon from '@lucide/svelte/icons/book-open';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import Loader2Icon from '@lucide/svelte/icons/loader-2';
+	import PencilIcon from '@lucide/svelte/icons/pencil';
+	import PlusIcon from '@lucide/svelte/icons/plus';
 	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
-	import SparklesIcon from '@lucide/svelte/icons/sparkles';
+	import SaveIcon from '@lucide/svelte/icons/save';
+	import UserRoundIcon from '@lucide/svelte/icons/user-round';
+	import XIcon from '@lucide/svelte/icons/x';
 	import { untrack } from 'svelte';
 	import { MarkdownContent } from '$lib/components/markdown';
+	import { resolvePaperSheetSubjectTheme } from '@spark/schemas';
 	import {
 		DIAGNOSTIC_COUNTRIES,
 		DIAGNOSTIC_TOPICS,
 		getDiagnosticLevelOptions,
+		getDiagnosticSubjectDetailOptions,
 		resolveDiagnosticLevelLabel,
 		type DiagnosticCountry,
 		type DiagnosticStartMode,
@@ -19,39 +25,110 @@
 	} from '$lib/diagnostic/options';
 	import type { PageData } from './$types';
 
-	type Diagnostic = NonNullable<PageData['diagnostic']>;
+	type Profile = PageData['profile'];
+	type Subject = Profile['subjects'][number];
+	type Diagnostic = PageData['diagnostics'][number];
 	type DiagnosticSheet = Diagnostic['sheets'][number];
+	type SubjectInput = {
+		id?: string;
+		topic: DiagnosticTopic;
+		country: DiagnosticCountry;
+		schoolYear: string;
+		course: string;
+		board: string;
+		notes: string;
+	};
 
 	let { data }: { data: PageData } = $props();
-	const initialDiagnostic = untrack(() => data.diagnostic);
-	const initialCountry = initialDiagnostic?.country ?? 'UK';
-	let diagnostic = $state<Diagnostic | null>(initialDiagnostic);
-	let selectedCountry = $state<DiagnosticCountry>(initialCountry);
-	let selectedTopic = $state<DiagnosticTopic>(initialDiagnostic?.topic ?? 'olympiad_math');
-	let selectedSchoolYear = $state(
-		initialDiagnostic?.schoolYear ?? getDiagnosticLevelOptions(initialCountry)[5] ?? 'Year 8'
-	);
+	const initialProfile = untrack(() => data.profile);
+	let profile = $state<Profile>(initialProfile);
+	let diagnostics = $state<Diagnostic[]>(untrack(() => data.diagnostics));
+	let birthYearInput = $state(initialProfile.birthYear?.toString() ?? '');
+	let profileError = $state<string | null>(null);
 	let requestError = $state<string | null>(null);
+	let profileSaving = $state(false);
+	let startingSubjectId = $state<string | null>(null);
 	let startingMode = $state<DiagnosticStartMode | null>(null);
-	let showSetup = $state(initialDiagnostic === null);
+	let editingSubjectId = $state<string | null>(null);
+	let showSubjectForm = $state(initialProfile.subjects.length === 0);
+	let subjectForm = $state<SubjectInput>(
+		createEmptySubjectForm(initialProfile.subjects[0]?.country ?? 'UK')
+	);
 
-	const levelOptions = $derived(getDiagnosticLevelOptions(selectedCountry));
-	const schoolYearLabel = $derived(resolveDiagnosticLevelLabel(selectedCountry));
-	const activeSheet = $derived.by(() => {
-		if (!diagnostic || diagnostic.status === 'complete') {
-			return null;
-		}
-		return diagnostic.sheets.find((sheet) => sheet.index === diagnostic?.currentSheetIndex) ?? null;
-	});
-	const completedSheets = $derived(diagnostic?.sheets.filter((sheet) => sheet.runId) ?? []);
-	const isComplete = $derived(diagnostic?.status === 'complete');
-	const canContinue = $derived(Boolean(diagnostic && activeSheet));
+	const currentYear = new Date().getFullYear();
+	const birthYearValue = $derived(Number.parseInt(birthYearInput, 10));
+	const birthYearValid = $derived(
+		Number.isInteger(birthYearValue) && birthYearValue >= 1990 && birthYearValue <= currentYear
+	);
+	const levelOptions = $derived(getDiagnosticLevelOptions(subjectForm.country));
+	const schoolYearLabel = $derived(resolveDiagnosticLevelLabel(subjectForm.country));
+	const detailOptions = $derived(
+		getDiagnosticSubjectDetailOptions(subjectForm.country, subjectForm.topic)
+	);
 
 	$effect(() => {
-		if (!levelOptions.includes(selectedSchoolYear)) {
-			selectedSchoolYear = levelOptions[0] ?? selectedSchoolYear;
+		if (!levelOptions.includes(subjectForm.schoolYear)) {
+			subjectForm.schoolYear = levelOptions[0] ?? subjectForm.schoolYear;
+		}
+		const currentCourse = untrack(() => subjectForm.course);
+		const currentBoard = untrack(() => subjectForm.board);
+		if (!detailOptions.courses.includes(currentCourse)) {
+			subjectForm.course = detailOptions.courses[0] ?? currentCourse;
+		}
+		if (!detailOptions.boards.includes(currentBoard)) {
+			subjectForm.board = detailOptions.boards[0] ?? currentBoard;
 		}
 	});
+
+	function createEmptySubjectForm(country: DiagnosticCountry): SubjectInput {
+		const topic: DiagnosticTopic = 'olympiad_math';
+		const level = getDiagnosticLevelOptions(country)[5] ?? getDiagnosticLevelOptions(country)[0] ?? 'Year 8';
+		const details = getDiagnosticSubjectDetailOptions(country, topic);
+		return {
+			topic,
+			country,
+			schoolYear: level,
+			course: details.courses[0] ?? 'School course',
+			board: details.boards[0] ?? 'School set',
+			notes: ''
+		};
+	}
+
+	function subjectToInput(subject: Subject): SubjectInput {
+		return {
+			id: subject.id,
+			topic: subject.topic,
+			country: subject.country,
+			schoolYear: subject.schoolYear,
+			course: subject.course,
+			board: subject.board,
+			notes: subject.notes
+		};
+	}
+
+	function normalizeSubjectInput(subject: Subject | SubjectInput): SubjectInput {
+		return {
+			id: subject.id,
+			topic: subject.topic,
+			country: subject.country,
+			schoolYear: subject.schoolYear,
+			course: subject.course.trim(),
+			board: subject.board.trim(),
+			notes: subject.notes.trim()
+		};
+	}
+
+	function subjectThemeStyle(subject: Subject): string {
+		const theme = resolvePaperSheetSubjectTheme({
+			label: `${subject.subjectLabel} ${subject.topicLabel} ${subject.course}`
+		});
+		return [
+			`--subject-color: ${theme.color}`,
+			`--subject-accent: ${theme.accent}`,
+			`--subject-light: ${theme.light}`,
+			`--subject-border: ${theme.border}`
+		].join('; ');
+	}
 
 	function formatDate(value: string | null): string {
 		if (!value) {
@@ -71,10 +148,6 @@
 	function formatPercent(value: number): string {
 		const rounded = Math.round(value * 10) / 10;
 		return `${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)}%`;
-	}
-
-	function findSheet(index: number): DiagnosticSheet | null {
-		return diagnostic?.sheets.find((sheet) => sheet.index === index) ?? null;
 	}
 
 	function conciseText(value: string, maxWords: number): string {
@@ -126,25 +199,43 @@
 			`**Keep:** ${keep}`,
 			`**Focus:** ${focus}`,
 			`**Next:** ${next}`
-		]
-			.join('\n\n');
+		].join('\n\n');
 	}
 
-	function resolveSheetHref(sheet: DiagnosticSheet | null, index: number): string | null {
-		if (!diagnostic || !sheet) {
-			return null;
+	function matchesSubject(diagnostic: Diagnostic, subject: Subject): boolean {
+		if (diagnostic.subjectId) {
+			return diagnostic.subjectId === subject.id;
 		}
-		if (sheet.runId) {
-			return `/spark/sheets/${sheet.runId}`;
-		}
-		if (diagnostic.status === 'in_progress' && diagnostic.currentSheetIndex === index) {
-			return `/spark/diagnostic/${diagnostic.id}`;
-		}
-		return null;
+		return (
+			diagnostic.topic === subject.topic &&
+			diagnostic.country === subject.country &&
+			diagnostic.schoolYear === subject.schoolYear &&
+			(!diagnostic.subjectCourse || diagnostic.subjectCourse === subject.course)
+		);
 	}
 
-	function resolveSheetState(sheet: DiagnosticSheet | null, index: number): string {
-		if (!diagnostic || !sheet) {
+	function subjectDiagnostics(subject: Subject): Diagnostic[] {
+		return diagnostics.filter((diagnostic) => matchesSubject(diagnostic, subject));
+	}
+
+	function activeDiagnosticForSubject(subject: Subject): Diagnostic | null {
+		return subjectDiagnostics(subject).find((diagnostic) => diagnostic.status === 'in_progress') ?? null;
+	}
+
+	function latestCompletedDiagnosticForSubject(subject: Subject): Diagnostic | null {
+		return subjectDiagnostics(subject).find((diagnostic) => diagnostic.status === 'complete') ?? null;
+	}
+
+	function latestDiagnosticForSubject(subject: Subject): Diagnostic | null {
+		return subjectDiagnostics(subject)[0] ?? null;
+	}
+
+	function findSheet(diagnostic: Diagnostic, index: number): DiagnosticSheet | null {
+		return diagnostic.sheets.find((sheet) => sheet.index === index) ?? null;
+	}
+
+	function resolveSheetState(diagnostic: Diagnostic, sheet: DiagnosticSheet | null, index: number): string {
+		if (!sheet) {
 			return 'locked';
 		}
 		if (sheet.runId) {
@@ -156,8 +247,19 @@
 		return 'locked';
 	}
 
-	function resolveSheetStatusLabel(sheet: DiagnosticSheet | null, index: number): string {
-		const state = resolveSheetState(sheet, index);
+	function resolveSheetHref(diagnostic: Diagnostic, sheet: DiagnosticSheet | null, index: number): string | null {
+		const state = resolveSheetState(diagnostic, sheet, index);
+		if (state === 'graded' && sheet?.runId) {
+			return `/spark/sheets/${sheet.runId}`;
+		}
+		if (state === 'current') {
+			return `/spark/diagnostic/${diagnostic.id}`;
+		}
+		return null;
+	}
+
+	function resolveSheetStatusLabel(diagnostic: Diagnostic, sheet: DiagnosticSheet | null, index: number): string {
+		const state = resolveSheetState(diagnostic, sheet, index);
 		if (state === 'graded') {
 			return 'Graded';
 		}
@@ -167,10 +269,88 @@
 		return 'Waiting';
 	}
 
-	async function startDiagnostic(mode: DiagnosticStartMode, source?: Diagnostic): Promise<void> {
-		if (startingMode) {
+	function openNewSubjectForm(): void {
+		editingSubjectId = null;
+		subjectForm = createEmptySubjectForm(profile.subjects[0]?.country ?? 'UK');
+		showSubjectForm = true;
+		profileError = null;
+	}
+
+	function openEditSubjectForm(subject: Subject): void {
+		editingSubjectId = subject.id;
+		subjectForm = subjectToInput(subject);
+		showSubjectForm = true;
+		profileError = null;
+	}
+
+	async function saveProfile(subjects: Array<Subject | SubjectInput>): Promise<Profile | null> {
+		profileError = null;
+		if (!birthYearValid) {
+			profileError = `Enter a year of birth between 1990 and ${currentYear.toString()}.`;
+			return null;
+		}
+		const normalizedSubjects = subjects.map(normalizeSubjectInput);
+		if (normalizedSubjects.some((subject) => !subject.course || !subject.board)) {
+			profileError = 'Every subject needs a course/detail and board or syllabus.';
+			return null;
+		}
+		profileSaving = true;
+		try {
+			const response = await fetch('/api/spark/diagnostic/profile', {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					birthYear: birthYearValue,
+					subjects: normalizedSubjects
+				})
+			});
+			const payload = (await response.json().catch(() => null)) as {
+				profile?: Profile;
+				error?: string;
+			} | null;
+			if (!response.ok || !payload?.profile) {
+				throw new Error(payload?.error ?? 'diagnostic_profile_save_failed');
+			}
+			profile = payload.profile;
+			birthYearInput = payload.profile.birthYear?.toString() ?? birthYearInput;
+			return payload.profile;
+		} catch (error) {
+			console.error('[diagnostic] profile save failed', error);
+			profileError = 'Profile could not be saved. Try again.';
+			return null;
+		} finally {
+			profileSaving = false;
+		}
+	}
+
+	async function saveYearOfBirth(): Promise<void> {
+		await saveProfile(profile.subjects);
+	}
+
+	async function saveSubject(): Promise<void> {
+		const nextSubject = normalizeSubjectInput(subjectForm);
+		const nextSubjects = editingSubjectId
+			? profile.subjects.map((subject) => (subject.id === editingSubjectId ? nextSubject : subject))
+			: [...profile.subjects, nextSubject];
+		const saved = await saveProfile(nextSubjects);
+		if (saved) {
+			showSubjectForm = false;
+			editingSubjectId = null;
+			subjectForm = createEmptySubjectForm(saved.subjects[0]?.country ?? 'UK');
+		}
+	}
+
+	async function startDiagnostic(subject: Subject, mode: DiagnosticStartMode): Promise<void> {
+		if (startingSubjectId) {
 			return;
 		}
+		if (profile.birthYear !== birthYearValue) {
+			const saved = await saveProfile(profile.subjects);
+			if (!saved) {
+				return;
+			}
+		}
+		startingSubjectId = subject.id;
 		startingMode = mode;
 		requestError = null;
 		try {
@@ -178,9 +358,7 @@
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					country: source?.country ?? selectedCountry,
-					topic: source?.topic ?? selectedTopic,
-					schoolYear: source?.schoolYear ?? selectedSchoolYear,
+					subjectId: subject.id,
 					mode
 				})
 			});
@@ -191,13 +369,13 @@
 			if (!response.ok || !payload?.diagnostic) {
 				throw new Error(payload?.error ?? 'diagnostic_start_failed');
 			}
-			diagnostic = payload.diagnostic;
-			showSetup = false;
+			diagnostics = [payload.diagnostic, ...diagnostics.filter((item) => item.id !== payload.diagnostic?.id)];
 			await goto(`/spark/diagnostic/${payload.diagnostic.id}`);
 		} catch (error) {
 			console.error('[diagnostic] start request failed', error);
 			requestError = 'Diagnostic could not start. Try again.';
 		} finally {
+			startingSubjectId = null;
 			startingMode = null;
 		}
 	}
@@ -211,235 +389,363 @@
 	<header class="diagnostic-header">
 		<div>
 			<p class="eyebrow">Diagnostic</p>
-			<h1>Diagnostic</h1>
+			<h1>Subject diagnostics</h1>
 			<p class="subtitle">
-				Three adaptive sheets that narrow the starting level, then publish graded sheets into the
-				Sheets workspace.
+				Keep a small learner profile, add subjects with course details, then run a diagnostic for
+				each subject independently.
 			</p>
 		</div>
 		<a class="back-button" href="/spark">Back to chat</a>
 	</header>
 
-	{#if requestError}
-		<div class="diagnostic-error" role="alert">{requestError}</div>
+	{#if profileError || requestError}
+		<div class="diagnostic-error" role="alert">{profileError ?? requestError}</div>
 	{/if}
 
-	{#if showSetup}
-		<section class="setup-panel" aria-label="Diagnostic setup">
-			<div class="setup-panel__intro">
-				<span class="setup-panel__icon" aria-hidden="true">
-					<SparklesIcon size={22} />
-				</span>
-				<div>
-					<h2>Choose the starting point</h2>
-					<p>The first sheet starts broad; each next sheet adapts to submitted answers.</p>
-				</div>
+	<section class="profile-panel" aria-label="Learner profile">
+		<div class="profile-panel__title">
+			<span class="profile-icon" aria-hidden="true">
+				<UserRoundIcon size={19} />
+			</span>
+			<div>
+				<p class="eyebrow">Profile</p>
+				<h2>Learner details</h2>
 			</div>
+		</div>
+		<div class="profile-panel__controls">
+			<label class="field compact" for="birth-year">
+				<span>Year of birth</span>
+				<input
+					id="birth-year"
+					type="number"
+					min="1990"
+					max={currentYear}
+					inputmode="numeric"
+					bind:value={birthYearInput}
+				/>
+			</label>
+			<button
+				class="secondary-button"
+				type="button"
+				onclick={() => void saveYearOfBirth()}
+				disabled={profileSaving}
+			>
+				{#if profileSaving}
+					<Loader2Icon class="spin" size={17} />
+					<span>Saving</span>
+				{:else}
+					<SaveIcon size={17} />
+					<span>Save profile</span>
+				{/if}
+			</button>
+		</div>
+		<p class="profile-note">
+			Used across all subjects. Subject, course, and board can be added or edited below.
+		</p>
+	</section>
 
-			<div class="setup-grid">
-				<div class="field">
-					<label for="diagnostic-country">Country</label>
-					<select id="diagnostic-country" bind:value={selectedCountry}>
-						{#each DIAGNOSTIC_COUNTRIES as country}
-							<option value={country.value}>{country.label}</option>
-						{/each}
-					</select>
-				</div>
-				<div class="field">
-					<label for="diagnostic-topic">Topic</label>
-					<select id="diagnostic-topic" bind:value={selectedTopic}>
-						{#each DIAGNOSTIC_TOPICS as topic}
-							<option value={topic.value}>{topic.label}</option>
-						{/each}
-					</select>
-				</div>
-				<div class="field">
-					<label for="diagnostic-year">{schoolYearLabel}</label>
-					<select id="diagnostic-year" bind:value={selectedSchoolYear}>
-						{#each levelOptions as schoolYear}
-							<option value={schoolYear}>{schoolYear}</option>
-						{/each}
-					</select>
-				</div>
+	<section class="subjects-panel" aria-label="Diagnostic subjects">
+		<div class="section-heading">
+			<div>
+				<p class="eyebrow">Subjects</p>
+				<h2>{profile.subjects.length === 0 ? 'Add the first subject' : 'Diagnostic subjects'}</h2>
 			</div>
-
-			<div class="setup-actions">
-				<button
-					class="primary-button"
-					type="button"
-					onclick={() => void startDiagnostic('fresh')}
-					disabled={startingMode !== null}
-				>
-					{#if startingMode === 'fresh'}
-						<Loader2Icon class="spin" size={17} />
-						<span>Generating sheet</span>
-					{:else}
-						<span>Start diagnostic</span>
-						<ArrowRightIcon size={17} />
-					{/if}
+			{#if !showSubjectForm}
+				<button class="primary-button" type="button" onclick={openNewSubjectForm}>
+					<PlusIcon size={17} />
+					<span>Add subject</span>
 				</button>
-			</div>
-		</section>
-	{:else if diagnostic}
-		{#if isComplete}
-			<section class="results-panel" aria-label="Diagnostic results">
-				<div class="results-panel__badge" aria-hidden="true">
-					<CheckIcon size={23} />
+			{/if}
+		</div>
+
+		{#if showSubjectForm}
+			<form
+				class="subject-form"
+				aria-label={editingSubjectId ? 'Edit diagnostic subject' : 'Add diagnostic subject'}
+				onsubmit={(event) => {
+					event.preventDefault();
+					void saveSubject();
+				}}
+			>
+				<div class="subject-form__heading">
+					<div>
+						<h3>{editingSubjectId ? 'Edit subject' : 'New subject'}</h3>
+						<p>Country first, then subject, then the local school stage and syllabus details.</p>
+					</div>
+					<button
+						class="icon-button"
+						type="button"
+						aria-label="Close subject form"
+						onclick={() => {
+							showSubjectForm = false;
+							editingSubjectId = null;
+						}}
+					>
+						<XIcon size={18} />
+					</button>
 				</div>
-				<div class="results-panel__body">
-					<p class="eyebrow">Completed {formatDate(diagnostic.completedAt)}</p>
-					<h2>Diagnostic results</h2>
-					<div class="diagnostic-report">
-						<MarkdownContent markdown={buildResultsMarkdown(diagnostic)} />
-					</div>
-					<div class="setup-actions">
-						<button
-							class="secondary-button"
-							type="button"
-							onclick={() => void startDiagnostic('fresh', diagnostic ?? undefined)}
-							disabled={startingMode !== null}
-						>
-							{#if startingMode === 'fresh'}
-								<Loader2Icon class="spin" size={17} />
-								<span>Starting</span>
-							{:else}
-								<RotateCcwIcon size={17} />
-								<span>Redo from scratch</span>
-							{/if}
-						</button>
-						<button
-							class="primary-button"
-							type="button"
-							onclick={() => void startDiagnostic('progress', diagnostic ?? undefined)}
-							disabled={startingMode !== null}
-						>
-							{#if startingMode === 'progress'}
-								<Loader2Icon class="spin" size={17} />
-								<span>Generating sheet</span>
-							{:else}
-								<span>Progress further</span>
-								<ArrowRightIcon size={17} />
-							{/if}
-						</button>
-					</div>
+				<div class="setup-grid">
+					<label class="field" for="subject-country">
+						<span>Country</span>
+						<select id="subject-country" bind:value={subjectForm.country}>
+							{#each DIAGNOSTIC_COUNTRIES as country}
+								<option value={country.value}>{country.label}</option>
+							{/each}
+						</select>
+					</label>
+					<label class="field" for="subject-topic">
+						<span>Subject</span>
+						<select id="subject-topic" bind:value={subjectForm.topic}>
+							{#each DIAGNOSTIC_TOPICS as topic}
+								<option value={topic.value}>{topic.label}</option>
+							{/each}
+						</select>
+					</label>
+					<label class="field" for="subject-year">
+						<span>{schoolYearLabel}</span>
+						<select id="subject-year" bind:value={subjectForm.schoolYear}>
+							{#each levelOptions as schoolYear}
+								<option value={schoolYear}>{schoolYear}</option>
+							{/each}
+						</select>
+					</label>
+					<label class="field" for="subject-course">
+						<span>Course or detail</span>
+						<input
+							id="subject-course"
+							list="subject-course-options"
+							bind:value={subjectForm.course}
+							placeholder="GCSE Triple Science Physics"
+						/>
+						<datalist id="subject-course-options">
+							{#each detailOptions.courses as course}
+								<option value={course}></option>
+							{/each}
+						</datalist>
+					</label>
+					<label class="field" for="subject-board">
+						<span>Board or syllabus</span>
+						<input
+							id="subject-board"
+							list="subject-board-options"
+							bind:value={subjectForm.board}
+							placeholder="AQA"
+						/>
+						<datalist id="subject-board-options">
+							{#each detailOptions.boards as board}
+								<option value={board}></option>
+							{/each}
+						</datalist>
+					</label>
+					<label class="field" for="subject-notes">
+						<span>Notes</span>
+						<input
+							id="subject-notes"
+							bind:value={subjectForm.notes}
+							placeholder="Optional class set, exam date, or target"
+						/>
+					</label>
+				</div>
+				<div class="setup-actions">
+					<button class="primary-button" type="submit" disabled={profileSaving}>
+						{#if profileSaving}
+							<Loader2Icon class="spin" size={17} />
+							<span>Saving</span>
+						{:else}
+							<SaveIcon size={17} />
+							<span>{editingSubjectId ? 'Save subject' : 'Add subject'}</span>
+						{/if}
+					</button>
+				</div>
+			</form>
+		{/if}
+
+		{#if profile.subjects.length === 0}
+			<section class="empty-panel">
+				<BookOpenIcon size={24} />
+				<div>
+					<h3>No subjects yet</h3>
+					<p>Add a subject such as GCSE Triple Science Physics, AQA, then start its diagnostic.</p>
 				</div>
 			</section>
 		{:else}
-			<section class="continue-panel" aria-label="Current diagnostic">
-				<div>
-					<p class="eyebrow">In progress</p>
-					<h2>{diagnostic.topicLabel} · {diagnostic.schoolYear}</h2>
-					<p>
-						{completedSheets.length} of 3 sheets graded. Open the next sheet when you are ready.
-					</p>
-				</div>
-				{#if canContinue}
-					<a class="primary-button" href={`/spark/diagnostic/${diagnostic.id}`}>
-						<span>Open sheet {diagnostic.currentSheetIndex}</span>
-						<ArrowRightIcon size={17} />
-					</a>
-				{/if}
-			</section>
-		{/if}
-
-		<section class="sheet-board" aria-label="Diagnostic sheets">
-			{#each [1, 2, 3] as index}
-				{@const sheet = findSheet(index)}
-				{@const href = resolveSheetHref(sheet, index)}
-				<svelte:element
-					this={href ? 'a' : 'div'}
-					href={href ?? undefined}
-					class="sheet-card"
-					data-state={resolveSheetState(sheet, index)}
-				>
-					<div class="sheet-thumb">
-						<header class="sheet-thumb__header">
-							<div class="sheet-thumb__marks">
-								<p>Marks</p>
-								<strong>
-									{#if sheet?.grading}
-										{sheet.grading.totalScore}/{sheet.grading.maxScore}
-									{:else}
-										-
-									{/if}
-								</strong>
-								{#if sheet?.grading}
-									<span>{formatPercent(sheet.grading.percentage)}</span>
-								{/if}
+			<div class="subject-grid">
+				{#each profile.subjects as subject (subject.id)}
+					{@const activeDiagnostic = activeDiagnosticForSubject(subject)}
+					{@const completedDiagnostic = latestCompletedDiagnosticForSubject(subject)}
+					{@const latestDiagnostic = latestDiagnosticForSubject(subject)}
+					<article class="subject-card" style={subjectThemeStyle(subject)}>
+						<header class="subject-card__header">
+							<div class="subject-badge" aria-hidden="true">
+								{subject.subjectLabel.slice(0, 1)}
 							</div>
 							<div>
-								<p class="sheet-thumb__eyebrow">Sheet {index} · {diagnostic.topicLabel}</p>
-								<h3>{sheet?.title ?? `Diagnostic sheet ${index}`}</h3>
-								<p>{sheet?.subtitle ?? 'Generated after the previous sheet is graded.'}</p>
+								<p class="subject-card__eyebrow">{subject.topicLabel}</p>
+								<h3>{subject.course}</h3>
+								<p>{subject.countryLabel} · {subject.schoolYear} · {subject.board}</p>
 							</div>
 						</header>
-						<div class="sheet-thumb__body">
-							<span class="status-pill" data-state={resolveSheetState(sheet, index)}>
-								{resolveSheetStatusLabel(sheet, index)}
-							</span>
-							{#if sheet?.grading}
-								<p>{sheet.grading.summary}</p>
-							{:else if resolveSheetState(sheet, index) === 'current'}
-								<p>5 multiple choice, 6 fill-in-the-blanks, and 3 extension questions.</p>
+
+						{#if subject.notes}
+							<p class="subject-notes">{subject.notes}</p>
+						{/if}
+
+						<div class="subject-status">
+							{#if activeDiagnostic}
+								<span class="status-dot" data-state="current"></span>
+								<div>
+									<strong>Diagnostic in progress</strong>
+									<p>
+										{activeDiagnostic.sheets.filter((sheet) => sheet.runId).length} of 3 sheets graded.
+										Open sheet {activeDiagnostic.currentSheetIndex}.
+									</p>
+								</div>
+							{:else if completedDiagnostic}
+								<span class="status-dot" data-state="complete"></span>
+								<div>
+									<strong>Completed {formatDate(completedDiagnostic.completedAt)}</strong>
+									<div class="diagnostic-report">
+										<MarkdownContent markdown={buildResultsMarkdown(completedDiagnostic)} />
+									</div>
+								</div>
 							{:else}
-								<p>This sheet will be generated by the agent after the previous one is submitted.</p>
+								<span class="status-dot" data-state="empty"></span>
+								<div>
+									<strong>No diagnostic yet</strong>
+									<p>The first sheet will start from this subject profile.</p>
+								</div>
 							{/if}
-							<div class="sheet-thumb__lines" aria-hidden="true">
-								<span></span>
-								<span></span>
-								<span></span>
-							</div>
 						</div>
-						<footer class="sheet-thumb__footer">
-							<FileTextIcon size={15} />
-							<span>
-								{#if sheet?.runId}
-									Open graded sheet
-								{:else if resolveSheetState(sheet, index) === 'current'}
-									Open diagnostic sheet
-								{:else}
-									Waiting for prior sheet
-								{/if}
-							</span>
-						</footer>
-					</div>
-				</svelte:element>
-			{/each}
-		</section>
-	{:else}
-		<section class="empty-panel">
-			<h2>No diagnostic yet</h2>
-			<button
-				class="primary-button"
-				type="button"
-				onclick={() => {
-					showSetup = true;
-				}}
-			>
-				Start diagnostic
-			</button>
-		</section>
-	{/if}
+
+						<div class="subject-actions">
+							<button
+								class="secondary-button"
+								type="button"
+								onclick={() => openEditSubjectForm(subject)}
+							>
+								<PencilIcon size={16} />
+								<span>Edit</span>
+							</button>
+							{#if activeDiagnostic}
+								<a class="primary-button" href={`/spark/diagnostic/${activeDiagnostic.id}`}>
+									<span>Continue</span>
+									<ArrowRightIcon size={16} />
+								</a>
+							{:else if completedDiagnostic}
+								<button
+									class="secondary-button"
+									type="button"
+									onclick={() => void startDiagnostic(subject, 'fresh')}
+									disabled={startingSubjectId !== null}
+								>
+									{#if startingSubjectId === subject.id && startingMode === 'fresh'}
+										<Loader2Icon class="spin" size={16} />
+										<span>Starting</span>
+									{:else}
+										<RotateCcwIcon size={16} />
+										<span>Retake</span>
+									{/if}
+								</button>
+								<button
+									class="primary-button"
+									type="button"
+									onclick={() => void startDiagnostic(subject, 'progress')}
+									disabled={startingSubjectId !== null}
+								>
+									{#if startingSubjectId === subject.id && startingMode === 'progress'}
+										<Loader2Icon class="spin" size={16} />
+										<span>Generating</span>
+									{:else}
+										<span>Progress further</span>
+										<ArrowRightIcon size={16} />
+									{/if}
+								</button>
+							{:else}
+								<button
+									class="primary-button"
+									type="button"
+									onclick={() => void startDiagnostic(subject, 'fresh')}
+									disabled={startingSubjectId !== null}
+								>
+									{#if startingSubjectId === subject.id}
+										<Loader2Icon class="spin" size={16} />
+										<span>Generating</span>
+									{:else}
+										<span>Start diagnostic</span>
+										<ArrowRightIcon size={16} />
+									{/if}
+								</button>
+							{/if}
+						</div>
+
+						{#if latestDiagnostic}
+							<div class="sheet-strip" aria-label={`${subject.subjectLabel} diagnostic sheets`}>
+								{#each [1, 2, 3] as index}
+									{@const sheet = findSheet(latestDiagnostic, index)}
+									{@const href = resolveSheetHref(latestDiagnostic, sheet, index)}
+									<svelte:element
+										this={href ? 'a' : 'div'}
+										href={href ?? undefined}
+										class="mini-sheet"
+										data-state={resolveSheetState(latestDiagnostic, sheet, index)}
+									>
+										<span class="mini-sheet__label">Sheet {index}</span>
+										<strong>
+											{#if sheet?.grading}
+												{sheet.grading.totalScore}/{sheet.grading.maxScore}
+											{:else}
+												-
+											{/if}
+										</strong>
+										<small>
+											{#if sheet?.grading}
+												{formatPercent(sheet.grading.percentage)}
+											{:else}
+												{resolveSheetStatusLabel(latestDiagnostic, sheet, index)}
+											{/if}
+										</small>
+										<FileTextIcon size={14} />
+									</svelte:element>
+								{/each}
+							</div>
+						{/if}
+					</article>
+				{/each}
+			</div>
+		{/if}
+	</section>
 </section>
 
 <style lang="postcss">
 	.diagnostic-page {
+		--diagnostic-sheet-color: #3f3bb5;
+		--diagnostic-sheet-accent: #5856d6;
+		--diagnostic-sheet-light: #eeeeff;
+		--diagnostic-sheet-border: #c1c0f6;
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
-		width: min(88rem, 94vw);
+		width: min(100%, 1024px);
+		max-width: 1024px;
 		margin: 0 auto 3rem;
 		padding-top: 1.5rem;
 		color: var(--foreground);
 	}
 
 	.diagnostic-header,
-	.continue-panel,
-	.results-panel {
+	.profile-panel,
+	.section-heading,
+	.subject-card__header,
+	.subject-actions,
+	.setup-actions {
 		display: flex;
-		justify-content: space-between;
 		align-items: flex-start;
 		gap: 1rem;
+	}
+
+	.diagnostic-header,
+	.section-heading {
+		justify-content: space-between;
 	}
 
 	.eyebrow {
@@ -448,7 +754,7 @@
 		letter-spacing: 0.08em;
 		font-size: 0.78rem;
 		font-weight: 750;
-		color: #0f766e;
+		color: color-mix(in srgb, var(--diagnostic-sheet-color) 78%, var(--foreground));
 	}
 
 	h1,
@@ -465,38 +771,40 @@
 	}
 
 	h2 {
-		margin-bottom: 0.45rem;
-		font-size: 1.45rem;
-		line-height: 1.15;
+		margin-bottom: 0.25rem;
+		font-size: 1.35rem;
+		line-height: 1.16;
 	}
 
 	h3 {
-		margin-bottom: 0.35rem;
+		margin-bottom: 0.25rem;
 		font-size: 1rem;
 		line-height: 1.2;
 	}
 
 	.subtitle,
-	.continue-panel p,
-	.setup-panel__intro p,
-	.results-panel p {
+	.profile-note,
+	.subject-form__heading p,
+	.empty-panel p,
+	.subject-card__header p,
+	.subject-status p,
+	.subject-notes {
 		margin-bottom: 0;
 		color: color-mix(in srgb, var(--foreground) 68%, transparent);
 	}
 
 	.subtitle {
-		max-width: 45rem;
+		max-width: 50rem;
 	}
 
 	.back-button,
 	.primary-button,
-	.secondary-button {
+	.secondary-button,
+	.icon-button {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		gap: 0.45rem;
-		min-height: 2.45rem;
-		padding: 0.55rem 0.85rem;
 		border-radius: 8px;
 		text-decoration: none;
 		font-weight: 780;
@@ -504,21 +812,46 @@
 	}
 
 	.back-button,
+	.primary-button,
 	.secondary-button {
+		min-height: 2.45rem;
+		padding: 0.55rem 0.85rem;
+	}
+
+	.back-button,
+	.secondary-button,
+	.icon-button {
 		border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
 		background: color-mix(in srgb, var(--card) 95%, transparent);
 		color: inherit;
 	}
 
 	.primary-button {
-		border: 0;
-		background: #0f766e;
-		color: white;
+		border: 1px solid color-mix(in srgb, var(--diagnostic-sheet-color) 34%, transparent);
+		background: color-mix(in srgb, var(--background) 88%, var(--diagnostic-sheet-light) 72%);
+		color: color-mix(in srgb, var(--diagnostic-sheet-color) 86%, var(--foreground));
 		cursor: pointer;
 	}
 
+	.primary-button:hover,
+	.primary-button:focus-visible {
+		background: color-mix(in srgb, var(--diagnostic-sheet-light) 78%, var(--background));
+	}
+
+	.subject-card .primary-button {
+		border-color: var(--subject-color, var(--diagnostic-sheet-color));
+		background: var(--subject-color, var(--diagnostic-sheet-color));
+		color: #ffffff;
+	}
+
+	.subject-card .primary-button:hover,
+	.subject-card .primary-button:focus-visible {
+		background: color-mix(in srgb, var(--subject-color, var(--diagnostic-sheet-color)) 88%, #000);
+	}
+
 	button.primary-button,
-	button.secondary-button {
+	button.secondary-button,
+	button.icon-button {
 		cursor: pointer;
 	}
 
@@ -526,6 +859,13 @@
 	.secondary-button:disabled {
 		opacity: 0.58;
 		cursor: not-allowed;
+	}
+
+	.icon-button {
+		width: 2.25rem;
+		height: 2.25rem;
+		padding: 0;
+		border-radius: 999px;
 	}
 
 	:global(.spin) {
@@ -547,40 +887,87 @@
 		font-weight: 700;
 	}
 
-	.setup-panel,
-	.continue-panel,
-	.results-panel,
+	.profile-panel,
+	.subjects-panel,
+	.subject-form,
+	.subject-card,
 	.empty-panel {
 		border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
 		border-radius: 8px;
 		background: color-mix(in srgb, var(--card) 96%, transparent);
-		box-shadow: 0 16px 42px rgba(15, 23, 42, 0.08);
-		padding: 1.1rem;
+		box-shadow: 0 14px 36px rgba(15, 23, 42, 0.07);
 	}
 
-	.setup-panel {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-	}
-
-	.setup-panel__intro {
-		display: flex;
+	.profile-panel {
+		display: grid;
+		grid-template-columns: auto auto minmax(0, 24rem);
 		align-items: center;
-		gap: 0.8rem;
+		justify-content: flex-start;
+		padding: 1rem;
 	}
 
-	.setup-panel__icon,
-	.results-panel__badge {
+	.profile-panel__title,
+	.profile-panel__controls {
+		display: flex;
+		gap: 0.75rem;
+	}
+
+	.profile-panel__title {
+		align-items: center;
+	}
+
+	.profile-panel__controls {
+		align-items: flex-end;
+	}
+
+	.profile-icon,
+	.subject-badge,
+	.status-dot {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 2.6rem;
-		height: 2.6rem;
-		border-radius: 999px;
-		background: #dff7ef;
-		color: #0f766e;
 		flex: 0 0 auto;
+	}
+
+	.profile-icon {
+		width: 2.5rem;
+		height: 2.5rem;
+		border-radius: 999px;
+		background: var(--diagnostic-sheet-light);
+		color: var(--diagnostic-sheet-color);
+	}
+
+	.profile-note {
+		grid-column: 2 / 4;
+		max-width: 24rem;
+		font-size: 0.9rem;
+	}
+
+	.subjects-panel {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		padding: 1rem;
+	}
+
+	.subject-form {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		padding: 1rem;
+		background:
+			linear-gradient(
+				180deg,
+				color-mix(in srgb, var(--diagnostic-sheet-light) 68%, transparent),
+				transparent 42%
+			),
+			color-mix(in srgb, var(--card) 98%, transparent);
+	}
+
+	.subject-form__heading {
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
 	}
 
 	.setup-grid {
@@ -595,13 +982,18 @@
 		gap: 0.35rem;
 	}
 
-	.field label {
+	.field.compact {
+		min-width: 9rem;
+	}
+
+	.field span {
 		font-size: 0.82rem;
 		font-weight: 760;
 		color: color-mix(in srgb, var(--foreground) 75%, transparent);
 	}
 
-	.field select {
+	.field select,
+	.field input {
 		width: 100%;
 		min-height: 2.55rem;
 		border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
@@ -613,44 +1005,106 @@
 	}
 
 	.setup-actions {
-		display: flex;
-		flex-wrap: wrap;
 		justify-content: flex-end;
-		gap: 0.65rem;
+		flex-wrap: wrap;
 	}
 
-	.results-panel {
-		justify-content: flex-start;
+	.empty-panel {
+		display: flex;
+		align-items: center;
+		gap: 0.8rem;
+		padding: 1rem;
+		color: color-mix(in srgb, var(--foreground) 74%, transparent);
 	}
 
-	.results-panel__body {
-		min-width: 0;
-		flex: 1 1 auto;
-		max-width: 62rem;
+	.subject-grid {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 1rem;
+	}
+
+	.subject-card {
+		--subject-color: var(--diagnostic-sheet-color);
+		--subject-accent: var(--diagnostic-sheet-accent);
+		--subject-light: var(--diagnostic-sheet-light);
+		--subject-border: var(--diagnostic-sheet-border);
+		display: flex;
+		flex-direction: column;
+		gap: 0.9rem;
+		padding: 1rem;
+		border-color: color-mix(in srgb, var(--subject-border) 72%, var(--border));
+		font-family: Georgia, 'Times New Roman', serif;
+	}
+
+	.subject-badge {
+		width: 2.8rem;
+		height: 2.8rem;
+		border-radius: 8px;
+		border: 1px solid color-mix(in srgb, var(--subject-border) 72%, transparent);
+		background: var(--subject-light);
+		color: var(--subject-color);
+		font-weight: 850;
+	}
+
+	.subject-card__eyebrow {
+		margin: 0 0 0.18rem;
+		color: color-mix(in srgb, var(--subject-color) 78%, var(--foreground));
+		font-family:
+			ui-sans-serif,
+			system-ui,
+			sans-serif;
+		font-size: 0.75rem;
+		font-weight: 820;
+	}
+
+	.subject-notes {
+		border-left: 3px solid color-mix(in srgb, var(--subject-accent) 74%, var(--subject-color));
+		padding-left: 0.7rem;
+		font-size: 0.9rem;
+	}
+
+	.subject-status {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr);
+		gap: 0.7rem;
+		align-items: flex-start;
+		padding: 0.85rem;
+		border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+		border-radius: 8px;
+		background: color-mix(in srgb, var(--background) 74%, transparent);
+	}
+
+	.status-dot {
+		width: 0.85rem;
+		height: 0.85rem;
+		margin-top: 0.25rem;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--foreground) 24%, transparent);
+	}
+
+	.status-dot[data-state='current'] {
+		background: #d6a11e;
+	}
+
+	.status-dot[data-state='complete'] {
+		background: var(--paper-review-correct-border, #22a66e);
 	}
 
 	.diagnostic-report {
-		max-width: 54rem;
-		margin-bottom: 1rem;
-		border: 1px solid color-mix(in srgb, #0f766e 16%, var(--border));
-		border-radius: 8px;
-		background:
-			linear-gradient(180deg, color-mix(in srgb, #ecfdf5 82%, transparent), transparent 46%),
-			color-mix(in srgb, var(--background) 86%, transparent);
-		padding: 0.95rem 1rem;
-		line-height: 1.46;
-		--markdown-heading: color-mix(in srgb, #0f766e 82%, var(--foreground));
-		--markdown-strong: color-mix(in srgb, #0f766e 76%, var(--foreground));
-		--markdown-quote-border: #0f766e;
+		margin-top: 0.55rem;
+		line-height: 1.42;
+		--markdown-heading: color-mix(in srgb, var(--subject-color) 82%, var(--foreground));
+		--markdown-strong: color-mix(in srgb, var(--subject-color) 76%, var(--foreground));
+		--markdown-quote-border: var(--subject-color);
 	}
 
 	:global(.diagnostic-report .markdown-content > * + *) {
-		margin-top: 0.58rem;
+		margin-top: 0.42rem;
 	}
 
 	:global(.diagnostic-report .markdown-content h3) {
-		margin: 0 0 0.3rem;
-		font-size: 1.05rem;
+		margin: 0 0 0.25rem;
+		font-size: 0.98rem;
 		font-weight: 820;
 	}
 
@@ -660,191 +1114,127 @@
 		color: color-mix(in srgb, var(--foreground) 74%, transparent);
 	}
 
-	:global(.diagnostic-report .markdown-content ul) {
-		padding-left: 1.05rem;
+	.subject-actions {
+		font-family:
+			ui-sans-serif,
+			system-ui,
+			sans-serif;
+		flex-wrap: wrap;
+		justify-content: flex-end;
 	}
 
-	.sheet-board {
+	.sheet-strip {
 		display: grid;
 		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: 1rem;
+		gap: 0.65rem;
 	}
 
-	.sheet-card {
+	.mini-sheet {
+		min-height: 6.4rem;
+		display: grid;
+		grid-template-rows: auto 1fr auto;
+		gap: 0.2rem;
+		padding: 0.65rem;
+		border: 1px solid color-mix(in srgb, var(--subject-border) 58%, var(--border));
+		border-radius: 8px;
+		background:
+			linear-gradient(
+				180deg,
+				color-mix(in srgb, var(--subject-light) 82%, var(--card)) 0%,
+				var(--card) 70%
+			),
+			var(--card);
 		color: inherit;
+		font-family: Georgia, 'Times New Roman', serif;
 		text-decoration: none;
 	}
 
-	.sheet-card[data-state='current']:hover .sheet-thumb,
-	.sheet-card[data-state='graded']:hover .sheet-thumb {
-		transform: translateY(-2px);
-		box-shadow: 0 20px 48px rgba(15, 23, 42, 0.13);
-	}
-
-	.sheet-thumb {
-		min-height: 18.5rem;
-		display: flex;
-		flex-direction: column;
-		border: 1px solid color-mix(in srgb, #007aff 22%, var(--border));
-		border-radius: 8px;
-		background:
-			linear-gradient(180deg, color-mix(in srgb, #eaf4ff 82%, var(--card)) 0%, var(--card) 58%),
-			var(--card);
-		overflow: hidden;
-		transition:
-			transform 0.18s ease,
-			box-shadow 0.18s ease;
-	}
-
-	.sheet-card[data-state='locked'] .sheet-thumb {
-		opacity: 0.72;
+	.mini-sheet[data-state='locked'] {
+		opacity: 0.62;
 		background: color-mix(in srgb, var(--card) 96%, transparent);
 	}
 
-	.sheet-thumb__header {
-		display: grid;
-		grid-template-columns: auto minmax(0, 1fr);
-		gap: 0.85rem;
-		padding: 1rem;
-		border-bottom: 1px solid color-mix(in srgb, #007aff 18%, var(--border));
+	.mini-sheet[data-state='current'] {
+		border-color: color-mix(in srgb, var(--subject-color) 64%, var(--border));
 	}
 
-	.sheet-thumb__marks {
-		width: 4.5rem;
-		min-height: 4.5rem;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		border-radius: 8px;
-		background: white;
-		border: 1px solid color-mix(in srgb, #007aff 26%, var(--border));
-		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.64);
+	.mini-sheet:hover {
+		transform: translateY(-1px);
 	}
 
-	.sheet-thumb__marks p,
-	.sheet-thumb__marks span {
-		margin: 0;
-		font-size: 0.72rem;
-		color: color-mix(in srgb, var(--foreground) 58%, transparent);
+	.mini-sheet__label,
+	.mini-sheet small {
+		color: color-mix(in srgb, var(--foreground) 62%, transparent);
+		font-size: 0.76rem;
 	}
 
-	.sheet-thumb__marks strong {
-		font-size: 1.02rem;
+	.mini-sheet strong {
+		align-self: center;
+		font-size: 1.05rem;
 	}
 
-	.sheet-thumb__eyebrow {
-		margin: 0 0 0.2rem;
-		color: color-mix(in srgb, #0057d9 76%, var(--foreground));
-		font-size: 0.74rem;
-		font-weight: 780;
+	:global(.mini-sheet svg) {
+		justify-self: end;
+		color: color-mix(in srgb, var(--subject-color) 70%, var(--foreground));
 	}
 
-	.sheet-thumb h3 {
-		margin: 0;
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		-webkit-box-orient: vertical;
-		overflow: hidden;
+	:global([data-theme='dark'] .subject-badge),
+	:global(:root:not([data-theme='light']) .subject-badge),
+	:global([data-theme='dark'] .mini-sheet),
+	:global(:root:not([data-theme='light']) .mini-sheet) {
+		background: color-mix(in srgb, var(--background) 90%, var(--subject-color) 10%);
 	}
 
-	.sheet-thumb__header p:last-child,
-	.sheet-thumb__body p {
-		margin: 0.35rem 0 0;
-		color: color-mix(in srgb, var(--foreground) 66%, transparent);
-		line-height: 1.38;
-	}
-
-	.sheet-thumb__body {
-		flex: 1 1 auto;
-		padding: 1rem;
-	}
-
-	.sheet-thumb__lines {
-		display: grid;
-		gap: 0.45rem;
-		margin-top: 0.85rem;
-	}
-
-	.sheet-thumb__lines span {
-		display: block;
-		height: 0.45rem;
-		border-radius: 999px;
-		background: color-mix(in srgb, #007aff 14%, transparent);
-	}
-
-	.sheet-thumb__lines span:nth-child(2) {
-		width: 78%;
-	}
-
-	.sheet-thumb__lines span:nth-child(3) {
-		width: 58%;
-	}
-
-	.status-pill {
-		display: inline-flex;
-		align-items: center;
-		border-radius: 999px;
-		padding: 0.25rem 0.55rem;
-		background: color-mix(in srgb, var(--foreground) 9%, transparent);
-		color: color-mix(in srgb, var(--foreground) 72%, transparent);
-		font-size: 0.74rem;
-		font-weight: 780;
-	}
-
-	.status-pill[data-state='current'] {
-		background: #dff7ef;
-		color: #075e4d;
-	}
-
-	.status-pill[data-state='graded'] {
-		background: #e8f1ff;
-		color: #1d4ed8;
-	}
-
-	.sheet-thumb__footer {
-		display: flex;
-		align-items: center;
-		gap: 0.45rem;
-		padding: 0.85rem 1rem;
-		border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-		color: color-mix(in srgb, var(--foreground) 70%, transparent);
-		font-size: 0.84rem;
-		font-weight: 760;
-	}
-
-	:global([data-theme='dark'] .sheet-thumb__marks),
-	:global(:root:not([data-theme='light']) .sheet-thumb__marks) {
-		background: color-mix(in srgb, var(--background) 90%, #007aff 10%);
-	}
-
-	@media (max-width: 900px) {
-		.setup-grid,
-		.sheet-board {
-			grid-template-columns: 1fr;
-		}
-
+	@media (max-width: 980px) {
+		.profile-panel,
 		.diagnostic-header,
-		.continue-panel,
-		.results-panel {
-			flex-direction: column;
+		.section-heading {
 			align-items: stretch;
 		}
 
-		.results-panel__badge {
-			width: 2.25rem;
-			height: 2.25rem;
-		}
-
-		.setup-panel__intro {
+		.diagnostic-header,
+		.section-heading {
 			flex-direction: column;
-			align-items: flex-start;
-			gap: 0.65rem;
 		}
 
-		.setup-panel__icon {
-			width: 2.25rem;
-			height: 2.25rem;
+		.profile-panel {
+			grid-template-columns: 1fr;
+		}
+
+		.profile-panel__title {
+			align-items: flex-start;
+		}
+
+		.profile-panel__controls {
+			align-items: flex-end;
+		}
+
+		.profile-note {
+			grid-column: 1;
+			max-width: none;
+		}
+
+		.setup-grid,
+		.subject-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.back-button {
+			align-self: flex-start;
+		}
+	}
+
+	@media (max-width: 640px) {
+		.diagnostic-page {
+			width: min(100% - 1rem, 1024px);
+			padding-top: 1rem;
+		}
+
+		.profile-panel__controls,
+		.subject-actions,
+		.setup-actions {
+			flex-direction: column;
+			align-items: stretch;
 		}
 
 		.primary-button,
@@ -853,13 +1243,8 @@
 			white-space: normal;
 		}
 
-		.back-button {
-			align-self: flex-start;
-			white-space: normal;
-		}
-
-		.setup-actions {
-			justify-content: stretch;
+		.sheet-strip {
+			grid-template-columns: 1fr;
 		}
 	}
 </style>

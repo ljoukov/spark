@@ -2,7 +2,9 @@ import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
 import {
-	getLatestDiagnosticTest,
+	listDiagnosticTests,
+	loadDiagnosticProfile,
+	serializeDiagnosticProfileForClient,
 	serializeDiagnosticTestForClient
 } from '$lib/server/diagnostic/service';
 
@@ -12,8 +14,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 		throw redirect(302, '/login');
 	}
 
-	const latest = await getLatestDiagnosticTest(user.uid);
+	const [profile, diagnostics] = await Promise.all([
+		loadDiagnosticProfile(user.uid),
+		listDiagnosticTests(user.uid, 30)
+	]);
 	return {
-		diagnostic: latest ? serializeDiagnosticTestForClient(latest) : null
+		profile: serializeDiagnosticProfileForClient(profile),
+		diagnostics: diagnostics.map(serializeDiagnosticTestForClient)
 	};
 };
