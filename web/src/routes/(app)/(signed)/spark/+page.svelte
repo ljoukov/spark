@@ -8,6 +8,7 @@
 	import { fromStore, type Readable } from 'svelte/store';
 	import { getFirestore, doc, onSnapshot, type Unsubscribe } from 'firebase/firestore';
 	import { getAuth, onIdTokenChanged } from 'firebase/auth';
+	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import ArrowUp from '@lucide/svelte/icons/arrow-up';
 	import Camera from '@lucide/svelte/icons/camera';
 	import Code2 from '@lucide/svelte/icons/code-2';
@@ -16,6 +17,7 @@
 	import Mic from '@lucide/svelte/icons/mic';
 	import Plus from '@lucide/svelte/icons/plus';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
+	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import type { PageData } from './$types';
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
 	import { MarkdownContent } from '$lib/components/markdown/index.js';
@@ -71,6 +73,13 @@
 		file: SparkAgentFile;
 	};
 	type ChatStreamPhase = 'idle' | 'connecting' | 'sending' | 'thinking' | 'responding';
+	type DiagnosticStatus = {
+		hasCompleted: boolean;
+		latest: {
+			id: string;
+			status: 'in_progress' | 'complete';
+		} | null;
+	};
 
 	const MAX_INLINE_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 	const TARGET_IMAGE_ATTACHMENT_BYTES = Math.floor(MAX_INLINE_ATTACHMENT_BYTES * 0.9);
@@ -109,6 +118,8 @@
 	let pendingScrollText = $state<string | null>(null);
 	let pendingScrollMessageId = $state<string | null>(null);
 	let lastScrollMessageId = $state<string | null>(null);
+	let diagnosticStatus = $state<DiagnosticStatus | null>(null);
+	let diagnosticStatusUserId = $state<string | null>(null);
 	let attachmentInputRef = $state<HTMLInputElement | null>(null);
 	let photoInputRef = $state<HTMLInputElement | null>(null);
 	let attachments = $state<LocalAttachment[]>([]);
@@ -675,6 +686,13 @@
 		return count;
 	});
 	const shouldUseThreadPadding = $derived(assistantMessageCount > 1);
+	const showDiagnosticAdvert = $derived(
+		messages.length === 0 && !sending && diagnosticStatus !== null && !diagnosticStatus.hasCompleted
+	);
+	const diagnosticAdvertHref = $derived('/spark/diagnostic');
+	const diagnosticAdvertCta = $derived(
+		diagnosticStatus?.latest?.status === 'in_progress' ? 'Continue diagnostic' : 'Start diagnostic'
+	);
 
 	function setConversationId(nextId: string | null): void {
 		conversationId = nextId;
@@ -1400,6 +1418,25 @@
 		}
 	}
 
+	async function loadDiagnosticStatus(activeUserId: string): Promise<void> {
+		try {
+			const response = await fetch('/api/spark/diagnostic/status');
+			if (!response.ok) {
+				throw new Error(`status_${response.status.toString()}`);
+			}
+			const payload = (await response.json()) as DiagnosticStatus;
+			if (diagnosticStatusUserId !== activeUserId) {
+				return;
+			}
+			diagnosticStatus = payload;
+		} catch (statusError) {
+			console.warn('[spark-chat] diagnostic status load failed', statusError);
+			if (diagnosticStatusUserId === activeUserId) {
+				diagnosticStatus = null;
+			}
+		}
+	}
+
 	async function handleFileInputChange(event: Event): Promise<void> {
 		const target = event.target as HTMLInputElement | null;
 		if (!target) {
@@ -1666,6 +1703,20 @@
 		if (!browser || !userId) {
 			return;
 		}
+		if (!authReady) {
+			return;
+		}
+		if (diagnosticStatusUserId !== userId) {
+			diagnosticStatusUserId = userId;
+			diagnosticStatus = null;
+			void loadDiagnosticStatus(userId);
+		}
+	});
+
+	$effect(() => {
+		if (!browser || !userId) {
+			return;
+		}
 		const requestedConversationId = page.url.searchParams.get('conversationId')?.trim() ?? '';
 		if (requestedConversationId.length > 0) {
 			if (requestedConversationId === rejectedConversationId) {
@@ -1891,6 +1942,7 @@
 			<Button variant="outline" size="sm" onclick={() => resetConversation()} disabled={sending}>
 				New chat
 			</Button>
+			<Button variant="ghost" size="sm" href="/spark/diagnostic">Diagnostic</Button>
 			<Button variant="ghost" size="sm" href="/spark/lessons">Lessons</Button>
 			<Button variant="ghost" size="sm" href="/spark/sheets">Sheets</Button>
 			<Button variant="ghost" size="sm" href="/spark/agents">Agents</Button>
@@ -1917,6 +1969,21 @@
 					<p>
 						Spark AI Agent can map out lessons, generate practice prompts, and review your uploads.
 					</p>
+					{#if showDiagnosticAdvert}
+						<a class="diagnostic-ad" href={diagnosticAdvertHref}>
+							<span class="diagnostic-ad__icon" aria-hidden="true">
+								<Sparkles size={18} />
+							</span>
+							<span class="diagnostic-ad__body">
+								<strong>Diagnostic</strong>
+								<span>Find a starting level with three adaptive sheets.</span>
+							</span>
+							<span class="diagnostic-ad__cta">
+								{diagnosticAdvertCta}
+								<ArrowRight size={16} />
+							</span>
+						</a>
+					{/if}
 					<div class="agent-empty__examples">
 						<span>“Plan a 3-day GCSE Biology revision sprint.”</span>
 						<span>“Help me break down this algorithm into steps.”</span>
@@ -2395,6 +2462,8 @@
 	.agent-toolbar {
 		display: flex;
 		justify-content: flex-end;
+		gap: 0.35rem;
+		flex-wrap: wrap;
 	}
 
 	.agent-stream {
@@ -2490,6 +2559,77 @@
 		border-radius: 1.75rem;
 		border: 1px solid var(--chat-border);
 		background: var(--chat-surface);
+	}
+
+	.diagnostic-ad {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 0.75rem;
+		width: min(100%, 34rem);
+		margin: 0.2rem auto 0.1rem;
+		padding: 0.75rem 0.85rem;
+		border: 1px solid color-mix(in srgb, #0f766e 26%, var(--chat-border));
+		border-radius: 8px;
+		background: linear-gradient(135deg, rgba(236, 253, 245, 0.94), rgba(239, 246, 255, 0.92));
+		color: inherit;
+		text-align: left;
+		text-decoration: none;
+		box-shadow: 0 16px 42px -34px rgba(15, 23, 42, 0.35);
+	}
+
+	.diagnostic-ad__icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2rem;
+		height: 2rem;
+		border-radius: 999px;
+		background: #0f766e;
+		color: white;
+	}
+
+	.diagnostic-ad__body {
+		display: flex;
+		flex-direction: column;
+		gap: 0.12rem;
+		min-width: 0;
+	}
+
+	.diagnostic-ad__body strong {
+		font-size: 0.95rem;
+	}
+
+	.diagnostic-ad__body span {
+		color: color-mix(in srgb, var(--foreground) 66%, transparent);
+		font-size: 0.86rem;
+	}
+
+	.diagnostic-ad__cta {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		color: #0f766e;
+		font-weight: 800;
+		font-size: 0.86rem;
+		white-space: nowrap;
+	}
+
+	:global(:root:not([data-theme='light']) .diagnostic-ad),
+	:global([data-theme='dark'] .diagnostic-ad),
+	:global(.dark .diagnostic-ad) {
+		background: linear-gradient(135deg, rgba(15, 118, 110, 0.18), rgba(37, 99, 235, 0.14));
+	}
+
+	@media (max-width: 560px) {
+		.diagnostic-ad {
+			grid-template-columns: auto minmax(0, 1fr);
+		}
+
+		.diagnostic-ad__cta {
+			grid-column: 2;
+			white-space: normal;
+		}
 	}
 
 	.agent-thread {

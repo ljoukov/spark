@@ -6,6 +6,10 @@
 		type AnnotatedTextTheme
 	} from '$lib/components/annotated-text';
 	import { MarkdownContent } from '$lib/components/markdown/index.js';
+	import {
+		stripStudentFormulaMarkup,
+		stripStudentFormulaMarkupFromMap
+	} from '$lib/spark/gaps/studentFormulaText';
 	import type {
 		SparkLearningGapGuidedPresentation,
 		SparkTutorGuidedGradeResult,
@@ -222,15 +226,32 @@
 		const initialFieldResults = initialState?.fieldResults ?? {};
 		const initialLastChecked = initialState?.lastChecked ?? {};
 		const initialFieldAttempts = initialState?.fieldAttempts ?? {};
-		answers = { ...createAnswerMap(), ...initialAnswers };
+		answers = { ...createAnswerMap(), ...stripStudentFormulaMarkupFromMap(initialAnswers) };
 		fieldResults = { ...createFieldResultMap(), ...initialFieldResults };
-		lastChecked = { ...createAnswerMap(), ...initialLastChecked };
-		fieldAttempts = { ...createFieldAttemptMap(), ...initialFieldAttempts };
+		lastChecked = { ...createAnswerMap(), ...stripStudentFormulaMarkupFromMap(initialLastChecked) };
+		fieldAttempts = { ...createFieldAttemptMap(), ...sanitizeFieldAttempts(initialFieldAttempts) };
 		writtenAnswer = initialState?.writtenAnswer ?? '';
 		gradeResult = initialState?.gradeResult ?? null;
 		grading = false;
 		errorMessage = '';
 		maxVisitedPhaseIndex = Math.max(initialState?.maxVisitedPhaseIndex ?? 0, phaseIndex(phase));
+	}
+
+	function sanitizeFieldAttempts(
+		attempts: Record<string, GuidedFieldAttempt[]> | undefined
+	): Record<string, GuidedFieldAttempt[]> {
+		if (!attempts) {
+			return {};
+		}
+		return Object.fromEntries(
+			Object.entries(attempts).map(([questionId, questionAttempts]) => [
+				questionId,
+				questionAttempts.map((attempt) => ({
+					...attempt,
+					answer: stripStudentFormulaMarkup(attempt.answer)
+				}))
+			])
+		);
 	}
 
 	function answerValue(questionId: string): string {
@@ -452,12 +473,12 @@
 	function fieldFeedbackText(question: GuidedQuestion): string {
 		const result = fieldResultFor(question.id);
 		if (result.status === 'idle') {
-			return plainSingleLine(question.hint ?? '');
+			return plainSingleLine(stripStudentFormulaMarkup(question.hint ?? ''));
 		}
 		if (result.status === 'judging') {
 			return 'Checking...';
 		}
-		return plainSingleLine(result.feedback);
+		return plainSingleLine(stripStudentFormulaMarkup(result.feedback));
 	}
 
 	function plainSingleLine(value: string): string {

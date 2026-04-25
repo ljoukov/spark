@@ -7,6 +7,10 @@ import {
 	persistSheetGuidedReviewState,
 	type SheetGuidedQuestionContext
 } from '$lib/server/tutorSessions/sheetGuided';
+import {
+	stripStudentFormulaMarkup,
+	stripStudentFormulaMarkupFromMap
+} from '$lib/spark/gaps/studentFormulaText';
 import { generateJson, type LlmTextModelId } from '@spark/llm';
 import {
 	SparkLearningGapGuidedPresentationSchema,
@@ -101,12 +105,31 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		return json({ error: 'question_not_found' }, { status: 404 });
 	}
 	if (thread.guidedPresentation) {
+		const presentation = sanitizePresentation(thread.guidedPresentation);
+		const guidedState = thread.guidedState
+			? {
+					...thread.guidedState,
+					answers: stripStudentFormulaMarkupFromMap(thread.guidedState.answers),
+					lastChecked: stripStudentFormulaMarkupFromMap(thread.guidedState.lastChecked)
+				}
+			: null;
+		const reviewState = SparkTutorReviewStateSchema.parse({
+			...context.reviewState,
+			threads: {
+				...context.reviewState.threads,
+				[body.questionId]: {
+					...thread,
+					guidedPresentation: presentation,
+					...(guidedState ? { guidedState } : {})
+				}
+			}
+		});
 		return json({
 			ok: true,
 			sessionId: context.sessionId,
-			presentation: thread.guidedPresentation,
-			guidedState: thread.guidedState ?? null,
-			reviewState: context.reviewState
+			presentation,
+			guidedState,
+			reviewState
 		});
 	}
 
@@ -135,8 +158,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			maxAttempts: 2
 		});
 		generated = {
-			presentation: SparkLearningGapGuidedPresentationSchema.parse(rawGenerated.presentation),
-			prefilledAnswers: rawGenerated.prefilledAnswers
+			presentation: sanitizePresentation(
+				SparkLearningGapGuidedPresentationSchema.parse(rawGenerated.presentation)
+			),
+			prefilledAnswers: stripStudentFormulaMarkupFromMap(rawGenerated.prefilledAnswers)
 		};
 	} catch (error) {
 		console.warn('[sheet-guided-presentation] generation failed; using fallback', {
@@ -206,6 +231,8 @@ function buildPresentationPrompt(options: {
 		'The modelAnswer should be concise, correct, and mark-scheme aligned.',
 		'The memoryChain should be a compact chain of key ideas separated by ->.',
 		'Prefill a guided field only when the submitted answer clearly already shows that exact idea. Do not prefill guesses.',
+		'Prefilled answer values are inserted into student input boxes: use plain text formulas, not Markdown or LaTeX delimiters like $, $$, \\( \\), or \\[ \\].',
+		'For prefilled answer values, write x <= 7 instead of $x \\leq 7$ and 40 - 5y instead of $40 - 5y$.',
 		'Always include prefilledAnswers; use an empty object when no guided field should be prefilled.',
 		'Never prefill the full written answer.',
 		'',
@@ -237,6 +264,27 @@ function buildPresentationPrompt(options: {
 		'Private answer/reference context:',
 		context.privateReferenceContext
 	].join('\n');
+}
+
+function sanitizePresentation(
+	presentation: SparkLearningGapGuidedPresentation
+): SparkLearningGapGuidedPresentation {
+	return SparkLearningGapGuidedPresentationSchema.parse({
+		...presentation,
+		questions: presentation.questions.map((question) => ({
+			...question,
+			expectedAnswer: stripStudentFormulaMarkup(question.expectedAnswer),
+			...(question.hint ? { hint: stripStudentFormulaMarkup(question.hint) } : {})
+		})),
+		memoryChain: stripStudentFormulaMarkup(presentation.memoryChain),
+		...(presentation.answerPrompt
+			? { answerPrompt: stripStudentFormulaMarkup(presentation.answerPrompt) }
+			: {}),
+		modelAnswer: stripStudentFormulaMarkup(presentation.modelAnswer),
+		...(presentation.markScheme
+			? { markScheme: stripStudentFormulaMarkup(presentation.markScheme) }
+			: {})
+	});
 }
 
 function splitAnswerParts(value: string, targetStepCount: number): string[] {

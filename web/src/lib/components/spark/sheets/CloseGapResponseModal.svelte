@@ -241,10 +241,15 @@
 		width: 2.2rem;
 		height: 2.2rem;
 		border: 1px solid var(--close-gap-paper-border);
-		border-radius: 8px;
+		border-radius: 999px;
 		background: var(--close-gap-paper);
 		color: var(--close-gap-ink);
 		cursor: pointer;
+	}
+
+	.close-gap-response-modal__close:focus-visible {
+		outline: 2px solid color-mix(in srgb, var(--close-gap-accent) 28%, transparent);
+		outline-offset: 3px;
 	}
 
 	.close-gap-response-modal__body {

@@ -30,6 +30,7 @@ import {
 	findTutorSessionForSheet,
 	patchTutorSession
 } from '$lib/server/tutorSessions/repo';
+import { stripStudentFormulaMarkupFromMap } from '$lib/spark/gaps/studentFormulaText';
 
 export const sheetGuidedQuestionQuerySchema = z.object({
 	questionId: z.string().trim().min(1)
@@ -437,14 +438,19 @@ export function mergeGuidedState(options: {
 	const current = options.current ?? {};
 	const next = options.next ?? {};
 	const answers = {
-		...(options.prefillAnswers ?? {}),
-		...(current.answers ?? {}),
-		...(next.answers ?? {})
+		...stripStudentFormulaMarkupFromMap(options.prefillAnswers),
+		...stripStudentFormulaMarkupFromMap(current.answers),
+		...stripStudentFormulaMarkupFromMap(next.answers)
+	};
+	const lastChecked = {
+		...stripStudentFormulaMarkupFromMap(current.lastChecked),
+		...stripStudentFormulaMarkupFromMap(next.lastChecked)
 	};
 	return normalizeGuidedState({
 		...current,
 		...next,
 		answers,
+		lastChecked,
 		updatedAt: options.now.toISOString()
 	});
 }

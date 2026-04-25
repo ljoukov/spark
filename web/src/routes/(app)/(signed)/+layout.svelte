@@ -25,8 +25,24 @@
 
 	function isSheetStyleStandaloneRoute(routeId: string | null | undefined): boolean {
 		return Boolean(
-			routeId?.includes('/spark/sheets/[sheetId]') || routeId?.includes('/spark/gaps/[gapId]')
+			routeId?.includes('/spark/sheets/[sheetId]') ||
+				routeId?.includes('/spark/gaps/[gapId]') ||
+				routeId?.includes('/spark/diagnostic/[diagnosticId]')
 		);
+	}
+
+	function resolveSheetCloseHref(routeId: string | null | undefined): string {
+		if (routeId?.includes('/spark/diagnostic/[diagnosticId]')) {
+			return '/spark/diagnostic';
+		}
+		return '/spark/sheets';
+	}
+
+	function resolveSheetCloseLabel(routeId: string | null | undefined): string {
+		if (routeId?.includes('/spark/diagnostic/[diagnosticId]')) {
+			return 'Back to diagnostic';
+		}
+		return 'Back to all sheets';
 	}
 
 	function isGuideImmersiveRoute(routeId: string | null | undefined): boolean {
@@ -40,6 +56,12 @@
 		if (pathname === '/spark/sheets') {
 			return true;
 		}
+		if (pathname === '/spark/diagnostic') {
+			return true;
+		}
+		if (/^\/spark\/diagnostic\/[^/]+$/u.test(pathname ?? '')) {
+			return true;
+		}
 		return /^\/spark\/sheets\/[^/]+$/u.test(pathname ?? '');
 	}
 
@@ -50,6 +72,12 @@
 		if (pathname === '/spark/sheets') {
 			return 'Loading sheets';
 		}
+		if (pathname === '/spark/diagnostic') {
+			return 'Opening diagnostic';
+		}
+		if (/^\/spark\/diagnostic\/[^/]+$/u.test(pathname ?? '')) {
+			return 'Opening diagnostic sheet';
+		}
 		return 'Opening sheet';
 	}
 
@@ -59,6 +87,12 @@
 		}
 		if (pathname === '/spark/sheets') {
 			return 'Checking worksheet runs, marks, and feedback.';
+		}
+		if (pathname === '/spark/diagnostic') {
+			return 'Preparing the diagnostic workspace.';
+		}
+		if (/^\/spark\/diagnostic\/[^/]+$/u.test(pathname ?? '')) {
+			return 'Preparing the worksheet surface.';
 		}
 		return 'Preparing the worksheet surface.';
 	}
@@ -108,6 +142,8 @@
 	});
 	const sessionId = $derived(page.params.sessionId ?? null);
 	const showSheetDetailLayout = $derived(isSheetStyleStandaloneRoute(page.route.id));
+	const sheetCloseHref = $derived(resolveSheetCloseHref(page.route.id));
+	const sheetCloseLabel = $derived(resolveSheetCloseLabel(page.route.id));
 	const showGuideImmersiveLayout = $derived(isGuideImmersiveRoute(page.route.id));
 	const experience = $derived(resolveExperience(page.route.id));
 	const sessionHomeHref = $derived(resolveSessionHomeHref(experience, sessionId));
@@ -435,7 +471,7 @@
 			return;
 		}
 		event.preventDefault();
-		window.location.assign('/spark/sheets');
+		window.location.assign(sheetCloseHref);
 	}
 </script>
 
@@ -456,9 +492,9 @@
 		{#if showSheetDetailLayout}
 			<a
 				class="sheet-close-button"
-				href="/spark/sheets"
-				aria-label="Back to all sheets"
-				title="Back to all sheets"
+				href={sheetCloseHref}
+				aria-label={sheetCloseLabel}
+				title={sheetCloseLabel}
 				onclick={handleSheetCloseClick}
 			>
 				<XIcon class="sheet-close-button__icon" />
@@ -575,6 +611,14 @@
 								}}
 							>
 								Sheets
+							</DropdownMenu.Item>
+							<DropdownMenu.Item
+								class="app-user-menu__link"
+								onSelect={() => {
+									void goto('/spark/diagnostic');
+								}}
+							>
+								Diagnostic
 							</DropdownMenu.Item>
 							<DropdownMenu.Separator />
 							<DropdownMenu.Sub>
