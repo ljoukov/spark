@@ -1945,6 +1945,7 @@
 			<Button variant="ghost" size="sm" href="/spark/diagnostic">Diagnostic</Button>
 			<Button variant="ghost" size="sm" href="/spark/lessons">Lessons</Button>
 			<Button variant="ghost" size="sm" href="/spark/sheets">Sheets</Button>
+			<Button variant="ghost" size="sm" href="/spark/pathways">Pathways</Button>
 			<Button variant="ghost" size="sm" href="/spark/agents">Agents</Button>
 		</div>
 

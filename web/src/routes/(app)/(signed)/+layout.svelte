@@ -620,6 +620,14 @@
 							>
 								Diagnostic
 							</DropdownMenu.Item>
+							<DropdownMenu.Item
+								class="app-user-menu__link"
+								onSelect={() => {
+									void goto('/spark/pathways');
+								}}
+							>
+								Pathways
+							</DropdownMenu.Item>
 							<DropdownMenu.Separator />
 							<DropdownMenu.Sub>
 								<DropdownMenu.SubTrigger class="app-user-menu__subtrigger">

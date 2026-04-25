@@ -14,4 +14,5 @@ export * from "./sparkAgentTask";
 export * from "./sparkGrader";
 export * from "./sparkGaps";
 export * from "./sparkTutorSession";
+export * from "./pathway";
 export * from "./tutorMarkdown";

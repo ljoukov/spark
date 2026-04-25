@@ -271,14 +271,11 @@ function resolveSheetPhase(options: {
 	hasReport: boolean;
 	hasDraft: boolean;
 }): 'building' | 'solving' | 'grading' | 'graded' {
-	if (options.explicitPhase === 'grading' && options.status === 'done' && options.hasReport) {
+	if (options.hasReport) {
 		return 'graded';
 	}
 	if (options.explicitPhase) {
 		return options.explicitPhase;
-	}
-	if (options.hasReport) {
-		return 'graded';
 	}
 	if (options.hasDraft) {
 		return 'solving';

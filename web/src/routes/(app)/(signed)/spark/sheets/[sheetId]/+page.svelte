@@ -1090,6 +1090,9 @@
 		left: PageData['run']['totals'],
 		right: PageData['run']['totals']
 	): boolean {
+		if (left === null && right === null) {
+			return true;
+		}
 		if (left === null || right === null) {
 			return false;
 		}
@@ -1628,8 +1631,12 @@
 	});
 
 	$effect(() => {
-		if (!interactionSessionId && data.interaction?.id) {
-			interactionSessionId = data.interaction.id;
+		const nextInteractionSessionId = data.interaction?.id ?? null;
+		if (
+			nextInteractionSessionId &&
+			untrack(() => interactionSessionId) !== nextInteractionSessionId
+		) {
+			interactionSessionId = nextInteractionSessionId;
 		}
 	});
 
@@ -1638,7 +1645,9 @@
 			return;
 		}
 		if (!shouldPollSheetState()) {
-			artifactRefreshAttempts = 0;
+			if (untrack(() => artifactRefreshAttempts) !== 0) {
+				artifactRefreshAttempts = 0;
+			}
 			return;
 		}
 		const delayMs = resolveArtifactRefreshDelay(artifactRefreshAttempts);

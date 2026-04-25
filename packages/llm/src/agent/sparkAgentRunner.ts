@@ -17312,8 +17312,8 @@ function buildAgentTools(options: {
             userId,
             runId: graderPublish.runId,
             updates: {
-              updatedAt: new Date(),
               sheetPhase: "graded",
+              updatedAt: new Date(),
               ...(publication.paper ? { paper: publication.paper } : {}),
               presentation: publication.presentation,
               totals: publication.totals,
