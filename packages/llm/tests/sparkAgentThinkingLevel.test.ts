@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 describe("resolveSparkAgentThinkingLevel", () => {
-  it("uses medium thinking for gpt-5.4-fast agent runs", async () => {
+  it("uses medium thinking for gpt-5.5-fast agent runs", async () => {
     const { resolveSparkAgentThinkingLevel } = await import(
       "../src/agent/sparkAgentRunner"
     );
 
-    expect(resolveSparkAgentThinkingLevel("chatgpt-gpt-5.4-fast")).toBe("medium");
+    expect(resolveSparkAgentThinkingLevel("chatgpt-gpt-5.5-fast")).toBe("medium");
   });
 
   it("uses medium thinking for gpt-5.3-codex-spark agent runs", async () => {

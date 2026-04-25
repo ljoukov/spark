@@ -38,7 +38,7 @@ import type { JobProgressReporter, LlmUsageChunk } from "../utils/concurrency";
 import { errorAsString } from "../utils/error";
 import { loadEnvFromFile, loadLocalEnv } from "../utils/env";
 
-const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4-fast";
+const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.5-fast";
 const DEFAULT_MAX_STEPS = 1000;
 const DEFAULT_STORY_PLAN_ITEM_ID = "story";
 const SUPPORTED_BRIEF_EXTENSIONS = [".txt", ".md", ".markdown"] as const;
@@ -70,7 +70,11 @@ function formatCurrencyUsd(value: number): string {
 function resolveThinkingLevel(
   modelId: LlmTextModelId,
 ): LlmThinkingLevel | undefined {
-  if (modelId.includes("gpt-5.4") || modelId.includes("gpt-5.3-codex-spark")) {
+  if (
+    modelId.includes("gpt-5.5") ||
+    modelId.includes("gpt-5.4") ||
+    modelId.includes("gpt-5.3-codex-spark")
+  ) {
     return "medium";
   }
   return undefined;

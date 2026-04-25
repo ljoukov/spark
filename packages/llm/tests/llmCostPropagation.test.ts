@@ -56,13 +56,13 @@ describe("Spark LLM wrapper cost propagation", () => {
       events: (async function* () {
         yield {
           type: "model",
-          modelVersion: "chatgpt-gpt-5.4-fast",
+          modelVersion: "chatgpt-gpt-5.5-fast",
         };
       })(),
       result: Promise.resolve({
         provider: "chatgpt",
-        model: "chatgpt-gpt-5.4-fast",
-        modelVersion: "chatgpt-gpt-5.4-fast",
+        model: "chatgpt-gpt-5.5-fast",
+        modelVersion: "chatgpt-gpt-5.5-fast",
         text: "ok",
         thoughts: "",
         blocked: false,
@@ -76,14 +76,14 @@ describe("Spark LLM wrapper cost propagation", () => {
     const chunks: LlmUsageChunk[] = [];
 
     await generateText({
-      modelId: "chatgpt-gpt-5.4-fast",
+      modelId: "chatgpt-gpt-5.5-fast",
       contents: [{ role: "user", parts: [{ type: "text", text: "hi" }] }],
       progress: createCapturingProgress(chunks),
     });
 
     expect(chunks).toContainEqual(
       expect.objectContaining({
-        modelVersion: "chatgpt-gpt-5.4-fast",
+        modelVersion: "chatgpt-gpt-5.5-fast",
         costUsd: 0.25,
       }),
     );
@@ -94,8 +94,8 @@ describe("Spark LLM wrapper cost propagation", () => {
       value: { ok: true },
       result: {
         provider: "chatgpt",
-        model: "chatgpt-gpt-5.4-fast",
-        modelVersion: "chatgpt-gpt-5.4-fast",
+        model: "chatgpt-gpt-5.5-fast",
+        modelVersion: "chatgpt-gpt-5.5-fast",
         text: '{"ok":true}',
         thoughts: "",
         blocked: false,
@@ -108,7 +108,7 @@ describe("Spark LLM wrapper cost propagation", () => {
     const chunks: LlmUsageChunk[] = [];
 
     await generateJson({
-      modelId: "chatgpt-gpt-5.4-fast",
+      modelId: "chatgpt-gpt-5.5-fast",
       contents: [{ role: "user", parts: [{ type: "text", text: "hi" }] }],
       schema: z.object({ ok: z.boolean() }),
       progress: createCapturingProgress(chunks),
@@ -116,7 +116,7 @@ describe("Spark LLM wrapper cost propagation", () => {
 
     expect(chunks).toContainEqual(
       expect.objectContaining({
-        modelVersion: "chatgpt-gpt-5.4-fast",
+        modelVersion: "chatgpt-gpt-5.5-fast",
         costUsd: 0.33,
       }),
     );

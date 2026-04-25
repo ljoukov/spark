@@ -35,7 +35,7 @@ Optional model override:
 ```bash
 bun --cwd=eval run bench:spark-agent-replay -- \
   --run-path data/spark-agent/<timestamp>/<workspace-id> \
-  --model-id chatgpt-gpt-5.4-fast
+  --model-id chatgpt-gpt-5.5-fast
 ```
 
 ## How It Works

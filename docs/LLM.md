@@ -39,8 +39,8 @@ All calls accept:
   - `tools?`: `{ type: 'web-search', mode?: 'cached' | 'live' }` and `{ type: 'code-execution' }` (mapped to Google Search / OpenAI web search + code interpreter)
 
 OpenAI model routing:
-- `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano` → OpenAI API.
-- `chatgpt-gpt-5.4-fast`, `chatgpt-gpt-5.4-mini`, `chatgpt-gpt-5.3-codex-spark` → ChatGPT Codex backend (OAuth). Legacy aliases `gpt-5.2-codex`, `chatgpt-gpt-5.2-codex`, and `chatgpt-gpt-5.3-codex` are normalized to `chatgpt-gpt-5.3-codex-spark`.
+- `gpt-5.5`, `gpt-5.5-fast`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano` → OpenAI API.
+- `chatgpt-gpt-5.5`, `chatgpt-gpt-5.5-fast`, `chatgpt-gpt-5.4`, `chatgpt-gpt-5.4-fast`, `chatgpt-gpt-5.4-mini`, `chatgpt-gpt-5.3-codex-spark` → ChatGPT Codex backend (OAuth). Legacy aliases `gpt-5.2-codex`, `chatgpt-gpt-5.2-codex`, and `chatgpt-gpt-5.3-codex` are normalized to `chatgpt-gpt-5.3-codex-spark`.
 
 ### JSON convenience
 

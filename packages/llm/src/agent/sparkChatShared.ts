@@ -41,7 +41,7 @@ const trimmedString = z.string().trim().min(1);
 
 export const DEFAULT_SPARK_GRADER_RUN_KEY = "uploaded_work" as const;
 export const DEFAULT_SPARK_GRADER_RUN_LABEL = "Uploaded work" as const;
-export const SPARK_CHAT_MODEL_ID = "chatgpt-gpt-5.4-fast" as const;
+export const SPARK_CHAT_MODEL_ID = "chatgpt-gpt-5.5-fast" as const;
 export const SPARK_CHAT_THINKING_LEVEL = "medium" as const;
 export const SPARK_CHAT_MAX_TOOL_STEPS = 256;
 const EXPLICIT_NO_STUDENT_ANSWER_PATTERN =

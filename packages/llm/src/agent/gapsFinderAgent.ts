@@ -47,7 +47,7 @@ const GAPS_FINDER_SCHEMA_VERSION = 1;
 const GAPS_FINDER_BATCH_SIZE = 4;
 const GAPS_FINDER_MAX_CANDIDATES = 12;
 const GAPS_FINDER_STALE_LOCK_MS = 30 * 60 * 1000;
-const GAPS_FINDER_MODEL_ID = "chatgpt-gpt-5.4-fast";
+const GAPS_FINDER_MODEL_ID = "chatgpt-gpt-5.5-fast";
 
 type QueueGapsFinderRunOptions = {
   serviceAccountJson: string;

@@ -7,6 +7,8 @@ const MIN_INTERVAL_BETWEEN_START_MS = 200;
 const START_JITTER_MS = 200;
 
 export const OPENAI_MODEL_IDS = [
+  "gpt-5.5",
+  "gpt-5.5-fast",
   "gpt-5.4",
   "gpt-5.4-mini",
   "gpt-5.4-nano",
@@ -51,6 +53,18 @@ const OPENAI_GPT_54_PRICING: OpenAiPricing = {
   inputRate: 2.5 / 1_000_000,
   cachedRate: 0.25 / 1_000_000,
   outputRate: 15 / 1_000_000,
+};
+
+const OPENAI_GPT_55_PRICING: OpenAiPricing = {
+  inputRate: 5 / 1_000_000,
+  cachedRate: 0.5 / 1_000_000,
+  outputRate: 30 / 1_000_000,
+};
+
+const OPENAI_GPT_55_PRIORITY_PRICING: OpenAiPricing = {
+  inputRate: 12.5 / 1_000_000,
+  cachedRate: 1.25 / 1_000_000,
+  outputRate: 75 / 1_000_000,
 };
 
 const OPENAI_GPT_54_PRIORITY_PRICING: OpenAiPricing = {
@@ -114,6 +128,12 @@ export function resolveOpenAiModelVariant(
 }
 
 export function getOpenAiPricing(modelId: string): OpenAiPricing | undefined {
+  if (modelId.includes("gpt-5.5-fast")) {
+    return OPENAI_GPT_55_PRIORITY_PRICING;
+  }
+  if (modelId.includes("gpt-5.5")) {
+    return OPENAI_GPT_55_PRICING;
+  }
   if (modelId.includes("gpt-5.4-fast")) {
     return OPENAI_GPT_54_PRIORITY_PRICING;
   }

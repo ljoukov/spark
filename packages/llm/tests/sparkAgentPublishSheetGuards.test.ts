@@ -368,7 +368,7 @@ async function writeFreshCropReviewToolCall(options: {
 }): Promise<void> {
   const toolCallDir = path.join(
     options.rootDir,
-    "logs/agent/llm_calls/2026-04-13T10-00-00.000Z-0001/chatgpt-gpt-5.4-fast",
+    "logs/agent/llm_calls/2026-04-13T10-00-00.000Z-0001/chatgpt-gpt-5.5-fast",
   );
   await mkdir(toolCallDir, { recursive: true });
   await writeFile(
@@ -8836,14 +8836,14 @@ describe("Spark agent tool: publish_sheet guards", () => {
       await mkdir(
         path.join(
           rootDir,
-          "logs/agent/llm_calls/2026-04-13T10-00-00.000Z-0001/chatgpt-gpt-5.4-fast",
+          "logs/agent/llm_calls/2026-04-13T10-00-00.000Z-0001/chatgpt-gpt-5.5-fast",
         ),
         { recursive: true },
       );
       await writeFile(
         path.join(
           rootDir,
-          "logs/agent/llm_calls/2026-04-13T10-00-00.000Z-0001/chatgpt-gpt-5.4-fast/tool_call.txt",
+          "logs/agent/llm_calls/2026-04-13T10-00-00.000Z-0001/chatgpt-gpt-5.5-fast/tool_call.txt",
         ),
         JSON.stringify(
           [
@@ -9005,14 +9005,14 @@ describe("Spark agent tool: publish_sheet guards", () => {
       await mkdir(
         path.join(
           rootDir,
-          "logs/agent/llm_calls/2026-04-13T10-00-00.000Z-0001/chatgpt-gpt-5.4-fast",
+          "logs/agent/llm_calls/2026-04-13T10-00-00.000Z-0001/chatgpt-gpt-5.5-fast",
         ),
         { recursive: true },
       );
       await writeFile(
         path.join(
           rootDir,
-          "logs/agent/llm_calls/2026-04-13T10-00-00.000Z-0001/chatgpt-gpt-5.4-fast/tool_call.txt",
+          "logs/agent/llm_calls/2026-04-13T10-00-00.000Z-0001/chatgpt-gpt-5.5-fast/tool_call.txt",
         ),
         JSON.stringify(
           [
@@ -9584,7 +9584,7 @@ describe("Spark agent tool: publish_sheet guards", () => {
       await writeSourceProblemStatementTranscription(rootDir);
       const toolCallDir = path.join(
         rootDir,
-        "logs/agent/llm_calls/2026-04-13T10-00-00.000Z-0001/chatgpt-gpt-5.4-fast",
+        "logs/agent/llm_calls/2026-04-13T10-00-00.000Z-0001/chatgpt-gpt-5.5-fast",
       );
       await mkdir(toolCallDir, { recursive: true });
       await writeFile(

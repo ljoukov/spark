@@ -43,7 +43,7 @@ describe("Spark agent lesson pipeline guards", () => {
         rootDir,
       });
       const filesystemTools = createFilesystemToolSetForModel(
-        "chatgpt-gpt-5.4-fast",
+        "chatgpt-gpt-5.5-fast",
         filesystemToolConfig.profile ?? "auto",
         filesystemToolConfig.options,
       );
@@ -104,7 +104,7 @@ describe("Spark agent lesson pipeline guards", () => {
         rootDir,
       });
       const filesystemTools = createFilesystemToolSetForModel(
-        "chatgpt-gpt-5.4-fast",
+        "chatgpt-gpt-5.5-fast",
         filesystemToolConfig.profile ?? "auto",
         filesystemToolConfig.options,
       );

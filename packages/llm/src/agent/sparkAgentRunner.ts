@@ -154,7 +154,7 @@ import type {
 
 const execFileAsync = promisify(execFile);
 
-const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4-fast";
+const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.5-fast";
 const SPARK_AGENT_FILESYSTEM_TOOL_PROFILE = "codex" as const;
 
 type LlmDebugOptions = {
@@ -400,7 +400,7 @@ function attachExtractedPdfImagePaths(options: {
     };
   });
 }
-const DEFAULT_GENERATE_TEXT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4-fast";
+const DEFAULT_GENERATE_TEXT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.5-fast";
 const WORKSPACE_UPDATE_THROTTLE_MS = 10_000;
 const AGENT_LOG_THROTTLE_MS = 2_000;
 const AGENT_TOOL_LOG_SNIPPET_MAX_BYTES = 4 * 1024;
@@ -2707,7 +2707,11 @@ export function resolveSparkAgentToolCallsDir(rootDir: string): string {
 export function resolveSparkAgentThinkingLevel(
   modelId: LlmTextModelId,
 ): LlmThinkingLevel | undefined {
-  if (modelId.includes("gpt-5.4") || modelId.includes("gpt-5.3-codex-spark")) {
+  if (
+    modelId.includes("gpt-5.5") ||
+    modelId.includes("gpt-5.4") ||
+    modelId.includes("gpt-5.3-codex-spark")
+  ) {
     return "medium";
   }
   if (modelId.includes("gpt-5.2")) {

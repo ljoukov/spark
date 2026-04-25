@@ -21,11 +21,11 @@ describe("runJobsWithConcurrency cost tracking", () => {
       getId: (item) => item,
       handler: async (_item, { progress }) => {
         const handle = progress.startModelCall({
-          modelId: "chatgpt-gpt-5.4-fast",
+          modelId: "chatgpt-gpt-5.5-fast",
           uploadBytes: 0,
         });
         progress.recordModelUsage(handle, {
-          modelVersion: "chatgpt-gpt-5.4-fast",
+          modelVersion: "chatgpt-gpt-5.5-fast",
           costUsd: 0.25,
         });
         progress.finishModelCall(handle);
@@ -34,6 +34,6 @@ describe("runJobsWithConcurrency cost tracking", () => {
     });
 
     expect(rendered).toContain("cost: $0.2500");
-    expect(rendered).toContain("models: chatgpt-gpt-5.4-fast");
+    expect(rendered).toContain("models: chatgpt-gpt-5.5-fast");
   });
 });
