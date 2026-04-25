@@ -22,6 +22,9 @@ function resolveSheetPhase(options: {
 	hasReport: boolean;
 	hasDraft: boolean;
 }): 'building' | 'solving' | 'grading' | 'graded' {
+	if (options.explicitPhase === 'grading' && options.status === 'done' && options.hasReport) {
+		return 'graded';
+	}
 	if (options.explicitPhase) {
 		return options.explicitPhase;
 	}
@@ -72,8 +75,11 @@ async function loadSheetDashboard(userId: string) {
 				run
 			});
 			run = recovery.run;
-			const reportPath = run.sheet?.filePath ?? run.sheetPath;
-			const artifactRaw = await getWorkspaceTextFile(userId, run.workspaceId, reportPath);
+			const publishedArtifactPath =
+				run.sheet?.filePath ?? (run.status === 'done' ? run.sheetPath : null);
+			const artifactRaw = publishedArtifactPath
+				? await getWorkspaceTextFile(userId, run.workspaceId, publishedArtifactPath)
+				: null;
 			const report = artifactRaw ? safeParseGraderWorksheetReport(artifactRaw) : null;
 			const draft = artifactRaw ? safeParseSolveSheetDraft(artifactRaw) : null;
 			const analysis = analysisByRunId.get(run.id) ?? null;

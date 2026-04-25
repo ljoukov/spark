@@ -31,6 +31,8 @@ const PLACEHOLDER_TEXT_PATTERN =
 	/^(unknown\b|unidentified\b|year pending\b|paper pending\b|not specified\b)/i;
 const MACHINE_SUMMARY_PATTERN =
 	/(completed grader run\b|grader\/output\/|run-summary\.json\b|transcription-first\b|workspace(?:id)?\b|uploaded-only\b|line-by-line annotation\b|tool names?\b|run ids?\b|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+const GRADING_IN_PROGRESS_SUMMARY_PATTERN =
+	/\b(?:still being graded|answers are being graded|queued for grading|grading to start|waiting for grading|already being graded)\b/i;
 const USER_VISIBLE_PROCESS_PATTERN =
 	/\b(?:question\s+paper\s+transcription|transcription|transcribed|ocr|extracted\s+text|source\s+transcript|worksheet\s+json|artifact|publish(?:ed)?\s+sheet)\b/i;
 const SESSION_LABEL_PATTERN =
@@ -142,6 +144,15 @@ function buildFallbackSummary(options: {
 	sheetPhase?: GraderRunDisplayInput['sheetPhase'];
 	paper?: GraderRunPaperInput | null;
 }): string | null {
+	if (options.sheetPhase === 'graded') {
+		if (
+			!getMeaningfulText(options.paper?.paperName) &&
+			!getMeaningfulText(options.paper?.contextLabel)
+		) {
+			return 'The worksheet source could not be confidently identified.';
+		}
+		return null;
+	}
 	if (options.sheetPhase === 'building') {
 		if (options.status === 'executing') {
 			return 'This sheet is still being prepared.';
@@ -187,9 +198,17 @@ function buildFallbackSummary(options: {
 function getPreferredSummary(options: {
 	presentation?: GraderRunPresentationInput | null;
 	resultSummary?: string | null;
+	sheetPhase?: GraderRunDisplayInput['sheetPhase'];
 }): string | null {
 	const presentationSummary = options.presentation?.summaryMarkdown?.trim();
-	if (presentationSummary && !MACHINE_SUMMARY_PATTERN.test(presentationSummary)) {
+	if (
+		presentationSummary &&
+		!MACHINE_SUMMARY_PATTERN.test(presentationSummary) &&
+		!(
+			options.sheetPhase === 'graded' &&
+			GRADING_IN_PROGRESS_SUMMARY_PATTERN.test(presentationSummary)
+		)
+	) {
 		return presentationSummary;
 	}
 	const resultSummary = options.resultSummary?.trim();
@@ -199,7 +218,24 @@ function getPreferredSummary(options: {
 	if (MACHINE_SUMMARY_PATTERN.test(resultSummary)) {
 		return null;
 	}
+	if (options.sheetPhase === 'graded' && GRADING_IN_PROGRESS_SUMMARY_PATTERN.test(resultSummary)) {
+		return null;
+	}
 	return resultSummary;
+}
+
+function getPreferredSubtitle(options: {
+	presentation?: GraderRunPresentationInput | null;
+	sheetPhase?: GraderRunDisplayInput['sheetPhase'];
+}): string | null {
+	const subtitle = getMeaningfulText(options.presentation?.subtitle);
+	if (!subtitle) {
+		return null;
+	}
+	if (options.sheetPhase === 'graded' && GRADING_IN_PROGRESS_SUMMARY_PATTERN.test(subtitle)) {
+		return null;
+	}
+	return subtitle;
 }
 
 function buildFooter(options: {
@@ -236,7 +272,8 @@ export function buildGraderRunDisplay(input: GraderRunDisplayInput): GraderRunDi
 	const summaryMarkdown =
 		getPreferredSummary({
 			presentation: input.presentation,
-			resultSummary: input.resultSummary
+			resultSummary: input.resultSummary,
+			sheetPhase: input.sheetPhase
 		}) ??
 		buildFallbackSummary({
 			status: input.status,
@@ -246,7 +283,10 @@ export function buildGraderRunDisplay(input: GraderRunDisplayInput): GraderRunDi
 	return {
 		title,
 		subtitle:
-			getMeaningfulText(input.presentation?.subtitle) ??
+			getPreferredSubtitle({
+				presentation: input.presentation,
+				sheetPhase: input.sheetPhase
+			}) ??
 			buildFallbackSubtitle({
 				status: input.status,
 				sheetPhase: input.sheetPhase,

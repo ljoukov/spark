@@ -39,10 +39,12 @@ describe('buildGraderRunDisplay', () => {
 				'Completed grader run 8c08e319-01f3-4d9c-ade1-0416e3892cd1 using uploaded-only sources. Wrote grader/output/run-summary.json.'
 		});
 
-		expect(display.title).toBe('Uploaded worksheet');
-		expect(display.subtitle).toBe('Worksheet review prepared from the uploaded material.');
+		expect(display.title).toBe('Student worksheet');
+		expect(display.subtitle).toBe('Worksheet review prepared.');
 		expect(display.metaLine).toBeNull();
-		expect(display.summaryMarkdown).toContain('worksheet source could not be confidently identified');
+		expect(display.summaryMarkdown).toContain(
+			'worksheet source could not be confidently identified'
+		);
 		expect(display.summaryMarkdown).not.toContain('grader run');
 		expect(display.footer).toBe('Uploaded material');
 	});
@@ -83,10 +85,28 @@ describe('buildGraderRunDisplay', () => {
 			status: 'executing'
 		});
 
-		expect(display.title).toBe('Uploaded worksheet');
+		expect(display.title).toBe('Student worksheet');
 		expect(display.subtitle).toBe('Submitted answers are being graded.');
 		expect(display.summaryMarkdown).toBe('This sheet is still being graded.');
 		expect(display.footer).toBe('Uploaded material');
+	});
+
+	it('does not carry in-progress copy onto a graded sheet display', () => {
+		const display = buildGraderRunDisplay({
+			status: 'executing',
+			sheetPhase: 'graded',
+			presentation: {
+				title: 'Student worksheet',
+				subtitle: 'Submitted answers are being graded.',
+				summaryMarkdown: 'This sheet is still being graded.',
+				footer: 'Uploaded material'
+			}
+		});
+
+		expect(display.subtitle).toBe('Worksheet review prepared.');
+		expect(display.summaryMarkdown).toBe(
+			'The worksheet source could not be confidently identified.'
+		);
 	});
 
 	it('uses a neutral fallback title when no paper context is known', () => {
@@ -94,8 +114,8 @@ describe('buildGraderRunDisplay', () => {
 			status: 'created'
 		});
 
-		expect(display.title).toBe('Uploaded worksheet');
-		expect(display.subtitle).toBe('Queued from the uploaded material.');
+		expect(display.title).toBe('Student worksheet');
+		expect(display.subtitle).toBe('Queued for sheet generation.');
 		expect(display.metaLine).toBeNull();
 		expect(display.summaryMarkdown).toBe('Waiting for grading to start.');
 		expect(display.footer).toBe('Uploaded material');
@@ -107,8 +127,8 @@ describe('buildGraderRunDisplay', () => {
 			sheetPhase: 'solving'
 		});
 
-		expect(display.title).toBe('Uploaded worksheet');
-		expect(display.subtitle).toBe('Worksheet draft prepared from the uploaded material.');
+		expect(display.title).toBe('Student worksheet');
+		expect(display.subtitle).toBe('Worksheet draft prepared.');
 		expect(display.summaryMarkdown).toBe('This sheet is ready to solve.');
 		expect(display.footer).toBe('Uploaded material');
 	});

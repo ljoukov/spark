@@ -17313,6 +17313,7 @@ function buildAgentTools(options: {
             runId: graderPublish.runId,
             updates: {
               updatedAt: new Date(),
+              sheetPhase: "graded",
               ...(publication.paper ? { paper: publication.paper } : {}),
               presentation: publication.presentation,
               totals: publication.totals,
@@ -18269,6 +18270,7 @@ export async function runSparkAgentTask(
               runId: graderRunId,
               updates: {
                 status: "done",
+                sheetPhase: "graded",
                 updatedAt: now,
                 completedAt: now,
                 ...(resultSummary ? { resultSummary } : {}),

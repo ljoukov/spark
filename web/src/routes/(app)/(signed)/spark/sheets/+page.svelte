@@ -301,10 +301,10 @@
 	}
 
 	function isPendingSheet(sheet: Sheet): boolean {
-		if (sheet.status === 'created' || sheet.status === 'executing') {
-			return true;
+		if (sheet.status === 'failed' || sheet.status === 'stopped') {
+			return false;
 		}
-		return sheet.sheetPhase !== 'graded' && sheet.status !== 'failed' && sheet.status !== 'stopped';
+		return sheet.sheetPhase === 'building' || sheet.sheetPhase === 'grading';
 	}
 
 	function isGenericPreviewSummary(value: string): boolean {
