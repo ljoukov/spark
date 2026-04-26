@@ -144,6 +144,7 @@ import {
   renderPdfPagesBgra,
 } from "../utils/pdfium";
 import { getSharp } from "../utils/sharp";
+import { createTask } from "../utils/tasks";
 import type {
   JobProgressReporter,
   LlmUsageChunk,
@@ -165,6 +166,9 @@ type LlmDebugOptions = {
 };
 const DEFAULT_MAX_STEPS = 200;
 const DEFAULT_LESSON_MAX_STEPS = 1000;
+const DEFAULT_AGENT_TASK_CONTINUATION_BUDGET_MS = 25 * 60 * 1000;
+const MIN_AGENT_TASK_CONTINUATION_BUDGET_MS = 60 * 1000;
+const MAX_AGENT_TASK_CONTINUATION_BUDGET_MS = 28 * 60 * 1000;
 const DEFAULT_PDF_EXTRACTION_MODEL_ID: LlmTextModelId = "gemini-2.5-pro";
 const DEFAULT_EXTRACT_TEXT_MODEL_ID: LlmTextModelId = "gemini-flash-latest";
 const SUPPORTED_CROP_IMAGE_INPUT_MIME_TYPES = [
@@ -2057,6 +2061,13 @@ class StopRequestedError extends Error {
   }
 }
 
+class AgentContinuationRequestedError extends Error {
+  constructor(message = "Agent task continuation requested.") {
+    super(message);
+    this.name = "AgentContinuationRequestedError";
+  }
+}
+
 type WorkspaceFileMeta = {
   createdAt?: Date;
   updatedAt?: Date;
@@ -2137,6 +2148,40 @@ function parseOptionalPositiveInt(value: unknown): number | undefined {
     return undefined;
   }
   return parsedValue;
+}
+
+function resolveAgentTaskContinuationBudgetMs(): number {
+  const configured = parseOptionalPositiveInt(
+    process.env.SPARK_AGENT_TASK_BUDGET_MS,
+  );
+  if (configured === undefined) {
+    return DEFAULT_AGENT_TASK_CONTINUATION_BUDGET_MS;
+  }
+  return Math.min(
+    Math.max(configured, MIN_AGENT_TASK_CONTINUATION_BUDGET_MS),
+    MAX_AGENT_TASK_CONTINUATION_BUDGET_MS,
+  );
+}
+
+async function enqueueSparkAgentContinuation(options: {
+  readonly serviceAccountJson: string;
+  readonly userId: string;
+  readonly agentId: string;
+  readonly workspaceId: string;
+}): Promise<void> {
+  await createTask(
+    {
+      type: "runAgent",
+      runAgent: {
+        userId: options.userId,
+        agentId: options.agentId,
+        workspaceId: options.workspaceId,
+      },
+    },
+    {
+      serviceAccountJson: options.serviceAccountJson,
+    },
+  );
 }
 
 function renderWorkspaceFileReadResult(input: {
@@ -4780,15 +4825,35 @@ function hasPositiveSourceFidelityAudit(markdown: string): boolean {
   if (SOURCE_FIDELITY_BLOCKING_PATTERN.test(markdown)) {
     return false;
   }
-  const blockingIssuesMatches = Array.from(
-    markdown.matchAll(SOURCE_FIDELITY_BLOCKING_ISSUES_FIELD_PATTERN),
-  );
-  if (blockingIssuesMatches.length === 0) {
+  const blockingIssues = extractSourceFidelityBlockingIssueFields(markdown);
+  if (blockingIssues.length === 0) {
     return false;
   }
-  return blockingIssuesMatches.every((match) =>
-    SOURCE_FIDELITY_NO_BLOCKING_ISSUES_PATTERN.test(match[1]?.trim() ?? ""),
+  return blockingIssues.every((value) =>
+    SOURCE_FIDELITY_NO_BLOCKING_ISSUES_PATTERN.test(value),
   );
+}
+
+function extractSourceFidelityBlockingIssueFields(markdown: string): string[] {
+  return Array.from(
+    markdown.matchAll(SOURCE_FIDELITY_BLOCKING_ISSUES_FIELD_PATTERN),
+    (match) => match[1]?.trim() ?? "",
+  );
+}
+
+function normalizeSourceFidelityAuditMarkdown(markdown: string): string {
+  const trimmed = markdown.trim();
+  if (
+    !SOURCE_FIDELITY_SUBAGENT_CHECK_PATTERN.test(trimmed) ||
+    !SOURCE_FIDELITY_PASS_PATTERN.test(trimmed) ||
+    SOURCE_FIDELITY_BLOCKING_PATTERN.test(trimmed)
+  ) {
+    return trimmed;
+  }
+  if (extractSourceFidelityBlockingIssueFields(trimmed).length > 0) {
+    return trimmed;
+  }
+  return `${trimmed}\n- blocking issues: none`;
 }
 
 function isBenignDuplicateOnlyFailedCropValidationRecord(
@@ -5224,6 +5289,255 @@ function collectSheetMarkdown(report: SparkGraderWorksheetReport): string {
   }
 
   return parts.join("\n\n");
+}
+
+function renderSourceFidelityAnswerValue(value: unknown): string {
+  if (typeof value === "string") {
+    return value.length > 0 ? value : "<blank>";
+  }
+  return JSON.stringify(value);
+}
+
+function renderSourceFidelityQuestionView(
+  question: PaperSheetQuestion,
+  report: SparkGraderWorksheetReport,
+  depth: number,
+): string {
+  const heading = "#".repeat(Math.min(4 + depth, 6));
+  const lines = [
+    `${heading} Question ${question.displayNumber ?? question.id}`,
+    `- id: ${question.id}`,
+    `- type: ${question.type}`,
+    `- marks: ${question.marks.toString()}`,
+  ];
+  if (question.badgeLabel) {
+    lines.push(`- badgeLabel: ${question.badgeLabel}`);
+  }
+
+  switch (question.type) {
+    case "fill":
+      lines.push(
+        "",
+        "Prompt:",
+        question.prompt,
+        "",
+        "Blanks:",
+        ...question.blanks.map((blank, index) => {
+          const placeholder =
+            (blank.placeholder ?? "").trim().length > 0
+              ? (blank.placeholder ?? "")
+              : "blank";
+          return `- ${index.toString()}: ${placeholder}`;
+        }),
+        "",
+        "After:",
+        question.after,
+      );
+      if (question.conjunction) {
+        lines.push("", "Conjunction:", question.conjunction);
+      }
+      break;
+    case "mcq":
+      lines.push("", "Prompt:", question.prompt, "", "Options:");
+      for (const option of question.options) {
+        lines.push(`- ${option.id} (${option.label}): ${option.text}`);
+      }
+      if (question.displayMode) {
+        lines.push("", `Display mode: ${question.displayMode}`);
+      }
+      break;
+    case "lines":
+      lines.push(
+        "",
+        "Prompt:",
+        question.prompt,
+        "",
+        `Lines: ${question.lines.toString()}`,
+      );
+      break;
+    case "calc":
+      lines.push(
+        "",
+        "Prompt:",
+        question.prompt,
+        "",
+        `Input label: ${question.inputLabel}`,
+        `Unit: ${question.unit}`,
+      );
+      if (question.hint) {
+        lines.push("", "Hint:", question.hint);
+      }
+      break;
+    case "match":
+      lines.push("", "Prompt:", question.prompt, "", "Pairs:");
+      for (const pair of question.pairs) {
+        lines.push(`- ${pair.term}: ${pair.match}`);
+      }
+      break;
+    case "spelling":
+      lines.push("", "Prompt:", question.prompt, "", "Words:");
+      for (const word of question.words) {
+        lines.push(`- ${word.wrong}`);
+      }
+      break;
+    case "cloze":
+      lines.push(
+        "",
+        "Segments:",
+        ...question.segments.map((segment, index) => {
+          return `- ${index.toString()}: ${segment}`;
+        }),
+        "",
+        "Blanks:",
+        ...question.blanks.map((blank, index) => {
+          const placeholder =
+            (blank.placeholder ?? "").trim().length > 0
+              ? (blank.placeholder ?? "")
+              : "blank";
+          return `- ${index.toString()}: ${placeholder}`;
+        }),
+      );
+      if (question.wordBank) {
+        lines.push(
+          "",
+          "Word bank:",
+          ...question.wordBank.map((word) => `- ${word}`),
+        );
+      }
+      break;
+    case "answer_bank":
+      lines.push(
+        "",
+        "Segments:",
+        ...question.segments.map((segment, index) => {
+          return `- ${index.toString()}: ${segment}`;
+        }),
+        "",
+        "Blanks:",
+        ...question.blanks.map((blank, index) => {
+          const placeholder =
+            (blank.placeholder ?? "").trim().length > 0
+              ? (blank.placeholder ?? "")
+              : "blank";
+          return `- ${index.toString()}: ${placeholder}`;
+        }),
+        "",
+        "Options:",
+      );
+      for (const option of question.options) {
+        lines.push(`- ${option.id} (${option.label}): ${option.text}`);
+      }
+      break;
+    case "flow":
+      lines.push("", "Prompt:", question.prompt, "", "Rows:");
+      for (const [rowIndex, row] of question.rows.entries()) {
+        lines.push(`- row ${rowIndex.toString()}:`);
+        for (const item of row.items) {
+          if (item.type === "operation") {
+            lines.push(`  - operation: ${item.label}`);
+          } else {
+            lines.push(`  - box: ${item.boxId}`);
+          }
+        }
+      }
+      if (question.connectors) {
+        lines.push("", "Connectors:");
+        for (const connector of question.connectors) {
+          lines.push(
+            `- ${connector.fromBoxId} -> ${connector.toBoxId}: ${connector.label}`,
+          );
+        }
+      }
+      break;
+  }
+
+  lines.push(
+    "",
+    "Student answer:",
+    renderSourceFidelityAnswerValue(report.answers[question.id]),
+  );
+  const review = report.review.questions[question.id];
+  if (review) {
+    lines.push(
+      "",
+      "Review:",
+      `- status: ${review.status}`,
+      review.score
+        ? `- score: ${review.score.got.toString()}/${review.score.total.toString()}`
+        : "- score: not recorded",
+      `- note: ${review.note}`,
+    );
+  }
+
+  return lines.join("\n");
+}
+
+function renderSourceFidelityQuestionEntryView(
+  entry: PaperSheetQuestionEntry,
+  report: SparkGraderWorksheetReport,
+  depth: number,
+): string {
+  if (entry.type !== "group") {
+    return renderSourceFidelityQuestionView(entry, report, depth);
+  }
+
+  const heading = "#".repeat(Math.min(4 + depth, 6));
+  const lines = [
+    `${heading} Group ${entry.displayNumber ?? entry.id}`,
+    `- id: ${entry.id}`,
+    "- type: group",
+  ];
+  if (entry.badgeLabel) {
+    lines.push(`- badgeLabel: ${entry.badgeLabel}`);
+  }
+  lines.push("", "Prompt:", entry.prompt);
+  for (const child of entry.questions) {
+    lines.push("", renderSourceFidelityQuestionView(child, report, depth + 1));
+  }
+  return lines.join("\n");
+}
+
+function renderSourceFidelityWorksheetView(
+  report: SparkGraderWorksheetReport,
+): string {
+  const lines = [
+    "# Assembled worksheet source-fidelity view",
+    "",
+    "This is a complete normalized view of the worksheet artifact. Use it instead of raw JSON for source-fidelity judgement so JSON escaping, long-file outlines, and file-reader truncation do not look like worksheet omissions.",
+    "",
+    `Title: ${report.sheet.title}`,
+    `Subtitle: ${report.sheet.subtitle}`,
+    `Subject: ${report.sheet.subject}`,
+    `Level: ${report.sheet.level}`,
+    `Overall score: ${report.review.score.got.toString()}/${report.review.score.total.toString()}`,
+    `Review label: ${report.review.label}`,
+    "",
+    "## Sections",
+  ];
+
+  for (const section of report.sheet.sections) {
+    if (!("id" in section)) {
+      lines.push("", "### Text section", section.text);
+      continue;
+    }
+
+    lines.push("", `### ${section.label}`, `- id: ${section.id}`);
+    if (section.theory) {
+      lines.push("", "Section theory:", section.theory);
+    }
+    if (section.infoBox) {
+      lines.push(
+        "",
+        `Info box: ${section.infoBox.title}`,
+        section.infoBox.text,
+      );
+    }
+    for (const entry of section.questions ?? []) {
+      lines.push("", renderSourceFidelityQuestionEntryView(entry, report, 0));
+    }
+  }
+
+  return lines.join("\n");
 }
 
 type MarkdownImageTarget = {
@@ -7728,6 +8042,14 @@ async function patchGraderRunStatus(options: {
 function isTransientAgentServiceFailureMessage(message: string): boolean {
   return /\b(?:ChatGPT Codex request failed \((?:500|502|503|504|529)\)|upstream connect error|disconnect\/reset|connection termination|temporarily unavailable|service unavailable|overloaded|gateway timeout)\b/iu.test(
     message,
+  );
+}
+
+function isProviderAttachmentDownloadFailureMessage(message: string): boolean {
+  return (
+    /\bChatGPT Codex request failed \(400\)/iu.test(message) &&
+    /\bTimeout while downloading https?:\/\//iu.test(message) &&
+    /"param"\s*:\s*"url"/iu.test(message)
   );
 }
 
@@ -17093,6 +17415,17 @@ function buildAgentTools(options: {
             `Cannot run source-fidelity audit because "${resolvedSheetPath}" is invalid JSON: ${errorAsString(error)}. Call validate_grader_artifacts after fixing the JSON, then audit source fidelity.`,
           );
         }
+        const parsedWorksheetForAudit =
+          SparkGraderWorksheetReportSchema.safeParse(JSON.parse(sheetRaw));
+        const worksheetSourceFidelityView = parsedWorksheetForAudit.success
+          ? renderSourceFidelityWorksheetView(parsedWorksheetForAudit.data)
+          : [
+              "# Raw worksheet JSON",
+              "",
+              "The worksheet did not parse as a full grader worksheet report. Run validate_grader_artifacts before relying on source-fidelity audit results.",
+              "",
+              sheetRaw,
+            ].join("\n");
         const sheetPlanExists =
           (await stat(
             resolveWorkspacePath(rootDir, resolvedSheetPlanPath),
@@ -17128,6 +17461,12 @@ function buildAgentTools(options: {
             auditTools[toolName] = candidate;
           }
         }
+        auditTools.read_worksheet_for_source_fidelity = tool({
+          description:
+            "Read the complete normalized assembled worksheet view for source-fidelity review. This avoids false failures from raw JSON escaping or truncated file-reader output.",
+          inputSchema: z.object({}).strict(),
+          execute: () => worksheetSourceFidelityView,
+        });
 
         const imageSourcePaths = resolvedSourcePaths.filter((sourcePath) =>
           /\.(?:png|jpe?g|webp|gif)$/iu.test(sourcePath),
@@ -17135,17 +17474,20 @@ function buildAgentTools(options: {
         const reviewPrompt = [
           "You are a fresh-context source-fidelity validation agent.",
           "Do not grade, solve, improve, or redesign the worksheet. Only compare source material against the assembled worksheet for transfer fidelity.",
-          "Read the worksheet JSON and transcription first. Read the sheet plan when present. Inspect source images with view_image when image paths are provided.",
+          "Call read_worksheet_for_source_fidelity first and use that complete normalized worksheet view as the authoritative view of worksheet prompt text, options, marks, answers, and review entries. Raw JSON file readers may truncate large artifacts; do not report truncation unless it is present in the normalized worksheet view.",
+          "Read the transcription next. Read the sheet plan when present. Inspect source images with view_image when image paths are provided.",
           "For long source material, this prompt covers only the listed source scope; do not try to audit unrelated pages.",
+          "If every concrete transfer issue you find is non-blocking, set pass/fail to pass and write `blocking issues: none`. If you set pass/fail to fail, blocking issues must name the exact question ids and source facts that must be repaired before publish.",
           "",
           `Source scope: ${sourceScope}`,
           "",
           "Required files:",
+          "- assembled worksheet: call read_worksheet_for_source_fidelity",
           `- transcription: ${resolvedTranscriptionPath}`,
           sheetPlanExists
             ? `- sheet plan: ${resolvedSheetPlanPath}`
             : `- sheet plan: ${resolvedSheetPlanPath} (missing; record this if it affects audit confidence)`,
-          `- worksheet: ${resolvedSheetPath}`,
+          `- raw worksheet JSON: ${resolvedSheetPath} (optional fallback only; prefer read_worksheet_for_source_fidelity)`,
           resolvedSourcePaths.length > 0
             ? [
                 "Source paths:",
@@ -17197,6 +17539,7 @@ function buildAgentTools(options: {
         const usedReadTool = result.steps.some((step) =>
           step.toolCalls.some(
             (call) =>
+              call.toolName === "read_worksheet_for_source_fidelity" ||
               call.toolName === "read_file" ||
               call.toolName === "grep_files" ||
               call.toolName === "view_image",
@@ -17207,7 +17550,9 @@ function buildAgentTools(options: {
             "validate_source_fidelity_with_fresh_agent failed: the fresh audit agent returned without reading or viewing source/worksheet files.",
           );
         }
-        const reviewMarkdown = result.text.trim();
+        const reviewMarkdown = normalizeSourceFidelityAuditMarkdown(
+          result.text,
+        );
         await ensureDir(
           path.dirname(resolveWorkspacePath(rootDir, resolvedOutputPath)),
         );
@@ -17236,10 +17581,20 @@ function buildAgentTools(options: {
               auditRecords.push(record.trim());
             }
           }
+          const currentReview = reviewMarkdown.trim();
+          const aggregateRecords = [
+            ...auditRecords.filter((record) => {
+              return (
+                record !== currentReview &&
+                hasPositiveSourceFidelityAudit(record)
+              );
+            }),
+            currentReview,
+          ];
           const aggregateMarkdown = [
             "# Source fidelity audits",
             "",
-            ...auditRecords.map((record, index) => {
+            ...aggregateRecords.map((record, index) => {
               if (index === 0) {
                 return record;
               }
@@ -17254,10 +17609,9 @@ function buildAgentTools(options: {
           workspace.scheduleUpdate(aggregateOutputPath);
         }
         const passed = hasPositiveSourceFidelityAudit(reviewMarkdown);
-        const blockingIssues =
-          SOURCE_FIDELITY_BLOCKING_ISSUES_FIELD_PATTERN.exec(
-            reviewMarkdown,
-          )?.[1]?.trim() ?? "";
+        const blockingIssues = extractSourceFidelityBlockingIssueFields(
+          reviewMarkdown,
+        ).join("\n");
         return {
           status: passed ? "passed" : "failed",
           sourceScope,
@@ -18106,13 +18460,22 @@ export async function runSparkAgentTask(
       .map((entry) => toResolvedAttachmentInput(entry));
     const workspaceLinkAttachments =
       workspaceSync.getDiscoveredLinkAttachments();
-    const inlineInputAttachments = mergeAttachmentInputs({
+    const candidateInputAttachments = mergeAttachmentInputs({
       primary: explicitInputAttachments,
       secondary: workspaceLinkAttachments,
-    }).slice(0, AGENT_INLINE_ATTACHMENTS_MAX_COUNT);
+    });
+    const useInlineInputAttachments =
+      graderRunId === null && sheetRunId === null;
+    const inlineInputAttachments = useInlineInputAttachments
+      ? candidateInputAttachments.slice(0, AGENT_INLINE_ATTACHMENTS_MAX_COUNT)
+      : [];
     if (inlineInputAttachments.length > 0) {
       logSync?.append(
         `input_attachments: using ${inlineInputAttachments.length.toString()} attachment(s)`,
+      );
+    } else if (candidateInputAttachments.length > 0) {
+      logSync?.append(
+        `input_attachments: using workspace files; skipped ${candidateInputAttachments.length.toString()} inline attachment(s) for background sheet/grader run`,
       );
     }
     const maxSteps =
@@ -18174,7 +18537,6 @@ export async function runSparkAgentTask(
         })
         .strict(),
       execute: async ({ summary }) => {
-        doneCalled = true;
         logSync?.append(
           summary ? `done: ${summary}` : "done: completed without summary",
         );
@@ -18231,6 +18593,7 @@ export async function runSparkAgentTask(
             );
           }
         }
+        doneCalled = true;
         const runSummary =
           graderRunId && workspaceRoot && !publishedGraderSheet
             ? await readGraderRunSummaryFromWorkspace({
@@ -18927,6 +19290,22 @@ export async function runSparkAgentTask(
     processUsageMonitor = new AgentProcessUsageMonitor();
     processUsageMonitor.start();
     const toolLoopStartedAt = Date.now();
+    const continuationBudgetMs = resolveAgentTaskContinuationBudgetMs();
+    let continuationBudgetReached = false;
+    const continuationAbortController = new AbortController();
+    const continuationTimer = setTimeout(() => {
+      continuationBudgetReached = true;
+      logSync?.append(
+        [
+          "warn: task_time_budget_reached;",
+          `elapsed=${formatMillis(Date.now() - toolLoopStartedAt)}`,
+          `budget=${formatMillis(continuationBudgetMs)}`,
+          "aborting this Cloud Tasks attempt for continuation",
+        ].join(" "),
+      );
+      continuationAbortController.abort();
+    }, continuationBudgetMs);
+    continuationTimer.unref?.();
     const toolLoopEventBridge = createToolLoopStatsEventBridge({
       tracker: statsTracker,
       modelId,
@@ -18955,48 +19334,89 @@ export async function runSparkAgentTask(
     const graderModelTools = resolveSparkGraderModelTools({
       input: graderRequestPayload?.input,
     });
-    const toolLoopResult = await (async (): Promise<LlmToolLoopResult> => {
-      try {
-        return await runAgentLoop({
-          model: modelId,
-          input: initialInput ?? prompt,
-          ...(initialInput ? {} : { instructions: agentSystemPrompt }),
-          tools,
-          ...(tutorSessionId
-            ? {}
-            : graderRunId === null
-              ? { modelTools: [{ type: "web-search", mode: "live" }] }
-              : graderModelTools
-                ? { modelTools: graderModelTools }
-                : {}),
-          subagents: tutorSessionId
-            ? false
-            : resolveSparkAgentSubagentSelection(),
-          maxSteps,
-          ...(thinkingLevel ? { thinkingLevel } : {}),
-          onEvent: (event) => {
-            toolLoopEventBridge.onEvent(event);
-          },
-          telemetry: createSparkAgentRunTelemetryConfig({
-            agentType: agentMetricType,
-            job: monitoringJob,
-            taskIdPrefix: agentMetricTaskIdPrefix,
-          }),
-          logging: {
-            workspaceDir: resolveSparkAgentLogsDir(workspaceRoot),
-            callLogsDir: "llm_calls",
-            mirrorToConsole: false,
-            sink: {
-              append: (line: string) => {
-                logSync?.append(line);
-              },
-              flush: async () => {
-                await logSync?.flushAll();
-              },
+    const activeWorkspaceRoot = workspaceRoot;
+    if (!activeWorkspaceRoot) {
+      throw new Error("Workspace root is missing before agent loop.");
+    }
+    const runToolLoop = async (
+      loopInitialInput: LlmInputMessage[] | null,
+    ): Promise<LlmToolLoopResult> => {
+      return await runAgentLoop({
+        model: modelId,
+        input: loopInitialInput ?? prompt,
+        ...(loopInitialInput ? {} : { instructions: agentSystemPrompt }),
+        tools,
+        ...(tutorSessionId
+          ? {}
+          : graderRunId === null
+            ? { modelTools: [{ type: "web-search", mode: "live" }] }
+            : graderModelTools
+              ? { modelTools: graderModelTools }
+              : {}),
+        subagents: tutorSessionId ? false : resolveSparkAgentSubagentSelection(),
+        maxSteps,
+        ...(thinkingLevel ? { thinkingLevel } : {}),
+        signal: continuationAbortController.signal,
+        onEvent: (event) => {
+          toolLoopEventBridge.onEvent(event);
+        },
+        telemetry: createSparkAgentRunTelemetryConfig({
+          agentType: agentMetricType,
+          job: monitoringJob,
+          taskIdPrefix: agentMetricTaskIdPrefix,
+        }),
+        logging: {
+          workspaceDir: resolveSparkAgentLogsDir(activeWorkspaceRoot),
+          callLogsDir: "llm_calls",
+          mirrorToConsole: false,
+          sink: {
+            append: (line: string) => {
+              logSync?.append(line);
+            },
+            flush: async () => {
+              await logSync?.flushAll();
             },
           },
-        });
+        },
+      });
+    };
+    const toolLoopResult = await (async (): Promise<LlmToolLoopResult> => {
+      try {
+        return await runToolLoop(initialInput);
+      } catch (error) {
+        if (
+          continuationBudgetReached ||
+          continuationAbortController.signal.aborted
+        ) {
+          throw new AgentContinuationRequestedError(
+            `Agent task reached its ${formatMillis(continuationBudgetMs)} continuation budget.`,
+          );
+        }
+        if (
+          initialInput !== null &&
+          inlineInputAttachments.length > 0 &&
+          isProviderAttachmentDownloadFailureMessage(errorAsString(error))
+        ) {
+          logSync?.append(
+            "warn: provider could not download an inline attachment; retrying initial agent call without inline attachments because workspace files remain available through tools",
+          );
+          try {
+            return await runToolLoop(null);
+          } catch (retryError) {
+            if (
+              continuationBudgetReached ||
+              continuationAbortController.signal.aborted
+            ) {
+              throw new AgentContinuationRequestedError(
+                `Agent task reached its ${formatMillis(continuationBudgetMs)} continuation budget.`,
+              );
+            }
+            throw retryError;
+          }
+        }
+        throw error;
       } finally {
+        clearTimeout(continuationTimer);
         toolLoopEventBridge.finish();
       }
     })();
@@ -19129,6 +19549,59 @@ export async function runSparkAgentTask(
     }
     agentMetricStatus = "ok";
   } catch (error) {
+    if (error instanceof AgentContinuationRequestedError) {
+      agentMetricStatus = "ok";
+      const message = errorAsString(error);
+      logSync?.append(`continuation: ${message}`);
+      await workspaceSync?.flushAll().catch(() => undefined);
+      await logSync?.flushAll().catch(() => undefined);
+      const now = new Date();
+      await patchFirestoreDocument({
+        serviceAccountJson,
+        documentPath: agentDocPath,
+        updates: {
+          status: "executing",
+          updatedAt: now,
+          continuationRequestedAt: now,
+        },
+      }).catch((statusError) => {
+        logSync?.append(
+          `warn: failed to mark continuation status: ${errorAsString(statusError)}`,
+        );
+      });
+      if (sheetRunId) {
+        await patchGraderRunStatus({
+          serviceAccountJson,
+          userId: options.userId,
+          runId: sheetRunId,
+          updates: {
+            status: "executing",
+            updatedAt: now,
+          },
+        }).catch(() => undefined);
+      }
+      if (graderRunId) {
+        await patchGraderRunStatus({
+          serviceAccountJson,
+          userId: options.userId,
+          runId: graderRunId,
+          updates: {
+            status: "executing",
+            updatedAt: now,
+          },
+        }).catch(() => undefined);
+      }
+      await enqueueSparkAgentContinuation({
+        serviceAccountJson,
+        userId: options.userId,
+        agentId: options.agentId,
+        workspaceId: options.workspaceId,
+      });
+      logSync?.append("continuation: queued same agent/workspace");
+      await logSync?.flushAll().catch(() => undefined);
+      return;
+    }
+
     if (error instanceof StopRequestedError) {
       agentMetricStatus = "stopped";
       logSync?.append("warn: agent stopped by user request");

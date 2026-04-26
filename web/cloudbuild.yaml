@@ -45,7 +45,7 @@ steps:
         '--env-vars-file',
         'web/cloud-run-env.yaml',
         '--timeout',
-        '20m'
+        '60m'
       ]
 images:
   - ${_IMAGE_NAME}
