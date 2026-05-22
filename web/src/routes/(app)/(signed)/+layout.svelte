@@ -27,7 +27,8 @@
 		return Boolean(
 			routeId?.includes('/spark/sheets/[sheetId]') ||
 				routeId?.includes('/spark/gaps/[gapId]') ||
-				routeId?.includes('/spark/diagnostic/[diagnosticId]')
+				routeId?.includes('/spark/diagnostic/[diagnosticId]') ||
+				routeId?.includes('/spark/exp/explanations/[id]')
 		);
 	}
 
@@ -35,12 +36,18 @@
 		if (routeId?.includes('/spark/diagnostic/[diagnosticId]')) {
 			return '/spark/diagnostic';
 		}
+		if (routeId?.includes('/spark/exp/explanations/[id]')) {
+			return '/spark/exp/explanations';
+		}
 		return '/spark/sheets';
 	}
 
 	function resolveSheetCloseLabel(routeId: string | null | undefined): string {
 		if (routeId?.includes('/spark/diagnostic/[diagnosticId]')) {
 			return 'Back to diagnostic';
+		}
+		if (routeId?.includes('/spark/exp/explanations/[id]')) {
+			return 'Back to diagnosis flows';
 		}
 		return 'Back to all sheets';
 	}
@@ -53,6 +60,12 @@
 			return true;
 		}
 		if (pathname === '/spark/diagnostic') {
+			return true;
+		}
+		if (pathname === '/spark/exp/explanations') {
+			return true;
+		}
+		if (/^\/spark\/exp\/explanations\/[^/]+$/u.test(pathname ?? '')) {
 			return true;
 		}
 		if (/^\/spark\/diagnostic\/[^/]+$/u.test(pathname ?? '')) {
@@ -71,6 +84,12 @@
 		if (pathname === '/spark/diagnostic') {
 			return 'Opening diagnostic';
 		}
+		if (pathname === '/spark/exp/explanations') {
+			return 'Opening explanation flows';
+		}
+		if (/^\/spark\/exp\/explanations\/[^/]+$/u.test(pathname ?? '')) {
+			return 'Opening explanation flow';
+		}
 		if (/^\/spark\/diagnostic\/[^/]+$/u.test(pathname ?? '')) {
 			return 'Opening diagnostic sheet';
 		}
@@ -86,6 +105,12 @@
 		}
 		if (pathname === '/spark/diagnostic') {
 			return 'Preparing the diagnostic workspace.';
+		}
+		if (pathname === '/spark/exp/explanations') {
+			return 'Loading the diagnosis-to-repair examples.';
+		}
+		if (/^\/spark\/exp\/explanations\/[^/]+$/u.test(pathname ?? '')) {
+			return 'Preparing the explanation builder.';
 		}
 		if (/^\/spark\/diagnostic\/[^/]+$/u.test(pathname ?? '')) {
 			return 'Preparing the worksheet surface.';
