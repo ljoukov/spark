@@ -45,10 +45,6 @@
 		return 'Back to all sheets';
 	}
 
-	function isGuideImmersiveRoute(routeId: string | null | undefined): boolean {
-		return Boolean(routeId?.includes('/spark/guides/[id]'));
-	}
-
 	function isSparkLoadingTarget(pathname: string | null | undefined): boolean {
 		if (pathname === '/spark') {
 			return true;
@@ -144,7 +140,6 @@
 	const showSheetDetailLayout = $derived(isSheetStyleStandaloneRoute(page.route.id));
 	const sheetCloseHref = $derived(resolveSheetCloseHref(page.route.id));
 	const sheetCloseLabel = $derived(resolveSheetCloseLabel(page.route.id));
-	const showGuideImmersiveLayout = $derived(isGuideImmersiveRoute(page.route.id));
 	const experience = $derived(resolveExperience(page.route.id));
 	const sessionHomeHref = $derived(resolveSessionHomeHref(experience, sessionId));
 	const brandCopy = $derived(resolveBrandCopy(experience));
@@ -500,10 +495,6 @@
 				<XIcon class="sheet-close-button__icon" />
 			</a>
 			<main class="app-main app-main--sheet-detail">
-				{@render children?.()}
-			</main>
-		{:else if showGuideImmersiveLayout}
-			<main class="app-main app-main--guide-immersive">
 				{@render children?.()}
 			</main>
 		{:else}
@@ -1056,11 +1047,6 @@
 
 	.app-main--sheet-detail {
 		overflow: auto;
-	}
-
-	.app-main--guide-immersive {
-		overflow: hidden;
-		scrollbar-gutter: auto;
 	}
 
 	/* CSS-only lock: when page content contains a `.workspace` (code editor).
