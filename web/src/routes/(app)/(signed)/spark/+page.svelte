@@ -145,13 +145,13 @@
 		if (!browser) {
 			return false;
 		}
+		if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+			return true;
+		}
 		const userAgentData = (navigator as Navigator & { userAgentData?: { mobile?: boolean } })
 			.userAgentData;
 		if (userAgentData && typeof userAgentData.mobile === 'boolean') {
 			return userAgentData.mobile;
-		}
-		if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-			return true;
 		}
 		return navigator.maxTouchPoints > 1 && /Mac/i.test(navigator.platform);
 	});
