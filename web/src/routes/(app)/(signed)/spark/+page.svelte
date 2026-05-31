@@ -155,6 +155,12 @@
 		}
 		return navigator.maxTouchPoints > 1 && /Mac/i.test(navigator.platform);
 	});
+	const sparkOsBlocksFileAccess = $derived.by(() => {
+		if (!browser) {
+			return false;
+		}
+		return /\bSparkFileAccess\/none\b/i.test(navigator.userAgent);
+	});
 	const isMacPlatform = $derived.by(() => {
 		if (!browser) {
 			return false;
@@ -167,6 +173,7 @@
 		}
 		return isMacPlatform ? '⌘U' : 'Ctrl+U';
 	});
+	const canAttachFiles = $derived(browser && !sparkOsBlocksFileAccess);
 	const canTakePhoto = $derived(isMobileDevice);
 	const conversationAttachments = $derived(conversation?.attachments ?? []);
 	const activeConversationAttachments = $derived(
@@ -754,6 +761,9 @@
 	}
 
 	function handleAttachmentSelect(): void {
+		if (!canAttachFiles) {
+			return;
+		}
 		openFilePicker(attachmentInputRef);
 	}
 
@@ -837,6 +847,9 @@
 	}
 
 	async function handleComposerPaste(event: ClipboardEvent): Promise<void> {
+		if (!canAttachFiles) {
+			return;
+		}
 		if (sending) {
 			return;
 		}
@@ -849,6 +862,9 @@
 	}
 
 	function handleComposerDragEnter(event: DragEvent): void {
+		if (!canAttachFiles) {
+			return;
+		}
 		if (!hasFileTransfer(event.dataTransfer)) {
 			return;
 		}
@@ -860,6 +876,9 @@
 	}
 
 	function handleComposerDragOver(event: DragEvent): void {
+		if (!canAttachFiles) {
+			return;
+		}
 		if (!hasFileTransfer(event.dataTransfer)) {
 			return;
 		}
@@ -873,6 +892,9 @@
 	}
 
 	function handleComposerDragLeave(event: DragEvent): void {
+		if (!canAttachFiles) {
+			return;
+		}
 		if (!hasFileTransfer(event.dataTransfer)) {
 			return;
 		}
@@ -883,6 +905,9 @@
 	}
 
 	async function handleComposerDrop(event: DragEvent): Promise<void> {
+		if (!canAttachFiles) {
+			return;
+		}
 		const dataTransfer = event.dataTransfer;
 		const droppedFiles = extractSupportedTransferFiles(dataTransfer);
 		const hasDroppedFiles = hasFileTransfer(dataTransfer);
@@ -1672,6 +1697,9 @@
 			if (!hasShortcut) {
 				return;
 			}
+			if (!canAttachFiles) {
+				return;
+			}
 			event.preventDefault();
 			openFilePicker(attachmentInputRef);
 		};
@@ -2118,14 +2146,16 @@
 			<div class="agent-composer" bind:this={composerRef}>
 				<div class="composer-stack">
 					<div class="composer-card">
-						<input
-							class="sr-only"
-							type="file"
-							multiple
-							accept={SPARK_ATTACHMENT_FILE_INPUT_ACCEPT}
-							bind:this={attachmentInputRef}
-							onchange={handleFileInputChange}
-						/>
+						{#if canAttachFiles}
+							<input
+								class="sr-only"
+								type="file"
+								multiple
+								accept={SPARK_ATTACHMENT_FILE_INPUT_ACCEPT}
+								bind:this={attachmentInputRef}
+								onchange={handleFileInputChange}
+							/>
+						{/if}
 						<input
 							class="sr-only"
 							type="file"
@@ -2228,33 +2258,37 @@
 									<Plus class="composer-icon" />
 								</DropdownMenu.Trigger>
 								<DropdownMenu.Content class="composer-menu" sideOffset={12} align="start">
-									<DropdownMenu.Item
-										class="composer-menu__item"
-										onSelect={handleAttachmentSelect}
-										disabled={sending}
-									>
-										<span class="composer-menu__icon" aria-hidden="true">
-											<svg
-												width="18"
-												height="18"
-												viewBox="0 0 24 24"
-												fill="none"
-												xmlns="http://www.w3.org/2000/svg"
-												class="composer-menu__paperclip"
-											>
-												<path
-													d="M10 9V15C10 16.1046 10.8954 17 12 17V17C13.1046 17 14 16.1046 14 15V7C14 4.79086 12.2091 3 10 3V3C7.79086 3 6 4.79086 6 7V15C6 18.3137 8.68629 21 12 21V21C15.3137 21 18 18.3137 18 15V8"
-													stroke="currentColor"
-												></path>
-											</svg>
-										</span>
-										<span>Add photos &amp; files</span>
-										{#if attachmentShortcutLabel}
-											<DropdownMenu.Shortcut>{attachmentShortcutLabel}</DropdownMenu.Shortcut>
-										{/if}
-									</DropdownMenu.Item>
-									{#if canTakePhoto}
+									{#if canAttachFiles}
+										<DropdownMenu.Item
+											class="composer-menu__item"
+											onSelect={handleAttachmentSelect}
+											disabled={sending}
+										>
+											<span class="composer-menu__icon" aria-hidden="true">
+												<svg
+													width="18"
+													height="18"
+													viewBox="0 0 24 24"
+													fill="none"
+													xmlns="http://www.w3.org/2000/svg"
+													class="composer-menu__paperclip"
+												>
+													<path
+														d="M10 9V15C10 16.1046 10.8954 17 12 17V17C13.1046 17 14 16.1046 14 15V7C14 4.79086 12.2091 3 10 3V3C7.79086 3 6 4.79086 6 7V15C6 18.3137 8.68629 21 12 21V21C15.3137 21 18 18.3137 18 15V8"
+														stroke="currentColor"
+													></path>
+												</svg>
+											</span>
+											<span>Add photos &amp; files</span>
+											{#if attachmentShortcutLabel}
+												<DropdownMenu.Shortcut>{attachmentShortcutLabel}</DropdownMenu.Shortcut>
+											{/if}
+										</DropdownMenu.Item>
+									{/if}
+									{#if canAttachFiles && canTakePhoto}
 										<DropdownMenu.Separator />
+									{/if}
+									{#if canTakePhoto}
 										<DropdownMenu.Item
 											class="composer-menu__item"
 											onSelect={handleTakePhotoSelect}
