@@ -26,9 +26,9 @@
 	function isSheetStyleStandaloneRoute(routeId: string | null | undefined): boolean {
 		return Boolean(
 			routeId?.includes('/spark/sheets/[sheetId]') ||
-				routeId?.includes('/spark/gaps/[gapId]') ||
-				routeId?.includes('/spark/diagnostic/[diagnosticId]') ||
-				routeId?.includes('/spark/exp/explanations/[id]')
+			routeId?.includes('/spark/gaps/[gapId]') ||
+			routeId?.includes('/spark/diagnostic/[diagnosticId]') ||
+			routeId?.includes('/spark/exp/explanations/[id]')
 		);
 	}
 
@@ -146,7 +146,7 @@
 			return { title: 'Spark Lessons', tagline: 'Think. Hack. Spark.' };
 		}
 		if (experience === 'spark') {
-			return { title: 'Spark', tagline: 'Think. Hack. Spark.' };
+			return { title: 'Spark', tagline: null };
 		}
 		return { title: 'Spark', tagline: 'Think. Hack. Spark.' };
 	}
@@ -478,11 +478,7 @@
 
 	function isPlainLeftClick(event: MouseEvent): boolean {
 		return (
-			event.button === 0 &&
-			!event.metaKey &&
-			!event.ctrlKey &&
-			!event.shiftKey &&
-			!event.altKey
+			event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey
 		);
 	}
 

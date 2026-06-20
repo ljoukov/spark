@@ -3,6 +3,14 @@ import { describe, expect, it } from 'vitest';
 import sparkChatSystemPrompt from './spark-chat-system-prompt.md?raw';
 
 describe('spark chat system prompt', () => {
+	it('defines the GCSE Question Constellation coaching loop', () => {
+		expect(sparkChatSystemPrompt).toContain('Question Constellation');
+		expect(sparkChatSystemPrompt).toContain('same answer chain');
+		expect(sparkChatSystemPrompt).toContain(
+			'attempt → diagnose → upgrade → rewrite → save the chain → transfer'
+		);
+	});
+
 	it('asks a clarifying question for upload-only turns', () => {
 		expect(sparkChatSystemPrompt).toContain(
 			'ask one concise clarifying question instead of guessing the goal'

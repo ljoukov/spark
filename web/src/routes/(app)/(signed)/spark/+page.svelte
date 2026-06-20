@@ -80,6 +80,46 @@
 			status: 'in_progress' | 'complete';
 		} | null;
 	};
+	type ConstellationId =
+		| 'biology-respiration'
+		| 'english-language-inference'
+		| 'english-literature-macbeth'
+		| 'maths-substitute';
+	type ConstellationPhase =
+		| 'attempt'
+		| 'diagnosis'
+		| 'coach'
+		| 'rewrite'
+		| 'saved'
+		| 'transferAttempt'
+		| 'transferResult';
+	type ConstellationConfig = {
+		id: ConstellationId;
+		label: string;
+		title: string;
+		meta: string;
+		context: string;
+		question: string;
+		marks: string;
+		weakAnswer: string;
+		firstLink: string;
+		missingBridge: string;
+		missingPieces: string[];
+		chainSteps: string[];
+		revisedAnswer: string;
+		savedMove: string;
+		savedUse: string;
+		transferQuestion: string;
+		transferHint: string;
+		transferAnswer: string;
+	};
+	type ConstellationSession = {
+		id: ConstellationId;
+		phase: ConstellationPhase;
+		answer: string;
+		rewrite: string;
+		transferAnswer: string;
+	};
 
 	const MAX_INLINE_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 	const TARGET_IMAGE_ATTACHMENT_BYTES = Math.floor(MAX_INLINE_ATTACHMENT_BYTES * 0.9);
@@ -92,6 +132,113 @@
 	const INTERRUPTED_UPLOAD_MESSAGE = 'Upload interrupted. Remove and add this file again.';
 	const MAX_COMPOSER_LINES = 12;
 	const MAX_COMPOSER_CHARS = 12_000;
+	const CONSTELLATIONS: Record<ConstellationId, ConstellationConfig> = {
+		'biology-respiration': {
+			id: 'biology-respiration',
+			label: 'AQA GCSE Biology',
+			title: 'Blood flow & respiration',
+			meta: '6 questions. 1 same answer chain.',
+			context: 'Blood flow & respiration',
+			question: 'Explain why reduced blood flow to the heart can cause chest pain.',
+			marks: '4 marks',
+			weakAnswer: 'Less blood gets to the heart.',
+			firstLink: 'less blood reaches the heart',
+			missingBridge: 'respiration',
+			missingPieces: ['oxygen', 'respiration', 'energy'],
+			chainSteps: ['less blood', 'less oxygen', 'less respiration', 'less energy', 'pain'],
+			revisedAnswer:
+				'Less blood reaches the heart muscle, so less oxygen is delivered. The cells do less aerobic respiration, so less energy is released. This can cause chest pain.',
+			savedMove: 'Respiration → Energy Chain',
+			savedUse:
+				'Use this when a question asks why a cell, tissue, organ, or process is affected by less oxygen or glucose.',
+			transferQuestion: 'Why do muscles ache during intense exercise?',
+			transferHint: 'Use the same bridge: oxygen → respiration → energy → effect.',
+			transferAnswer:
+				'During intense exercise, the muscles may not get enough oxygen for aerobic respiration. Less energy is released aerobically, so anaerobic respiration happens and lactic acid builds up. This can make muscles ache.'
+		},
+		'english-language-inference': {
+			id: 'english-language-inference',
+			label: 'English Language',
+			title: 'Inference from evidence',
+			meta: '5 questions. 1 analysis move.',
+			context: 'Paper 1 inference',
+			question: 'What impressions do you get of the place from this description?',
+			marks: '4 marks',
+			weakAnswer: 'The place is scary.',
+			firstLink: 'clear impression',
+			missingBridge: 'word-level evidence',
+			missingPieces: ['quote', 'precise word', 'effect'],
+			chainSteps: ['point', 'short quote', 'precise word', 'inference', 'effect'],
+			revisedAnswer:
+				'The place seems threatening because the word "jagged" suggests sharp, dangerous shapes. This makes the reader feel uneasy, as if the setting could hurt the character.',
+			savedMove: 'Word → Inference → Effect Move',
+			savedUse:
+				'Use this when a question asks for impressions, feelings, tension, danger, or mood from a short extract.',
+			transferQuestion: 'How does the writer make the character seem nervous?',
+			transferHint:
+				'Choose one precise word, infer what it suggests, then explain the reader effect.',
+			transferAnswer:
+				'The writer makes the character seem nervous through the word "trembling", which suggests he cannot fully control his body. This makes the reader sense his fear and uncertainty.'
+		},
+		'english-literature-macbeth': {
+			id: 'english-literature-macbeth',
+			label: 'English Literature',
+			title: 'Macbeth ambition paragraph',
+			meta: '4 questions. 1 paragraph chain.',
+			context: 'Macbeth',
+			question: 'How does Shakespeare present ambition in Macbeth?',
+			marks: '6 marks',
+			weakAnswer: 'Macbeth is ambitious because he wants to be king.',
+			firstLink: 'clear idea about ambition',
+			missingBridge: 'method and theme',
+			missingPieces: ['quote', 'method', 'theme'],
+			chainSteps: ['argument', 'quote', 'method', 'meaning', 'theme'],
+			revisedAnswer:
+				'Shakespeare presents Macbeth’s ambition as dangerous because it begins to control his moral choices. When Macbeth says "stars, hide your fires", the image of darkness suggests he knows his desire is wrong. Shakespeare links ambition with corruption and secrecy.',
+			savedMove: 'Argument → Quote → Method → Theme Chain',
+			savedUse:
+				'Use this when a Literature paragraph needs to move from an idea into quotation, writer method, meaning, and theme.',
+			transferQuestion: 'How does Shakespeare present guilt in Macbeth?',
+			transferHint: 'Start with an argument, then move through quote → method → meaning → theme.',
+			transferAnswer:
+				'Shakespeare presents guilt as mentally destructive. Macbeth imagines a voice saying "sleep no more", and the image of lost sleep suggests his conscience will not let him rest. Shakespeare links guilt with psychological punishment.'
+		},
+		'maths-substitute': {
+			id: 'maths-substitute',
+			label: 'Maths',
+			title: 'Substitute, rearrange, solve',
+			meta: '5 questions. 1 method chain.',
+			context: 'Multi-step algebra',
+			question:
+				'Use \\(v = u + at\\) to find \\(t\\) when \\(v = 20\\), \\(u = 8\\), and \\(a = 3\\).',
+			marks: '3 marks',
+			weakAnswer: '20 = 8 + 3t',
+			firstLink: 'correct substitution',
+			missingBridge: 'rearranging',
+			missingPieces: ['subtract', 'divide', 'check'],
+			chainSteps: ['identify equation', 'substitute', 'rearrange', 'solve', 'check'],
+			revisedAnswer:
+				'Substitute into the formula: \\(20 = 8 + 3t\\). Subtract 8 from both sides: \\(12 = 3t\\). Divide by 3, so \\(t = 4\\).',
+			savedMove: 'Substitute → Rearrange → Solve Move',
+			savedUse: 'Use this when a Maths question gives a formula and asks for a missing value.',
+			transferQuestion: 'Use \\(s = d/t\\) to find \\(t\\) when \\(s = 12\\) and \\(d = 60\\).',
+			transferHint: 'Substitute first, then rearrange before solving.',
+			transferAnswer:
+				'Substitute into the formula: \\(12 = 60/t\\). Multiply by \\(t\\): \\(12t = 60\\). Divide by 12, so \\(t = 5\\).'
+		}
+	};
+	const PRIMARY_CONSTELLATION_ID: ConstellationId = 'biology-respiration';
+	const CONSTELLATION_STARTERS: ConstellationConfig[] = [
+		CONSTELLATIONS['english-language-inference'],
+		CONSTELLATIONS['english-literature-macbeth'],
+		CONSTELLATIONS['maths-substitute']
+	];
+	const CONSTELLATION_KEYWORDS: Record<ConstellationId, string[]> = {
+		'biology-respiration': ['oxygen', 'respiration', 'energy'],
+		'english-language-inference': ['quote', 'word', 'effect'],
+		'english-literature-macbeth': ['quote', 'method', 'theme'],
+		'maths-substitute': ['subtract', 'divide', '4']
+	};
 
 	let { data }: { data: PageData } = $props();
 
@@ -128,6 +275,8 @@
 	let fileDragDepth = $state(0);
 	let lastAttachmentConversationId = $state<string | null>(null);
 	let rejectedConversationId = $state<string | null>(null);
+	let activeConstellation = $state<ConstellationSession | null>(null);
+	let lastConstellationPhase = $state<ConstellationPhase | null>(null);
 	const pendingRemovalByLocalId = new Set<string>();
 	const ignoredAttachmentIdsByConversation = new Map<string, Set<string>>();
 	const ignoredFingerprintsByConversation = new Map<string, Set<string>>();
@@ -139,6 +288,10 @@
 		visible: false
 	});
 
+	const activeConstellationConfig = $derived(
+		activeConstellation ? CONSTELLATIONS[activeConstellation.id] : null
+	);
+	const activeConstellationPhase = $derived(activeConstellation?.phase ?? null);
 	const isComposerExpanded = $derived(composerExpanded);
 	const isFileDragActive = $derived(fileDragDepth > 0);
 	const isMobileDevice = $derived.by(() => {
@@ -732,6 +885,7 @@
 		const previousConversationId = conversationId;
 		setConversationId(null);
 		conversation = null;
+		activeConstellation = null;
 		conversationLoadState = 'idle';
 		streamingByMessageId = {};
 		streamingThoughtsByMessageId = {};
@@ -1511,8 +1665,8 @@
 		attachments = attachments.filter((entry) => !localIds.has(entry.localId));
 	}
 
-	async function sendMessage(): Promise<void> {
-		const trimmed = draft.trim();
+	async function sendMessage(options: { text?: string } = {}): Promise<void> {
+		const trimmed = (options.text ?? draft).trim();
 		if (sending || hasPendingUploads) {
 			return;
 		}
@@ -1676,6 +1830,80 @@
 			chatStreamPhase = 'idle';
 			chatStreamAssistantMessageId = null;
 		}
+	}
+
+	function startConstellation(id: ConstellationId): void {
+		if (sending || hasPendingUploads) {
+			return;
+		}
+		error = null;
+		draft = '';
+		activeConstellation = {
+			id,
+			phase: 'attempt',
+			answer: '',
+			rewrite: '',
+			transferAnswer: ''
+		};
+	}
+
+	function updateConstellation(update: Partial<ConstellationSession>): void {
+		if (!activeConstellation) {
+			return;
+		}
+		activeConstellation = { ...activeConstellation, ...update };
+	}
+
+	function beginConstellationRewrite(config: ConstellationConfig): void {
+		updateConstellation({
+			phase: 'rewrite',
+			rewrite: activeConstellation?.rewrite || config.revisedAnswer
+		});
+	}
+
+	function resolveChainHitCount(value: string, id: ConstellationId): number {
+		const normalized = value.toLowerCase();
+		let count = 0;
+		for (const keyword of CONSTELLATION_KEYWORDS[id]) {
+			if (normalized.includes(keyword.toLowerCase())) {
+				count += 1;
+			}
+		}
+		return count;
+	}
+
+	function resolveLikelyMark(value: string, config: ConstellationConfig): string {
+		const trimmed = value.trim();
+		if (trimmed.length === 0) {
+			return 'Not enough to mark';
+		}
+		const hitCount = resolveChainHitCount(trimmed, config.id);
+		if (hitCount >= 3) {
+			return config.id === 'english-literature-macbeth' ? 'Likely 5/6' : 'Likely full marks';
+		}
+		if (hitCount >= 2) {
+			return config.id === 'english-literature-macbeth' ? 'Likely 4/6' : 'Likely 3/4';
+		}
+		return config.id === 'maths-substitute' ? 'Likely 1/3' : 'Likely 1/4';
+	}
+
+	function resolveTransferResult(value: string, config: ConstellationConfig): string {
+		const hitCount = resolveChainHitCount(value, config.id);
+		if (hitCount >= 2) {
+			return 'Transferred. You used the same chain in a new question.';
+		}
+		if (value.trim().length > 0) {
+			return `Almost. You started the chain, but still need the bridge: ${config.missingBridge}.`;
+		}
+		return 'Try the same chain before checking.';
+	}
+
+	function textareaValue(event: Event): string {
+		const target = event.currentTarget;
+		if (target instanceof HTMLTextAreaElement) {
+			return target.value;
+		}
+		return '';
 	}
 
 	onMount(() => {
@@ -1880,6 +2108,28 @@
 	});
 
 	$effect(() => {
+		const phase = activeConstellationPhase;
+		if (!browser || !phase) {
+			lastConstellationPhase = phase;
+			return;
+		}
+		if (phase === lastConstellationPhase) {
+			return;
+		}
+		lastConstellationPhase = phase;
+		requestAnimationFrame(() => {
+			const appPage = document.querySelector('.app-page');
+			if (appPage instanceof HTMLElement) {
+				appPage.scrollTop = 0;
+			}
+			const container = document.querySelector('.app-main');
+			if (container instanceof HTMLElement) {
+				container.scrollTop = 0;
+			}
+		});
+	});
+
+	$effect(() => {
 		if (!browser || !composerRef) {
 			return;
 		}
@@ -1962,19 +2212,17 @@
 />
 
 <section
-	class={`agent-shell ${messages.length > 0 ? 'has-thread' : ''}`}
+	class={`agent-shell ${messages.length > 0 || activeConstellation ? 'has-thread' : ''} ${activeConstellation ? 'has-native-session' : ''}`}
 	aria-label="Spark AI Agent chat"
 >
 	<div class="agent-layout">
 		<div class="agent-toolbar">
-			<Button variant="outline" size="sm" onclick={() => resetConversation()} disabled={sending}>
-				New chat
-			</Button>
-			<Button variant="ghost" size="sm" href="/spark/diagnostic">Diagnostic</Button>
-			<Button variant="ghost" size="sm" href="/spark/lessons">Lessons</Button>
-			<Button variant="ghost" size="sm" href="/spark/sheets">Sheets</Button>
-			<Button variant="ghost" size="sm" href="/spark/pathways">Pathways</Button>
-			<Button variant="ghost" size="sm" href="/spark/agents">Agents</Button>
+			<div class="agent-actions">
+				<Button variant="ghost" size="sm" href="/spark/chats">Chats</Button>
+				<Button variant="outline" size="sm" onclick={() => resetConversation()} disabled={sending}>
+					New chat
+				</Button>
+			</div>
 		</div>
 
 		<div class="agent-stream">
@@ -1984,7 +2232,250 @@
 				</div>
 			{/if}
 
-			{#if isOpeningConversation}
+			{#if activeConstellation && activeConstellationConfig}
+				<div class="constellation-session" aria-label="Question Constellation training">
+					<div class="session-heading">
+						<div class="empty-avatar" aria-hidden="true">S</div>
+						<div>
+							<p>{activeConstellationConfig.label}</p>
+							<h2>{activeConstellationConfig.title}</h2>
+							<span>{activeConstellationConfig.meta}</span>
+						</div>
+					</div>
+
+					{#if activeConstellation.phase === 'attempt'}
+						<div class="training-card">
+							<div class="training-card__topline">
+								<span>Question 1</span>
+								<span>{activeConstellationConfig.marks}</span>
+							</div>
+							<h3>{activeConstellationConfig.question}</h3>
+						</div>
+						<label class="training-answer">
+							<span>Your answer</span>
+							<textarea
+								value={activeConstellation.answer}
+								placeholder="Write your answer first..."
+								oninput={(event) => updateConstellation({ answer: textareaValue(event) })}
+							></textarea>
+						</label>
+						<div class="training-actions">
+							<button
+								class="training-button training-button--secondary"
+								type="button"
+								onclick={() =>
+									updateConstellation({ answer: activeConstellationConfig.weakAnswer })}
+							>
+								Use sample answer
+							</button>
+							<button
+								class="training-button training-button--primary"
+								type="button"
+								onclick={() => updateConstellation({ phase: 'diagnosis' })}
+								disabled={activeConstellation.answer.trim().length === 0}
+							>
+								Check answer
+							</button>
+						</div>
+					{:else if activeConstellation.phase === 'diagnosis'}
+						<div class="answer-bubble">
+							<p>{activeConstellation.answer}</p>
+						</div>
+						<div class="training-card training-card--diagnosis">
+							<div class="training-card__topline">
+								<span
+									>{resolveLikelyMark(activeConstellation.answer, activeConstellationConfig)}</span
+								>
+							</div>
+							<h3>You found the first link.</h3>
+							<p>
+								You have <strong>{activeConstellationConfig.firstLink}</strong>. The missing bridge
+								is <strong>{activeConstellationConfig.missingBridge}</strong>.
+							</p>
+							<div class="missing-chips" aria-label="Missing answer pieces">
+								{#each activeConstellationConfig.missingPieces as piece}
+									<span>{piece}</span>
+								{/each}
+							</div>
+						</div>
+						<div class="training-actions">
+							<button
+								class="training-button training-button--secondary"
+								type="button"
+								onclick={() => updateConstellation({ phase: 'attempt' })}
+							>
+								Edit answer
+							</button>
+							<button
+								class="training-button training-button--primary"
+								type="button"
+								onclick={() => updateConstellation({ phase: 'coach' })}
+							>
+								Build chain
+							</button>
+						</div>
+					{:else if activeConstellation.phase === 'coach'}
+						<div class="training-card">
+							<div class="training-card__topline">
+								<span>Same answer chain</span>
+							</div>
+							<div class="training-chain" aria-label="Same answer chain">
+								{#each activeConstellationConfig.chainSteps as step, index}
+									<span>{step}</span>
+									{#if index < activeConstellationConfig.chainSteps.length - 1}
+										<span aria-hidden="true">→</span>
+									{/if}
+								{/each}
+							</div>
+							<p class="training-note">{activeConstellationConfig.transferHint}</p>
+						</div>
+						<div class="training-actions">
+							<button
+								class="training-button training-button--primary"
+								type="button"
+								onclick={() => beginConstellationRewrite(activeConstellationConfig)}
+							>
+								Rewrite answer
+							</button>
+						</div>
+					{:else if activeConstellation.phase === 'rewrite'}
+						<label class="training-answer">
+							<span>Revised answer</span>
+							<textarea
+								value={activeConstellation.rewrite}
+								oninput={(event) => updateConstellation({ rewrite: textareaValue(event) })}
+							></textarea>
+						</label>
+						<div class="score-row">
+							<span
+								>Before: {resolveLikelyMark(
+									activeConstellation.answer,
+									activeConstellationConfig
+								)}</span
+							>
+							<span>After: stronger answer</span>
+						</div>
+						<div class="training-actions">
+							<button
+								class="training-button training-button--secondary"
+								type="button"
+								onclick={() =>
+									updateConstellation({ rewrite: activeConstellationConfig.revisedAnswer })}
+							>
+								Use model rewrite
+							</button>
+							<button
+								class="training-button training-button--primary"
+								type="button"
+								onclick={() => updateConstellation({ phase: 'saved' })}
+								disabled={activeConstellation.rewrite.trim().length === 0}
+							>
+								Save chain
+							</button>
+						</div>
+					{:else if activeConstellation.phase === 'saved'}
+						<div class="training-card training-card--saved">
+							<div class="training-card__topline">
+								<span>Saved to Thinking Memory</span>
+							</div>
+							<h3>{activeConstellationConfig.savedMove}</h3>
+							<p>{activeConstellationConfig.savedUse}</p>
+							<div class="training-chain" aria-label="Saved chain">
+								{#each activeConstellationConfig.chainSteps as step, index}
+									<span>{step}</span>
+									{#if index < activeConstellationConfig.chainSteps.length - 1}
+										<span aria-hidden="true">→</span>
+									{/if}
+								{/each}
+							</div>
+						</div>
+						<div class="training-card">
+							<div class="training-card__topline">
+								<span>Transfer question</span>
+								<span>{activeConstellationConfig.marks}</span>
+							</div>
+							<h3>{activeConstellationConfig.transferQuestion}</h3>
+						</div>
+						<div class="training-actions">
+							<button
+								class="training-button training-button--primary"
+								type="button"
+								onclick={() => updateConstellation({ phase: 'transferAttempt' })}
+							>
+								Try transfer
+							</button>
+						</div>
+					{:else if activeConstellation.phase === 'transferAttempt'}
+						<div class="training-card">
+							<div class="training-card__topline">
+								<span>Use the same chain</span>
+								<span>{activeConstellationConfig.marks}</span>
+							</div>
+							<h3>{activeConstellationConfig.transferQuestion}</h3>
+						</div>
+						<label class="training-answer">
+							<span>Your transfer answer</span>
+							<textarea
+								value={activeConstellation.transferAnswer}
+								placeholder="Try the same chain without looking back..."
+								oninput={(event) => updateConstellation({ transferAnswer: textareaValue(event) })}
+							></textarea>
+						</label>
+						<div class="training-actions">
+							<button
+								class="training-button training-button--secondary"
+								type="button"
+								onclick={() =>
+									updateConstellation({
+										transferAnswer: activeConstellationConfig.transferAnswer
+									})}
+							>
+								Use sample transfer
+							</button>
+							<button
+								class="training-button training-button--primary"
+								type="button"
+								onclick={() => updateConstellation({ phase: 'transferResult' })}
+								disabled={activeConstellation.transferAnswer.trim().length === 0}
+							>
+								Check transfer
+							</button>
+						</div>
+					{:else if activeConstellation.phase === 'transferResult'}
+						<div class="answer-bubble">
+							<p>{activeConstellation.transferAnswer}</p>
+						</div>
+						<div class="training-card training-card--saved">
+							<div class="training-card__topline">
+								<span>Transfer result</span>
+							</div>
+							<h3>
+								{resolveTransferResult(
+									activeConstellation.transferAnswer,
+									activeConstellationConfig
+								)}
+							</h3>
+							<p>{activeConstellationConfig.transferHint}</p>
+						</div>
+						<div class="training-actions">
+							<button
+								class="training-button training-button--secondary"
+								type="button"
+								onclick={() => updateConstellation({ phase: 'transferAttempt' })}
+							>
+								Try again
+							</button>
+							<button
+								class="training-button training-button--primary"
+								type="button"
+								onclick={() => updateConstellation({ phase: 'saved' })}
+							>
+								Back to saved chain
+							</button>
+						</div>
+					{/if}
+				</div>
+			{:else if isOpeningConversation}
 				<div class="chat-opening" role="status" aria-live="polite">
 					<span class="chat-opening__spinner" aria-hidden="true"></span>
 					<div>
@@ -1994,10 +2485,57 @@
 				</div>
 			{:else if messages.length === 0}
 				<div class="agent-empty">
-					<h2>Start a new conversation</h2>
-					<p>
-						Spark AI Agent can map out lessons, generate practice prompts, and review your uploads.
-					</p>
+					<div class="empty-message">
+						<div class="empty-avatar" aria-hidden="true">S</div>
+						<div class="empty-copy">
+							<p class="empty-kicker">AQA GCSE Biology</p>
+							<h2>Let’s train one Question Constellation.</h2>
+							<p>Questions that look different, but use the same answer chain.</p>
+						</div>
+					</div>
+					<div class="constellation-card">
+						<div class="constellation-card__header">
+							<div>
+								<p class="constellation-card__eyebrow">Blood flow &amp; respiration</p>
+								<h3>6 questions. 1 same answer chain.</h3>
+							</div>
+							<span class="constellation-card__badge">Grade 9 training</span>
+						</div>
+						<div class="answer-chain" aria-label="Answer chain">
+							<span>supply</span>
+							<span aria-hidden="true">→</span>
+							<span>oxygen</span>
+							<span aria-hidden="true">→</span>
+							<span>respiration</span>
+							<span aria-hidden="true">→</span>
+							<span>energy</span>
+							<span aria-hidden="true">→</span>
+							<span>effect</span>
+						</div>
+						<button
+							class="constellation-start"
+							type="button"
+							onclick={() => startConstellation(PRIMARY_CONSTELLATION_ID)}
+							disabled={sending || hasPendingUploads}
+						>
+							Start constellation
+							<ArrowRight size={16} />
+						</button>
+					</div>
+					<div class="starter-strip" aria-label="More constellation starters">
+						{#each CONSTELLATION_STARTERS as starter}
+							<button
+								class="starter-chip"
+								type="button"
+								onclick={() => startConstellation(starter.id)}
+								disabled={sending || hasPendingUploads}
+							>
+								<span>{starter.label}</span>
+								<strong>{starter.title}</strong>
+								<small>{starter.meta}</small>
+							</button>
+						{/each}
+					</div>
 					{#if showDiagnosticAdvert}
 						<a class="diagnostic-ad" href={diagnosticAdvertHref}>
 							<span class="diagnostic-ad__icon" aria-hidden="true">
@@ -2013,11 +2551,6 @@
 							</span>
 						</a>
 					{/if}
-					<div class="agent-empty__examples">
-						<span>“Plan a 3-day GCSE Biology revision sprint.”</span>
-						<span>“Help me break down this algorithm into steps.”</span>
-						<span>“Summarise what I should study next.”</span>
-					</div>
 				</div>
 			{:else}
 				<div class={`agent-thread ${shouldUseThreadPadding ? 'has-thread-padding' : ''}`}>
@@ -2430,6 +2963,9 @@
 			var(--app-content-border, rgba(148, 163, 184, 0.35)) 70%,
 			transparent
 		);
+		--spark-navy: #07183d;
+		--spark-gold: #bd8425;
+		--spark-cream: #fffaf1;
 		--chat-send-bg: var(--foreground);
 		--chat-send-fg: var(--background);
 		--code-bg: color-mix(in srgb, var(--app-content-bg, #ffffff) 86%, rgba(15, 23, 42, 0.04));
@@ -2466,6 +3002,9 @@
 		--chat-border: rgba(148, 163, 184, 0.3);
 		--chat-user-bg: rgba(30, 41, 59, 0.45);
 		--chat-user-border: rgba(148, 163, 184, 0.3);
+		--spark-navy: rgba(248, 250, 252, 0.95);
+		--spark-gold: #f6c56e;
+		--spark-cream: rgba(15, 23, 42, 0.88);
 		--chat-send-bg: rgba(248, 250, 252, 0.92);
 		--chat-send-fg: rgba(15, 23, 42, 0.92);
 		--code-bg: color-mix(in srgb, rgba(15, 23, 42, 0.92) 82%, transparent);
@@ -2496,9 +3035,15 @@
 
 	.agent-toolbar {
 		display: flex;
+		align-items: center;
 		justify-content: flex-end;
+		gap: 1rem;
+	}
+
+	.agent-actions {
+		display: inline-flex;
+		align-items: center;
 		gap: 0.35rem;
-		flex-wrap: wrap;
 	}
 
 	.agent-stream {
@@ -2560,40 +3105,214 @@
 	}
 
 	.agent-empty {
-		padding: clamp(1.6rem, 3vw, 2.4rem);
-		border-radius: 1.5rem;
-		border: 1px dashed rgba(148, 163, 184, 0.3);
-		background: color-mix(in srgb, var(--app-content-bg, #ffffff) 65%, transparent);
 		display: flex;
 		flex-direction: column;
-		gap: 0.8rem;
-		text-align: center;
+		gap: clamp(1rem, 2.5vw, 1.35rem);
+		padding: clamp(0.4rem, 2vw, 1rem) 0 calc(var(--spark-composer-offset, 6rem) + 0.75rem);
+		text-align: left;
 	}
 
-	.agent-empty h2 {
-		margin: 0;
-		font-size: 1.35rem;
+	.empty-message {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr);
+		gap: 0.85rem;
+		align-items: start;
 	}
 
-	.agent-empty p {
+	.empty-avatar {
+		display: grid;
+		place-items: center;
+		width: 2.2rem;
+		height: 2.2rem;
+		border-radius: 999px;
+		background: var(--spark-navy);
+		color: var(--background);
+		font-family: ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+		font-size: 1.08rem;
+		font-weight: 720;
+		box-shadow: 0 18px 42px -30px rgba(7, 24, 61, 0.7);
+	}
+
+	.empty-copy {
+		max-width: 35rem;
+		padding-top: 0.1rem;
+	}
+
+	.empty-kicker {
+		margin: 0 0 0.45rem;
+		color: var(--text-secondary, rgba(30, 41, 59, 0.66));
+		font-size: 0.8rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	.empty-copy h2 {
 		margin: 0;
+		color: var(--spark-navy);
+		font-family: ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+		font-size: clamp(1.55rem, 4vw, 2.45rem);
+		font-weight: 650;
+		letter-spacing: 0;
+		line-height: 1.08;
+	}
+
+	.empty-copy p:not(.empty-kicker) {
+		margin: 0.8rem 0 0;
+		max-width: 30rem;
 		color: var(--text-secondary, rgba(30, 41, 59, 0.7));
+		font-size: clamp(0.98rem, 2vw, 1.05rem);
+		line-height: 1.55;
 	}
 
-	.agent-empty__examples {
+	.constellation-card {
+		display: grid;
+		gap: 1rem;
+		padding: clamp(1rem, 2.5vw, 1.25rem);
+		border: 1px solid color-mix(in srgb, var(--spark-gold) 28%, var(--chat-border));
+		border-radius: 1.1rem;
+		background: color-mix(in srgb, var(--app-content-bg, #ffffff) 88%, var(--spark-cream));
+		box-shadow: 0 24px 58px -46px rgba(7, 24, 61, 0.48);
+	}
+
+	.constellation-card__header {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+
+	.constellation-card__eyebrow {
+		margin: 0 0 0.35rem;
+		color: var(--text-secondary, rgba(30, 41, 59, 0.72));
+		font-size: 0.92rem;
+		font-weight: 650;
+	}
+
+	.constellation-card h3 {
+		margin: 0;
+		color: var(--spark-navy);
+		font-size: clamp(1.25rem, 3vw, 1.7rem);
+		font-weight: 760;
+		letter-spacing: 0;
+		line-height: 1.16;
+	}
+
+	.constellation-card__badge {
+		flex: 0 0 auto;
+		padding: 0.34rem 0.55rem;
+		border-radius: 999px;
+		border: 1px solid color-mix(in srgb, var(--spark-gold) 34%, transparent);
+		background: color-mix(in srgb, var(--spark-gold) 10%, transparent);
+		color: color-mix(in srgb, var(--spark-gold) 70%, var(--spark-navy));
+		font-size: 0.78rem;
+		font-weight: 760;
+		white-space: nowrap;
+	}
+
+	.answer-chain {
 		display: flex;
 		flex-wrap: wrap;
-		justify-content: center;
-		gap: 0.5rem;
-		font-size: 0.9rem;
-		color: var(--text-secondary, rgba(30, 41, 59, 0.7));
+		align-items: center;
+		gap: 0.42rem;
+		width: 100%;
+		padding: 0.72rem 0.82rem;
+		border-radius: 0.85rem;
+		border: 1px solid color-mix(in srgb, var(--chat-border) 72%, transparent);
+		background: color-mix(in srgb, var(--background) 72%, transparent);
+		color: color-mix(in srgb, var(--spark-navy) 84%, transparent);
+		font-size: clamp(0.9rem, 2vw, 0.98rem);
+		line-height: 1.45;
 	}
 
-	.agent-empty__examples span {
-		padding: 0.4rem 0.8rem;
-		border-radius: 1.75rem;
+	.answer-chain span:nth-child(even) {
+		color: var(--spark-gold);
+		font-weight: 800;
+	}
+
+	.constellation-start {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.45rem;
+		justify-self: start;
+		min-height: 2.8rem;
+		padding: 0.75rem 1rem;
+		border: none;
+		border-radius: 999px;
+		background: var(--spark-navy);
+		color: var(--background);
+		font-size: 0.96rem;
+		font-weight: 780;
+		cursor: pointer;
+		box-shadow: 0 18px 34px -24px rgba(7, 24, 61, 0.8);
+		transition:
+			transform 0.16s ease,
+			box-shadow 0.16s ease,
+			opacity 0.16s ease;
+	}
+
+	.constellation-start:hover:enabled {
+		transform: translateY(-1px);
+		box-shadow: 0 22px 42px -26px rgba(7, 24, 61, 0.85);
+	}
+
+	.constellation-start:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.starter-strip {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 0.7rem;
+	}
+
+	.starter-chip {
+		display: grid;
+		gap: 0.24rem;
+		min-height: 6.4rem;
+		padding: 0.85rem;
 		border: 1px solid var(--chat-border);
-		background: var(--chat-surface);
+		border-radius: 0.95rem;
+		background: color-mix(in srgb, var(--app-content-bg, #ffffff) 76%, transparent);
+		color: inherit;
+		text-align: left;
+		cursor: pointer;
+		transition:
+			transform 0.16s ease,
+			border-color 0.16s ease,
+			background 0.16s ease;
+	}
+
+	.starter-chip:hover:enabled {
+		transform: translateY(-1px);
+		border-color: color-mix(in srgb, var(--spark-gold) 32%, var(--chat-border));
+		background: color-mix(in srgb, var(--app-content-bg, #ffffff) 88%, var(--spark-cream));
+	}
+
+	.starter-chip:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.starter-chip span {
+		color: var(--text-secondary, rgba(30, 41, 59, 0.66));
+		font-size: 0.78rem;
+		font-weight: 700;
+	}
+
+	.starter-chip strong {
+		color: var(--spark-navy);
+		font-size: 0.96rem;
+		font-weight: 760;
+		line-height: 1.18;
+	}
+
+	.starter-chip small {
+		color: var(--text-secondary, rgba(30, 41, 59, 0.66));
+		font-size: 0.78rem;
+		line-height: 1.3;
 	}
 
 	.diagnostic-ad {
@@ -2657,6 +3376,69 @@
 	}
 
 	@media (max-width: 560px) {
+		.agent-shell {
+			width: min(100%, calc(100vw - 1.5rem));
+			padding-top: 0.9rem;
+		}
+
+		.agent-toolbar {
+			gap: 0.7rem;
+		}
+
+		.agent-actions {
+			gap: 0.25rem;
+		}
+
+		.empty-message {
+			gap: 0.65rem;
+		}
+
+		.empty-avatar {
+			width: 1.95rem;
+			height: 1.95rem;
+			font-size: 0.95rem;
+		}
+
+		.constellation-card__header {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 0.75rem;
+		}
+
+		.constellation-card__badge {
+			white-space: normal;
+		}
+
+		.constellation-start {
+			width: 100%;
+		}
+
+		.starter-strip {
+			display: flex;
+			gap: 0.55rem;
+			margin-inline: -0.35rem;
+			overflow-x: auto;
+			padding: 0 0.35rem 0.15rem;
+			scroll-snap-type: x proximity;
+			scrollbar-width: none;
+		}
+
+		.starter-strip::-webkit-scrollbar {
+			display: none;
+		}
+
+		.starter-chip {
+			flex: 0 0 min(15rem, 78vw);
+			min-height: 5.45rem;
+			scroll-snap-align: start;
+		}
+
+		@supports (-webkit-touch-callout: none) {
+			.starter-strip {
+				padding-bottom: 0.35rem;
+			}
+		}
+
 		.diagnostic-ad {
 			grid-template-columns: auto minmax(0, 1fr);
 		}
@@ -2664,6 +3446,289 @@
 		.diagnostic-ad__cta {
 			grid-column: 2;
 			white-space: normal;
+		}
+	}
+
+	@media (max-width: 380px) {
+		.agent-actions {
+			gap: 0.55rem;
+		}
+
+		.agent-actions :global(a),
+		.agent-actions :global(button) {
+			padding-inline: 0.7rem;
+		}
+	}
+
+	.constellation-session {
+		display: flex;
+		flex-direction: column;
+		gap: clamp(0.9rem, 2vw, 1.1rem);
+		padding-inline: clamp(0.5rem, 2vw, 0.75rem);
+		padding-bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px));
+	}
+
+	.session-heading {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr);
+		align-items: start;
+		gap: 0.8rem;
+	}
+
+	.session-heading p {
+		margin: 0 0 0.25rem;
+		color: var(--text-secondary, rgba(30, 41, 59, 0.66));
+		font-size: 0.78rem;
+		font-weight: 760;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	.session-heading h2 {
+		margin: 0;
+		color: var(--spark-navy);
+		font-family: ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+		font-size: clamp(1.55rem, 3.6vw, 2.25rem);
+		font-weight: 680;
+		letter-spacing: 0;
+		line-height: 1.08;
+	}
+
+	.session-heading span {
+		display: block;
+		margin-top: 0.35rem;
+		color: var(--text-secondary, rgba(30, 41, 59, 0.72));
+		font-size: 0.95rem;
+	}
+
+	.training-card {
+		display: grid;
+		gap: 0.8rem;
+		padding: clamp(1rem, 2.3vw, 1.2rem);
+		border: 1px solid var(--chat-border);
+		border-radius: 1rem;
+		background: color-mix(in srgb, var(--app-content-bg, #ffffff) 82%, transparent);
+		box-shadow: 0 22px 56px -46px rgba(7, 24, 61, 0.42);
+	}
+
+	.training-card--diagnosis {
+		border-color: color-mix(in srgb, var(--spark-gold) 32%, var(--chat-border));
+		background: color-mix(in srgb, var(--app-content-bg, #ffffff) 86%, var(--spark-cream));
+	}
+
+	.training-card--saved {
+		border-color: color-mix(in srgb, #0f766e 26%, var(--chat-border));
+		background: linear-gradient(135deg, rgba(236, 253, 245, 0.88), rgba(255, 250, 241, 0.92));
+	}
+
+	.training-card__topline,
+	.score-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.55rem;
+		color: var(--text-secondary, rgba(30, 41, 59, 0.66));
+		font-size: 0.82rem;
+		font-weight: 760;
+	}
+
+	.training-card h3 {
+		margin: 0;
+		color: var(--spark-navy);
+		font-size: clamp(1.18rem, 2.8vw, 1.55rem);
+		font-weight: 760;
+		letter-spacing: 0;
+		line-height: 1.22;
+	}
+
+	.training-card p {
+		margin: 0;
+		color: var(--text-secondary, rgba(30, 41, 59, 0.74));
+		line-height: 1.55;
+	}
+
+	.training-card strong {
+		color: var(--spark-navy);
+	}
+
+	.training-answer {
+		display: grid;
+		gap: 0.5rem;
+	}
+
+	.training-answer span {
+		color: var(--spark-navy);
+		font-size: 0.9rem;
+		font-weight: 760;
+	}
+
+	.training-answer textarea {
+		width: 100%;
+		min-height: 8.25rem;
+		resize: vertical;
+		padding: 0.9rem 1rem;
+		border: 1px solid var(--chat-border);
+		border-radius: 1rem;
+		background: color-mix(in srgb, var(--app-content-bg, #ffffff) 88%, transparent);
+		color: var(--text-primary, var(--foreground));
+		font: inherit;
+		line-height: 1.5;
+		outline: none;
+		box-shadow: 0 18px 45px -38px rgba(7, 24, 61, 0.42);
+	}
+
+	.training-answer textarea:focus {
+		border-color: color-mix(in srgb, var(--spark-gold) 45%, var(--chat-border));
+		box-shadow:
+			0 0 0 3px color-mix(in srgb, var(--spark-gold) 18%, transparent),
+			0 18px 45px -38px rgba(7, 24, 61, 0.42);
+	}
+
+	.training-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.55rem;
+		justify-content: flex-end;
+	}
+
+	.training-button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 2.6rem;
+		padding: 0.7rem 0.95rem;
+		border-radius: 999px;
+		font-size: 0.92rem;
+		font-weight: 780;
+		cursor: pointer;
+		transition:
+			transform 0.16s ease,
+			opacity 0.16s ease,
+			background 0.16s ease;
+	}
+
+	.training-button:hover:enabled {
+		transform: translateY(-1px);
+	}
+
+	.training-button:disabled {
+		opacity: 0.48;
+		cursor: not-allowed;
+	}
+
+	.training-button--primary {
+		border: none;
+		background: var(--spark-navy);
+		color: var(--background);
+	}
+
+	.training-button--secondary {
+		border: 1px solid var(--chat-border);
+		background: color-mix(in srgb, var(--app-content-bg, #ffffff) 76%, transparent);
+		color: var(--spark-navy);
+	}
+
+	.answer-bubble {
+		align-self: flex-end;
+		max-width: min(34rem, 88%);
+		padding: 0.75rem 0.95rem;
+		border: 1px solid var(--chat-user-border);
+		border-radius: 1rem;
+		background: var(--chat-user-bg);
+		color: var(--spark-navy);
+	}
+
+	.answer-bubble p {
+		margin: 0;
+		white-space: pre-wrap;
+	}
+
+	.missing-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.45rem;
+	}
+
+	.missing-chips span {
+		padding: 0.36rem 0.6rem;
+		border-radius: 999px;
+		border: 1px solid color-mix(in srgb, var(--spark-gold) 26%, var(--chat-border));
+		background: color-mix(in srgb, var(--spark-gold) 9%, transparent);
+		color: color-mix(in srgb, var(--spark-gold) 62%, var(--spark-navy));
+		font-size: 0.82rem;
+		font-weight: 760;
+	}
+
+	.training-chain {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.42rem;
+		padding: 0.75rem 0.85rem;
+		border-radius: 0.85rem;
+		border: 1px solid color-mix(in srgb, var(--chat-border) 72%, transparent);
+		background: color-mix(in srgb, var(--background) 70%, transparent);
+		color: color-mix(in srgb, var(--spark-navy) 86%, transparent);
+		line-height: 1.45;
+	}
+
+	.training-chain span:nth-child(even) {
+		color: var(--spark-gold);
+		font-weight: 820;
+	}
+
+	.training-note {
+		font-size: 0.92rem;
+	}
+
+	.score-row {
+		justify-content: flex-start;
+		padding: 0.75rem 0.9rem;
+		border-radius: 0.85rem;
+		border: 1px solid var(--chat-border);
+		background: color-mix(in srgb, var(--app-content-bg, #ffffff) 78%, transparent);
+	}
+
+	.score-row span + span::before {
+		content: '';
+		display: inline-block;
+		width: 1px;
+		height: 1rem;
+		margin: 0 0.7rem 0 0.2rem;
+		vertical-align: -0.15rem;
+		background: var(--chat-border);
+	}
+
+	.agent-shell.has-native-session .agent-composer {
+		display: none;
+	}
+
+	:global(:root:not([data-theme='light']) .training-card--saved),
+	:global([data-theme='dark'] .training-card--saved),
+	:global(.dark .training-card--saved) {
+		background: linear-gradient(135deg, rgba(15, 118, 110, 0.16), rgba(15, 23, 42, 0.7));
+	}
+
+	@media (max-width: 560px) {
+		.constellation-session {
+			padding-bottom: 1rem;
+		}
+
+		.training-actions {
+			flex-direction: column;
+		}
+
+		.training-button {
+			width: 100%;
+		}
+
+		.answer-bubble {
+			max-width: 100%;
+		}
+
+		.training-answer textarea {
+			min-height: 7.5rem;
 		}
 	}
 
