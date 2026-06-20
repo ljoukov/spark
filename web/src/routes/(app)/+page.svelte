@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 
 	let isMuted = $state(true);
@@ -90,7 +91,7 @@
 					<span class="slogan__secondary">Think. Hack. Spark.</span>
 				</h1>
 				<div class="cta">
-					<a class="cta__button" href="/login">LOGIN</a>
+					<a class="cta__button" href={resolve('/login')}>LOGIN</a>
 				</div>
 			</section>
 
@@ -112,8 +113,8 @@
 							bind:this={videoElement}
 							class="video-shell__video"
 							autoplay={shouldAutoPlay}
-							loop
-							playsinline
+							loop={true}
+							playsinline={true}
 							muted={isMuted}
 							preload="auto"
 							poster={INTRO_POSTER}

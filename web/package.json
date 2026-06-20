@@ -15,7 +15,7 @@
 		"build:gcp": "BUILD_TARGET=gcp bun run build:bun",
 		"preview": "vite preview",
 		"start:bun": "bun ./build/index.js",
-		"prepare": "svelte-kit sync || echo ''",
+		"prepare": "node ./scripts/prepare-sveltekit.mjs",
 		"typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"lint": "bun run typecheck && bun run eslint",
 		"eslint": "eslint --concurrency auto --ignore-pattern '**/*.svelte' .",
