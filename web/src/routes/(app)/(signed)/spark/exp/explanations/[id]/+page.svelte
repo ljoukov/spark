@@ -41,6 +41,14 @@
 		return `diagnosis-card diagnosis-card--${status}`;
 	}
 
+	function diagnosisColor(status: GiadFlowStatus): string {
+		return {
+			correct: '#189265',
+			identified: '#2563eb',
+			gap: '#f97316'
+		}[status];
+	}
+
 	function builderCardColor(index: number): string {
 		return builderCardColors[index] ?? flow.theme.accent;
 	}
@@ -152,9 +160,9 @@
 				</div>
 			</section>
 
-			<div class="diagnosis-grid" aria-label="Diagnosis">
-				{#each flow.diagnosis as item}
-					<article class={diagnosisClass(item.status)}>
+			<div class="diagnosis-grid" aria-label="Diagnosis timeline">
+				{#each flow.diagnosis as item, index}
+					<article class={diagnosisClass(item.status)} style={`--diagnosis-color:${diagnosisColor(item.status)}`}>
 						<div class="diagnosis-card__icon" aria-hidden="true">
 							{#if item.status === 'gap'}
 								<TriangleAlertIcon />
@@ -162,31 +170,17 @@
 								<CircleCheckIcon />
 							{/if}
 						</div>
-						<div>
-							<h2>{item.title}</h2>
-							<p>{item.body}</p>
-						</div>
+						<h2>{item.title}</h2>
 					</article>
+					{#if index < flow.diagnosis.length - 1}
+						<span
+							class="diagnosis-connector"
+							style={`--diagnosis-color:${diagnosisColor(item.status)}`}
+							aria-hidden="true"
+						></span>
+					{/if}
 				{/each}
 			</div>
-
-			<section class="note-panel note-panel--missing" aria-labelledby="missing-title">
-				<LightbulbIcon aria-hidden="true" />
-				<div>
-					<h2 id="missing-title">{flow.missing.title}</h2>
-					<p>
-						{flow.missing.bodyStart}
-						{#each flow.missing.highlights as highlight, index}
-							<strong>{highlight}</strong>{index === flow.missing.highlights.length - 1
-								? ''
-								: index === flow.missing.highlights.length - 2
-									? ', and '
-									: ', '}
-						{/each}
-						{flow.missing.bodyEnd}
-					</p>
-				</div>
-			</section>
 
 			<section class="split-section" aria-label="Repair plan">
 				<div class="flow-builder">
@@ -239,9 +233,9 @@
 								aria-label={`Open larger view for ${item.title}`}
 								onclick={() => openChainZoom(index)}
 							>
-								<span class="chain-badge">
-									<span class="chain-badge__number">{item.label}</span>
-									{item.title}
+								<span class="chain-card__title">
+									<span class="chain-card__number">{item.label}</span>
+									<span>{item.title}</span>
 								</span>
 								{#if item.visual}
 									<span class="concept-visual concept-visual--chain" aria-hidden="true">
@@ -451,7 +445,6 @@
 	.section-heading p,
 	.section-heading span,
 	.paper-total span,
-	.paper-section-header p,
 	.builder-step__answer,
 	.chain-card__body-text,
 	.note-panel p,
@@ -611,62 +604,68 @@
 
 	.diagnosis-grid {
 		display: grid;
-		grid-template-columns: repeat(2, max-content) minmax(14rem, 1fr);
-		gap: 0.5rem;
-		align-items: stretch;
-		padding: 0.72rem 0 0.82rem;
+		grid-template-columns: minmax(0, 1fr) minmax(1.6rem, 0.55fr) minmax(0, 1fr) minmax(
+				1.6rem,
+				0.55fr
+			) minmax(0, 1fr);
+		gap: 0.15rem;
+		align-items: start;
+		padding: 1.35rem 0 1.45rem;
 		border-bottom: 1px dashed var(--paper-divider);
 	}
 
 	.diagnosis-card {
-		display: flex;
-		gap: 0.45rem;
-		align-items: center;
+		--diagnosis-color: var(--paper-accent-text);
+		display: grid;
+		gap: 0.38rem;
+		justify-items: center;
 		min-width: 0;
-		border: 1px solid transparent;
-		border-radius: 8px;
-		background: transparent;
-		font-family:
-			Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-		padding: 0.46rem 0.58rem;
-	}
-
-	.diagnosis-card--correct {
-		border-color: color-mix(in srgb, var(--paper-review-correct-border) 24%, transparent);
-		background: color-mix(in srgb, var(--paper-review-correct-bg) 48%, transparent);
-	}
-
-	.diagnosis-card--identified {
-		border-color: color-mix(in srgb, var(--paper-border) 48%, transparent);
-		background: color-mix(in srgb, var(--paper-theory-bg) 54%, transparent);
-	}
-
-	.diagnosis-card--gap {
-		align-items: flex-start;
-		border: 1px solid color-mix(in srgb, var(--paper-review-teacher-border) 72%, var(--paper-border));
-		background: color-mix(in srgb, var(--paper-review-teacher-bg) 72%, var(--paper-surface-elevated));
-		padding: 0.62rem 0.75rem;
+		font-family: Georgia, 'Times New Roman', serif;
+		padding: 0;
+		text-align: center;
 	}
 
 	.diagnosis-card__icon {
-		color: var(--paper-review-correct-text);
-	}
-
-	.diagnosis-card--identified .diagnosis-card__icon {
-		color: var(--paper-accent-text);
-	}
-
-	.diagnosis-card--gap .diagnosis-card__icon {
-		color: var(--paper-review-incorrect-text);
+		display: inline-grid;
+		width: 2.8rem;
+		height: 2.8rem;
+		place-items: center;
+		border: 1.5px solid color-mix(in srgb, var(--diagnosis-color) 48%, var(--paper-border));
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--diagnosis-color) 12%, var(--paper-surface-elevated));
+		color: var(--diagnosis-color);
 	}
 
 	.diagnosis-card__icon :global(svg) {
-		width: 1.05rem;
-		height: 1.05rem;
+		width: 1.6rem;
+		height: 1.6rem;
+	}
+
+	.diagnosis-connector {
+		position: relative;
+		display: block;
+		min-width: 0;
+		height: 0.16rem;
+		margin-top: 1.32rem;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--diagnosis-color) 76%, var(--paper-divider));
+	}
+
+	.diagnosis-connector::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		right: -0.08rem;
+		width: 0;
+		height: 0;
+		border-top: 0.34rem solid transparent;
+		border-bottom: 0.34rem solid transparent;
+		border-left: 0.5rem solid
+			color-mix(in srgb, var(--diagnosis-color) 76%, var(--paper-divider));
+		transform: translateY(-50%);
 	}
 
 	.diagnosis-card h2,
-	.note-panel h2,
 	.paper-section-header h2,
 	.answer-card h2 {
 		margin: 0;
@@ -677,19 +676,19 @@
 		line-height: 1.2;
 	}
 
-	.diagnosis-card p,
-	.paper-section-header p,
+	.diagnosis-card h2 {
+		color: var(--diagnosis-color);
+		font-size: 16px;
+		font-weight: 700;
+		line-height: 1.18;
+	}
+
 	.chain-card__body-text,
 	.note-panel p,
 	.source-note {
 		color: var(--paper-text-soft);
 		font-size: var(--paper-reading-size);
 		line-height: 1.45;
-	}
-
-	.diagnosis-card--correct p,
-	.diagnosis-card--identified p {
-		display: none;
 	}
 
 	.note-panel {
@@ -703,19 +702,11 @@
 		padding: 0.9rem 1rem;
 	}
 
-	.note-panel--missing {
-		border-color: color-mix(in srgb, var(--paper-review-teacher-border) 64%, var(--paper-border));
-		background: color-mix(in srgb, var(--paper-review-teacher-bg) 68%, var(--paper-surface-elevated));
-	}
-
 	.note-panel > :global(svg) {
+		align-self: center;
 		width: 1.55rem;
 		height: 1.55rem;
 		color: var(--paper-review-teacher-text);
-	}
-
-	.note-panel h2 {
-		color: color-mix(in srgb, var(--paper-review-incorrect-text) 78%, var(--paper-text-strong));
 	}
 
 	.note-panel strong {
@@ -882,45 +873,56 @@
 		--step-color: var(--paper-accent-text);
 		appearance: none;
 		display: grid;
-		gap: 0.5rem;
+		grid-template-rows: auto minmax(0, 1fr) auto;
+		gap: 0.75rem;
 		justify-items: center;
-		align-content: start;
+		align-content: stretch;
 		min-width: 0;
-		padding: 0.75rem 0.5rem;
+		padding: 0.85rem;
 		border: 1.5px solid var(--step-color);
 		border-radius: 12px;
-		background: var(--paper-surface-elevated);
+		background: color-mix(in srgb, var(--step-color) 7%, var(--paper-surface-elevated));
 		color: inherit;
-		font: inherit;
+		font-family: Georgia, 'Times New Roman', serif;
+		font-size: 16px;
 		text-align: center;
 	}
 
-	.chain-badge {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.32rem;
+	.chain-card__title {
+		display: flex;
+		align-items: flex-start;
+		justify-content: flex-start;
+		gap: 0.42rem;
+		width: 100%;
 		max-width: 100%;
-		border-radius: 999px;
-		background: var(--step-color);
-		padding: 0.18rem 0.52rem 0.18rem 0.24rem;
-		color: #ffffff;
-		font-size: 0.72rem;
-		font-weight: 560;
-		line-height: 1.15;
+		min-width: 0;
+		color: var(--step-color);
+		font-size: 16px;
+		font-weight: 700;
+		letter-spacing: 0;
+		line-height: 1.2;
+		text-align: left;
 	}
 
-	.chain-badge__number {
+	.chain-card__title > span:not(.chain-card__number) {
+		min-width: 0;
+		flex: 1 1 auto;
+	}
+
+	.chain-card__number {
 		display: inline-flex;
-		width: 1.1rem;
-		height: 1.1rem;
+		width: 1.35rem;
+		height: 1.35rem;
 		flex: 0 0 auto;
 		align-items: center;
 		justify-content: center;
+		border: 1px solid color-mix(in srgb, var(--step-color) 36%, var(--paper-border));
 		border-radius: 999px;
 		background: #ffffff;
 		color: var(--step-color);
-		font-size: 0.62rem;
+		font-family:
+			Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+		font-size: 0.76rem;
 		font-weight: 760;
 		line-height: 1;
 	}
@@ -928,15 +930,16 @@
 	.concept-visual--chain {
 		width: auto;
 		height: auto;
+		align-self: center;
 		margin: 0.05rem 0;
-		font-size: 2.1rem;
+		font-size: 2.75rem;
 	}
 
 	.chain-card__body-text {
 		color: var(--paper-text-soft);
-		font-size: 0.72rem;
+		font-size: 16px;
 		font-weight: 430;
-		line-height: 1.4;
+		line-height: 1.36;
 	}
 
 	.zoom-card-trigger {
@@ -1293,21 +1296,22 @@
 		}
 
 		.diagnosis-grid {
-			grid-template-columns: repeat(2, minmax(0, 1fr));
+			grid-template-columns:
+				minmax(0, 1fr) minmax(0.75rem, 0.45fr) minmax(0, 1fr) minmax(0.75rem, 0.45fr)
+				minmax(0, 1fr);
 			padding-block: 0.56rem 0.72rem;
-			gap: 0.38rem;
+			gap: 0.08rem;
 		}
 
 		.diagnosis-card {
-			gap: 0.32rem;
+			gap: 0.28rem;
 			min-height: 0;
-			padding: 0.4rem 0.46rem;
-			text-align: left;
+			text-align: center;
 		}
 
-		.diagnosis-card--gap {
-			grid-column: 1 / -1;
-			padding: 0.58rem 0.62rem;
+		.diagnosis-card__icon {
+			width: 1.65rem;
+			height: 1.65rem;
 		}
 
 		.diagnosis-card__icon :global(svg) {
@@ -1316,26 +1320,23 @@
 		}
 
 		.diagnosis-card h2 {
-			font-size: 0.74rem;
+			font-size: 12px;
 			line-height: 1.14;
 		}
 
-		.diagnosis-card--gap h2 {
-			font-size: 0.85rem;
+		.diagnosis-connector {
+			height: 0.12rem;
+			margin-top: 0.77rem;
 		}
 
-		.diagnosis-card p {
-			font-size: 0.76rem;
-			line-height: 1.3;
+		.diagnosis-connector::after {
+			border-top-width: 0.24rem;
+			border-bottom-width: 0.24rem;
+			border-left-width: 0.36rem;
 		}
 
 		.note-panel {
 			padding: 0.68rem 0.75rem;
-		}
-
-		.note-panel--missing > :global(svg) {
-			width: 1.25rem;
-			height: 1.25rem;
 		}
 
 		.split-section {
@@ -1371,18 +1372,20 @@
 		}
 
 		.chain-card {
+			gap: 0.36rem;
 			min-width: 0;
-			padding: 0.46rem 0.32rem;
+			padding: 0.5rem 0.36rem;
 		}
 
-		.builder-step__title {
+		.builder-step__title,
+		.chain-card__title {
 			font-size: 13px;
 			font-weight: 560;
 			line-height: 1.14;
 		}
 
 		.chain-card__body-text {
-			font-size: 0.68rem;
+			font-size: 12px;
 			line-height: 1.24;
 		}
 
@@ -1411,7 +1414,7 @@
 		}
 
 		.concept-visual--chain {
-			font-size: 1.72rem;
+			font-size: 2.1rem;
 		}
 
 		.flow-arrow {
@@ -1419,22 +1422,24 @@
 			font-size: 1rem;
 		}
 
-		.chain-badge {
-			gap: 0.2rem;
-			padding: 0.16rem 0.36rem 0.16rem 0.18rem;
+		.flow-arrow--chain {
+			width: 0.85rem;
+			padding-inline: 0;
+			font-size: 0.92rem;
+		}
+
+		.chain-card__title {
+			gap: 0.24rem;
+			font-size: 12px;
+			font-weight: 560;
+			hyphens: auto;
+			overflow-wrap: anywhere;
+		}
+
+		.chain-card__number {
+			width: 1rem;
+			height: 1rem;
 			font-size: 0.56rem;
-			line-height: 1.08;
-		}
-
-		.chain-badge__number {
-			width: 0.9rem;
-			height: 0.9rem;
-			font-size: 0.52rem;
-		}
-
-		.chain-card__body-text {
-			font-size: 0.62rem;
-			line-height: 1.24;
 		}
 
 		.answer-card {

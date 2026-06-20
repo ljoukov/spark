@@ -434,7 +434,7 @@ export const GIAD_FLOWS: GiadFlow[] = [
 		diagnosis: [
 			{
 				status: 'correct',
-				title: 'Good starting idea',
+				title: 'Correct starting idea',
 				body: 'You noticed that blood flow is reduced.'
 			},
 			{
@@ -444,8 +444,8 @@ export const GIAD_FLOWS: GiadFlow[] = [
 			},
 			{
 				status: 'gap',
-				title: 'Next step: add the causal chain',
-				body: 'To make this clearer, connect reduced blood flow to chest pain.'
+				title: 'Gap: missing causal chain',
+				body: 'You need to explain why reduced blood flow causes pain.'
 			}
 		],
 		missing: {
