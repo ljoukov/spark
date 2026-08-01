@@ -1789,6 +1789,41 @@ describe("Spark agent tool: publish_sheet guards", () => {
     });
   });
 
+  it("normalizes null student image paths for bounded scoring", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const scoreAnswersTool = tools.score_answers_with_fresh_agent;
+      requireFunctionTool(scoreAnswersTool);
+      const parsed = scoreAnswersTool.inputSchema.parse({
+        scope: "Question 1",
+        worksheetIds: ["q1"],
+        sourceMarkdown: "Question 1 source.",
+        markSchemeMarkdown: "Question 1 mark scheme.",
+        studentAnswersMarkdown: "Question 1 student answers.",
+        studentImagePaths: null,
+      }) as { studentImagePaths?: string[] };
+
+      expect(parsed.studentImagePaths).toBeUndefined();
+    });
+  });
+
   it("blocks bounded scoring when the source transcription is missing", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =

@@ -16827,13 +16827,16 @@ function buildAgentTools(options: {
           sourceMarkdown: z.string().trim().min(1),
           markSchemeMarkdown: z.string().trim().min(1),
           studentAnswersMarkdown: z.string().trim().min(1),
-          studentImagePaths: z
-            .array(z.string().trim().min(1))
-            .max(8)
-            .optional()
-            .describe(
-              "Original student-answer image paths for this scope. Include these whenever marks depend on ticks, circles, shading, graphs, diagrams, layout, or handwriting that OCR may not preserve.",
-            ),
+          studentImagePaths: z.preprocess(
+            (value) => (value === null ? undefined : value),
+            z
+              .array(z.string().trim().min(1))
+              .max(8)
+              .optional()
+              .describe(
+                "Original student-answer image paths for this scope. Include these whenever marks depend on ticks, circles, shading, graphs, diagrams, layout, or handwriting that OCR may not preserve.",
+              ),
+          ),
           notes: z.preprocess(
             (value) => parseOptionalString(value),
             z.string().trim().min(1).optional(),
