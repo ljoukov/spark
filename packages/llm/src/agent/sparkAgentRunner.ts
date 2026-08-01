@@ -3584,6 +3584,8 @@ const CROP_EDGE_TOUCH_RATIO_THRESHOLD = 0.001;
 const DEFAULT_CROP_IMAGE_MARGIN_PX = 36;
 const GRADER_WORKSHEET_ASSET_MAX_DIMENSION = 1500;
 const GRADER_WORKSHEET_ASSET_JPEG_QUALITY = 82;
+const LLM_IMAGE_PREVIEW_MAX_DIMENSION = 1600;
+const LLM_IMAGE_PREVIEW_MAX_BYTES = 700 * 1024;
 
 function getBlockedIntermediateWorksheetAssetMessage(
   outputPath: string,
@@ -8809,6 +8811,57 @@ function resolveImageMimeTypeFromSharpFormat(options: {
   return undefined;
 }
 
+async function normalizeImageForLlmInput(sourceBytes: Buffer): Promise<Buffer> {
+  const sharp = getSharp();
+  const attempts = [
+    { maxDimension: LLM_IMAGE_PREVIEW_MAX_DIMENSION, quality: 82 },
+    { maxDimension: 1450, quality: 74 },
+    { maxDimension: 1300, quality: 66 },
+  ] as const;
+  let normalizedBytes: Buffer | null = null;
+  for (const attempt of attempts) {
+    normalizedBytes = await sharp(sourceBytes)
+      .rotate()
+      .resize({
+        width: attempt.maxDimension,
+        height: attempt.maxDimension,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .flatten({ background: "#ffffff" })
+      .jpeg({ quality: attempt.quality, mozjpeg: true })
+      .toBuffer();
+    if (normalizedBytes.byteLength <= LLM_IMAGE_PREVIEW_MAX_BYTES) {
+      return normalizedBytes;
+    }
+  }
+  if (normalizedBytes === null) {
+    throw new Error("Could not create a bounded image preview.");
+  }
+  return normalizedBytes;
+}
+
+function createSparkWorkspaceViewImageTool(options: { rootDir: string }) {
+  return tool({
+    description:
+      "View a workspace image using a bounded, orientation-corrected preview suitable for reliable model inspection.",
+    inputSchema: z.object({ path: z.string().trim().min(1) }).strict(),
+    execute: async ({ path: imagePath }) => {
+      const sourceBytes = await readFile(
+        resolveWorkspacePath(options.rootDir, imagePath),
+      );
+      const normalizedBytes = await normalizeImageForLlmInput(sourceBytes);
+      return [
+        {
+          type: "input_image" as const,
+          image_url: `data:image/jpeg;base64,${normalizedBytes.toString("base64")}`,
+          detail: "high" as const,
+        },
+      ];
+    },
+  });
+}
+
 function isSupportedCropImageMimeType(
   contentType: string | undefined,
 ): boolean {
@@ -11222,9 +11275,7 @@ function buildAgentTools(options: {
   let prePublishDiagramExtractionCount = 0;
   let prePublishCropRecoveryCredits = 0;
   const prePublishCropAttemptsByOutputPath = new Map<string, number>();
-  const workspaceViewImageTool = createCodexFilesystemToolSet(
-    buildSparkAgentFilesystemToolConfig({ workspace, rootDir }).options,
-  ).view_image;
+  const workspaceViewImageTool = createSparkWorkspaceViewImageTool({ rootDir });
 
   const workspaceFileExists = async (filePath: string): Promise<boolean> => {
     try {
@@ -12724,11 +12775,12 @@ function buildAgentTools(options: {
         `extract_text image is too large (${documentBytes.length.toString()} bytes, max ${EXTRACT_TEXT_MAX_BYTES.toString()} bytes).`,
       );
     }
+    const normalizedImageBytes = await normalizeImageForLlmInput(documentBytes);
     return {
-      documentBytes,
+      documentBytes: normalizedImageBytes,
       documentPath: resolvedDocumentPath,
       documentKind: "image",
-      documentMimeType: sourceMimeType,
+      documentMimeType: "image/jpeg",
     };
   };
 
@@ -12831,14 +12883,15 @@ function buildAgentTools(options: {
         `extract_text supporting image is too large (${rawBytes.length.toString()} bytes, max ${EXTRACT_TEXT_MAX_BYTES.toString()} bytes): "${resolvedContextPath}".`,
       );
     }
+    const normalizedImageBytes = await normalizeImageForLlmInput(rawBytes);
     return {
       contextPath: resolvedContextPath,
       contextKind: "image",
-      bytes: rawBytes.length,
+      bytes: normalizedImageBytes.length,
       part: {
         type: "inlineData",
-        data: rawBytes.toString("base64"),
-        mimeType: sourceMimeType,
+        data: normalizedImageBytes.toString("base64"),
+        mimeType: "image/jpeg",
       },
     };
   };
@@ -17263,14 +17316,7 @@ function buildAgentTools(options: {
           await readImageInfo(badCropGridPath);
         }
 
-        const filesystemToolConfig = buildSparkAgentFilesystemToolConfig({
-          workspace,
-          rootDir,
-        });
-        const filesystemTools = createCodexFilesystemToolSet(
-          filesystemToolConfig.options,
-        );
-        const viewImageTool = filesystemTools.view_image;
+        const viewImageTool = createSparkWorkspaceViewImageTool({ rootDir });
         if (
           !viewImageTool ||
           typeof viewImageTool !== "object" ||
@@ -17451,14 +17497,7 @@ function buildAgentTools(options: {
       }) => {
         const resolvedCropPath = cropPath.trim();
         await stat(resolveWorkspacePath(rootDir, resolvedCropPath));
-        const filesystemToolConfig = buildSparkAgentFilesystemToolConfig({
-          workspace,
-          rootDir,
-        });
-        const filesystemTools = createCodexFilesystemToolSet(
-          filesystemToolConfig.options,
-        );
-        const viewImageTool = filesystemTools.view_image;
+        const viewImageTool = createSparkWorkspaceViewImageTool({ rootDir });
         if (
           !viewImageTool ||
           typeof viewImageTool !== "object" ||
@@ -17664,13 +17703,13 @@ function buildAgentTools(options: {
           "read_file",
           "grep_files",
           "list_dir",
-          "view_image",
         ] as const) {
           const candidate = filesystemTools[toolName];
           if (candidate !== undefined) {
             auditTools[toolName] = candidate;
           }
         }
+        auditTools.view_image = createSparkWorkspaceViewImageTool({ rootDir });
         auditTools.read_worksheet_for_source_fidelity = tool({
           description:
             "Read the complete normalized assembled worksheet view for source-fidelity review. This avoids false failures from raw JSON escaping or truncated file-reader output.",
@@ -19287,6 +19326,10 @@ export async function runSparkAgentTask(
                   workspaceFilesystemToolConfig.options,
                 )
               : {};
+          if (workspaceFilesystemToolConfig) {
+            workspaceFilesystemTools.view_image =
+              createSparkWorkspaceViewImageTool({ rootDir: workspaceRoot });
+          }
           if (graderRunId !== null) {
             delete workspaceFilesystemTools.apply_patch;
           }
