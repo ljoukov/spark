@@ -16817,6 +16817,7 @@ function buildAgentTools(options: {
       description: [
         "Ask a fresh-context grading agent to score one bounded root question or short question range from already-extracted source/student/mark-scheme excerpts.",
         "Use this in handwritten-grading mode after transcription, source references, and sheet-plan exist, especially when a paper has many answer leaves or more than one root question.",
+        "Pass studentImagePaths for every relevant original answer page when marks depend on visible selections, circles, graphs, diagrams, layout, or handwriting that OCR may not preserve. The images are attached directly to the fresh grading model.",
         "Call one instance per root question or small contiguous range. The fresh agent scores only the supplied excerpt and writes a compact JSON result; this tool also returns the per-question results inline so the main agent can assemble sheet.json without rereading every scoring file. The main agent still assembles sheet.json, run-summary.json, source-fidelity audit, and publish_sheet.",
       ].join("\n"),
       inputSchema: z
@@ -16826,6 +16827,13 @@ function buildAgentTools(options: {
           sourceMarkdown: z.string().trim().min(1),
           markSchemeMarkdown: z.string().trim().min(1),
           studentAnswersMarkdown: z.string().trim().min(1),
+          studentImagePaths: z
+            .array(z.string().trim().min(1))
+            .max(8)
+            .optional()
+            .describe(
+              "Original student-answer image paths for this scope. Include these whenever marks depend on ticks, circles, shading, graphs, diagrams, layout, or handwriting that OCR may not preserve.",
+            ),
           notes: z.preprocess(
             (value) => parseOptionalString(value),
             z.string().trim().min(1).optional(),
@@ -16842,6 +16850,7 @@ function buildAgentTools(options: {
         sourceMarkdown,
         markSchemeMarkdown,
         studentAnswersMarkdown,
+        studentImagePaths,
         notes,
         outputPath,
       }) => {
@@ -16859,10 +16868,56 @@ function buildAgentTools(options: {
             nextAction: `${sourceExcerptIssues[0] ?? "The scoring source excerpt is not source-faithful"}. Rewrite grader/output/transcription.md and grader/output/sheet-plan.md from the printed source, then call score_answers_with_fresh_agent with the exact source excerpt, not a figure/table/options summary.`,
           };
         }
+        const normalizedStudentImagePaths = Array.from(
+          new Set(
+            (studentImagePaths ?? [])
+              .map((studentImagePath) => studentImagePath.trim())
+              .filter((studentImagePath) => studentImagePath.length > 0),
+          ),
+        );
+        const studentImageAttachments = await Promise.all(
+          normalizedStudentImagePaths.map(async (studentImagePath) => {
+            const attachment = await resolveExtractTextContextPartFromWorkspace(
+              {
+                contextPath: studentImagePath,
+              },
+            );
+            if (
+              attachment.contextKind !== "image" ||
+              attachment.part.type !== "inlineData"
+            ) {
+              throw new Error(
+                `score_answers_with_fresh_agent studentImagePaths must contain image files. Received "${studentImagePath}".`,
+              );
+            }
+            const attachmentMimeType = attachment.part.mimeType;
+            if (
+              typeof attachmentMimeType !== "string" ||
+              attachmentMimeType.trim().length === 0
+            ) {
+              throw new Error(
+                `score_answers_with_fresh_agent could not resolve an image MIME type for "${studentImagePath}".`,
+              );
+            }
+            const normalizedMimeType = attachmentMimeType.toLowerCase();
+            if (!SUPPORTED_INLINE_IMAGE_MIME_TYPES.has(normalizedMimeType)) {
+              throw new Error(
+                `score_answers_with_fresh_agent cannot send ${attachmentMimeType} inline. Normalize "${studentImagePath}" to JPEG, PNG, GIF, or WebP first.`,
+              );
+            }
+            return {
+              path: attachment.contextPath,
+              part: attachment.part,
+            };
+          }),
+        );
         const prompt = [
           "You are a bounded Spark grading subagent.",
           "Score only the supplied scope. Do not infer missing source text from memory, do not rewrite the worksheet, do not assemble sheet JSON, and do not grade items outside worksheetIds.",
           "Use the official mark scheme excerpt as the scoring authority. If evidence is ambiguous, set status to teacher-review and put the short uncertainty in note/evidence or the top-level uncertainties array. Do not add per-question fields beyond the exact shape.",
+          studentImageAttachments.length > 0
+            ? "Original student-answer images are attached after the text prompt. Inspect every attached image as primary evidence before scoring. Use the image to resolve ticks, circles, shading, graph axes/scales/points/lines, diagrams, calculation layout, and handwriting; do not defer to an uncertain OCR summary when the image is clear."
+            : "No original student-answer images were supplied. Grade only evidence that is fully captured in Student answer evidence; use teacher-review when a visual selection, graph, diagram, or ambiguous handwriting cannot be verified from text.",
           "Accept mathematically equivalent forms and methods when the supplied work shows the same value or relationship, such as 1/2 for 0.5, equivalent rearrangements, or equivalent significant figures unless the mark scheme explicitly requires one form.",
           "Inline notes must be short gap-closing cues for the learner. Do not reveal a full model answer, full mark scheme, final corrected sentence, or complete method in the note.",
           "For incorrect or partial items, include modelAnswer as a concise answer or method from the supplied source and mark scheme. The main agent uses this field for requested model-answer/reference sections, so do not leave it to a later derivation pass.",
@@ -16877,6 +16932,16 @@ function buildAgentTools(options: {
           "",
           "Student answer evidence:",
           studentAnswersMarkdown,
+          studentImageAttachments.length > 0
+            ? [
+                "",
+                "Attached original student-answer image paths, in attachment order:",
+                ...studentImageAttachments.map(
+                  (attachment, index) =>
+                    `${(index + 1).toString()}. ${attachment.path}`,
+                ),
+              ].join("\n")
+            : "",
           "",
           "Official mark scheme excerpt:",
           markSchemeMarkdown,
@@ -16909,6 +16974,15 @@ function buildAgentTools(options: {
                 prompt,
               ].join("\n"),
             },
+            ...studentImageAttachments.flatMap<LlmContentPart>(
+              (attachment, index) => [
+                {
+                  type: "text",
+                  text: `Original student-answer image ${(index + 1).toString()}: ${attachment.path}`,
+                },
+                attachment.part,
+              ],
+            ),
           ]),
           ...(thinkingLevel ? { thinkingLevel } : {}),
         });
@@ -16989,6 +17063,8 @@ function buildAgentTools(options: {
           scope,
           outputPath: resolvedOutputPath,
           questionCount: normalizedReview.questions.length,
+          studentImagePaths: normalizedStudentImagePaths,
+          studentImageCount: studentImageAttachments.length,
           totals: normalizedReview.totals,
           questions: normalizedReview.questions,
           uncertainties: normalizedReview.uncertainties,

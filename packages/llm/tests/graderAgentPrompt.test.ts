@@ -47,6 +47,8 @@ describe("grader agent prompt", () => {
     expect(prompt).toContain("correct `expectedContent` and revalidate once");
     expect(prompt).toContain("review_run_progress_with_fresh_agent");
     expect(prompt).toContain("score_answers_with_fresh_agent");
+    expect(prompt).toContain("studentImagePaths");
+    expect(prompt).toContain("do not substitute uncertain OCR");
     expect(prompt).toContain("returns per-question results inline");
     expect(prompt).toContain("do not spend turns rereading every scoring file");
     expect(prompt).toContain("validate_grader_artifacts");
@@ -123,8 +125,10 @@ describe("grader agent prompt", () => {
     expect(skills).toContain("## Source problem-statement transcription");
     expect(skills).toContain("source-fidelity");
     expect(skills).toContain(
-      "[![Figure 1](grader/output/assets/q1-figure-1.jpg)](grader/output/assets/q1-figure-1.jpg)",
+      "[![Figure 1](grader/output/assets/q1-figure-1.jpg)](grader/output/source-pages/page-0003.jpg)",
     );
+    expect(skills).toContain("studentImagePaths");
+    expect(skills).toContain("primary evidence instead of deferring to uncertain OCR");
     expect(skills).toContain("placeholder ovals");
     expect(skills).toContain("review.score.total");
     expect(skills).toContain(
@@ -141,7 +145,7 @@ describe("grader agent prompt", () => {
     expect(skills).toContain("grade-boundary / prize-threshold / medal-cutoff");
     expect(skills).toContain("## Real-World Outcome Reporting");
     expect(skills).toContain("omit per-question scores");
-    expect(skills).toContain("Do not publish linked crop assets");
+    expect(skills).toContain("Do not publish linked PDF crop assets");
     expect(skills).toContain("question-relevant content");
     expect(skills).toContain("expectedContent");
     expect(skills).toContain(
