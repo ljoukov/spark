@@ -3796,6 +3796,87 @@ function createExtractedSourceDisplayNumberPattern(
   return null;
 }
 
+type ExtractedSourceDisplayNumberOccurrence = {
+  readonly index: number;
+  readonly displayNumber: string;
+};
+
+function parseExtractedSourceLineDisplayNumber(line: string): string | null {
+  const decimalMatch =
+    /^[^\S\r\n]*(\*{1,2})?((?:\d[^\S\r\n]*){1,3})\.[^\S\r\n]*((?:\d[^\S\r\n]*){1,3})(?:\*{1,2})?(?=\s|$)/u.exec(
+      line,
+    );
+  if (decimalMatch?.[2] && decimalMatch[3]) {
+    const rawRoot = decimalMatch[2].trim();
+    const rawSubpart = decimalMatch[3].trim();
+    const rootDigits = rawRoot.replace(/\s+/gu, "");
+    const subpartDigits = rawSubpart.replace(/\s+/gu, "");
+    const remainder = line.slice(decimalMatch[0].length);
+    const hasQuestionText = /[A-Za-z]{2}/u.test(remainder);
+    const hasExplicitQuestionFormatting =
+      decimalMatch[1] !== undefined ||
+      rootDigits.startsWith("0") ||
+      /\d\s+\d/u.test(rawRoot) ||
+      /\s+\./u.test(decimalMatch[0]) ||
+      /\.\s+/u.test(decimalMatch[0]);
+    const root = Number.parseInt(rootDigits, 10);
+    const subpart = Number.parseInt(subpartDigits, 10);
+    if (
+      Number.isInteger(root) &&
+      root > 0 &&
+      Number.isInteger(subpart) &&
+      subpart > 0 &&
+      (hasQuestionText || hasExplicitQuestionFormatting)
+    ) {
+      return `${root.toString()}.${subpart.toString()}`;
+    }
+  }
+
+  const bracketMatch =
+    /^[^\S\r\n]*(\*{1,2})?((?:\d[^\S\r\n]*){1,3})\([^\S\r\n]*([^)]+?)[^\S\r\n]*\)(?:\*{1,2})?(?=\s|$)/u.exec(
+      line,
+    );
+  if (bracketMatch?.[2] && bracketMatch[3]) {
+    const rawRoot = bracketMatch[2].trim();
+    const rootDigits = rawRoot.replace(/\s+/gu, "");
+    const subpart = bracketMatch[3].trim().toLowerCase();
+    const remainder = line.slice(bracketMatch[0].length);
+    const hasQuestionText = /[A-Za-z]{2}/u.test(remainder);
+    const hasExplicitQuestionFormatting =
+      bracketMatch[1] !== undefined ||
+      rootDigits.startsWith("0") ||
+      /\d\s+\d/u.test(rawRoot);
+    const root = Number.parseInt(rootDigits, 10);
+    if (
+      Number.isInteger(root) &&
+      root > 0 &&
+      subpart.length > 0 &&
+      (hasQuestionText || hasExplicitQuestionFormatting)
+    ) {
+      return `${root.toString()}(${subpart})`;
+    }
+  }
+
+  return null;
+}
+
+function collectExtractedSourceDisplayNumberOccurrences(
+  sourceReferenceMarkdown: string,
+): ExtractedSourceDisplayNumberOccurrence[] {
+  const occurrences: ExtractedSourceDisplayNumberOccurrence[] = [];
+  for (const lineMatch of sourceReferenceMarkdown.matchAll(/^.*$/gmu)) {
+    const displayNumber = parseExtractedSourceLineDisplayNumber(lineMatch[0]);
+    if (displayNumber === null) {
+      continue;
+    }
+    occurrences.push({
+      index: lineMatch.index ?? 0,
+      displayNumber,
+    });
+  }
+  return occurrences;
+}
+
 function collectReportDisplayNumbers(
   report: SparkGraderWorksheetReport,
 ): Set<string> {
@@ -3848,12 +3929,34 @@ function collectSourceReferenceLabelsNearDisplayNumbers(
     return labels;
   }
 
+  const displayOccurrences = collectExtractedSourceDisplayNumberOccurrences(
+    sourceReferenceMarkdown,
+  );
+
   for (const match of sourceReferenceMarkdown.matchAll(referencePattern)) {
     const label = match[1]?.trim().toLowerCase();
     if (!label) {
       continue;
     }
     const index = match.index ?? 0;
+    let precedingDisplayOccurrence:
+      | ExtractedSourceDisplayNumberOccurrence
+      | undefined;
+    for (const occurrence of displayOccurrences) {
+      if (occurrence.index > index) {
+        break;
+      }
+      precedingDisplayOccurrence = occurrence;
+    }
+    if (
+      precedingDisplayOccurrence !== undefined &&
+      index - precedingDisplayOccurrence.index <= 5_000
+    ) {
+      if (displayNumbers.has(precedingDisplayOccurrence.displayNumber)) {
+        labels.add(label);
+      }
+      continue;
+    }
     const nearby = sourceReferenceMarkdown.slice(
       Math.max(0, index - 1200),
       index + 1600,

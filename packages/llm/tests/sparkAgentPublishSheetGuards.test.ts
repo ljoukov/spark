@@ -6810,6 +6810,161 @@ describe("Spark agent tool: publish_sheet guards", () => {
     });
   });
 
+  it("ignores named visuals from omitted nearby source subparts", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+      const figurePath = "grader/output/assets/q05-figure-9.png";
+
+      await writeMockPublishArtifacts({
+        rootDir,
+        title: "GCSE Biology grading report",
+        awardedMarks: 1,
+        maxMarks: 1,
+        footer: "AQA 8461/1H",
+        report: {
+          schemaVersion: 1,
+          sheet: {
+            id: "sheet-1",
+            subject: "Biology",
+            level: "GCSE",
+            title: "GCSE Biology grading report",
+            subtitle: "Uploaded work",
+            color: "#123456",
+            accent: "#345678",
+            light: "#f0f4f8",
+            border: "#89abcd",
+            sections: [
+              {
+                id: "Q5",
+                label: "Question 5",
+                questions: [
+                  {
+                    id: "q05_5",
+                    type: "lines",
+                    displayNumber: "05.5",
+                    badgeLabel: "5",
+                    marks: 1,
+                    prompt: [
+                      "Figure 9 shows nodules on a plant root.",
+                      "",
+                      `[![Figure 9](${figurePath})](${figurePath})`,
+                      "",
+                      "State one benefit of the nodules.",
+                    ].join("\n"),
+                    lines: 2,
+                  },
+                ],
+              },
+            ],
+          },
+          answers: {
+            q05_5: "They contain bacteria that help the plant.",
+          },
+          review: {
+            score: { got: 1, total: 1 },
+            label: "1/1",
+            message: "Correct.",
+            note: "",
+            questions: {
+              q05_5: {
+                status: "correct",
+                score: { got: 1, total: 1 },
+                note: "",
+              },
+            },
+          },
+        },
+      });
+      await writeValidatedCropAsset({
+        rootDir,
+        assetPath: figurePath,
+        sourceLabel: "Figure 9",
+      });
+      await writeFile(
+        path.join(rootDir, "request.json"),
+        JSON.stringify(
+          {
+            createdAt: new Date(0).toISOString(),
+            sourceText:
+              "Please grade my handwritten work against the uploaded paper.",
+            input: {},
+            attachments: [
+              {
+                id: "student-page",
+                contentType: "image/png",
+                sizeBytes: 100,
+                filename: "student-page.png",
+              },
+              {
+                id: "source-paper",
+                contentType: "application/pdf",
+                sizeBytes: 1000,
+                filename: "source-paper.pdf",
+              },
+            ],
+          },
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+      await writeSourceProblemStatementTranscription(
+        rootDir,
+        [
+          "## Source problem-statement transcription",
+          "",
+          "**05.5** Figure 9 shows nodules on a plant root. State one benefit of the nodules.",
+          "",
+        ].join("\n"),
+      );
+      await writeFile(
+        path.join(rootDir, "grader/output/qp-reference.md"),
+        [
+          "## Page 17",
+          "",
+          "0 5 . 2 Table 2 shows the students' results.",
+          "",
+          "Table 2",
+          "",
+          "0 5 . 4 Figure 8 shows two plants.",
+          "",
+          "Figure 8",
+          "",
+          "0 5 . 5 Figure 9 shows nodules on a plant root.",
+          "",
+          "Figure 9",
+          "",
+          "State one benefit of the nodules.",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+
+      await expect(publishSheetTool.execute({})).resolves.toMatchObject({
+        status: "published",
+      });
+    });
+  });
+
   it("rejects figure labels satisfied by a nearby image for a different figure", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =
