@@ -6395,6 +6395,160 @@ describe("Spark agent tool: publish_sheet guards", () => {
     });
   });
 
+  it("allows flat later subquestions to use a figure shown in an earlier sibling prompt", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+      const assetPath = "grader/output/assets/figure-4.png";
+      const report = {
+        schemaVersion: 1 as const,
+        sheet: {
+          id: "sheet-1",
+          subject: "Biology",
+          level: "GCSE",
+          title: "GCSE Biology grading report",
+          subtitle: "Uploaded work",
+          color: "#123456",
+          accent: "#345678",
+          light: "#f0f4f8",
+          border: "#89abcd",
+          sections: [
+            {
+              id: "Q2",
+              label: "Question 2",
+              questions: [
+                {
+                  id: "q02_4",
+                  type: "lines" as const,
+                  displayNumber: "02.4",
+                  badgeLabel: "4",
+                  marks: 1,
+                  prompt: `Figure 4 shows a root hair cell.\n\n[![Figure 4](${assetPath})](${assetPath})\n\nName the process by which water molecules enter the root hair cell.`,
+                  lines: 1,
+                  renderMode: "markdown" as const,
+                },
+                {
+                  id: "q02_5",
+                  type: "lines" as const,
+                  displayNumber: "02.5",
+                  badgeLabel: "5",
+                  marks: 1,
+                  prompt:
+                    "Explain how nitrate ions are transported into the root hair cell shown above.",
+                  lines: 2,
+                  renderMode: "markdown" as const,
+                },
+              ],
+            },
+          ],
+        },
+        answers: {
+          q02_4: "Osmosis",
+          q02_5: "Active transport uses energy.",
+        },
+        review: {
+          score: { got: 2, total: 2 },
+          label: "2/2",
+          message: "Both transport answers are correct.",
+          note: "Secure understanding of transport in root hair cells.",
+          questions: {
+            q02_4: {
+              status: "correct" as const,
+              score: { got: 1, total: 1 },
+              note: "",
+            },
+            q02_5: {
+              status: "correct" as const,
+              score: { got: 1, total: 1 },
+              note: "",
+            },
+          },
+        },
+      };
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const writeJsonTool = tools.write_json_workspace_file;
+      requireFunctionTool(writeJsonTool);
+      await expect(
+        writeJsonTool.execute({
+          filePath: "grader/output/sheet.json",
+          jsonText: JSON.stringify(report),
+        }),
+      ).resolves.toMatchObject({
+        status: "written",
+        filePath: "grader/output/sheet.json",
+      });
+
+      await writeFile(
+        path.join(rootDir, "request.json"),
+        JSON.stringify(
+          {
+            createdAt: new Date(0).toISOString(),
+            sourceText:
+              "Please grade my handwritten work against the uploaded PDF.",
+            input: {},
+            attachments: [
+              {
+                id: "student-page",
+                contentType: "image/png",
+                sizeBytes: 100,
+                filename: "student-page.png",
+              },
+              {
+                id: "source-paper",
+                contentType: "application/pdf",
+                sizeBytes: 1000,
+                filename: "source-paper.pdf",
+              },
+            ],
+          },
+          null,
+          2,
+        ).concat("\n"),
+        { encoding: "utf8" },
+      );
+      await writeSourceProblemStatementTranscription(
+        rootDir,
+        [
+          "## Source problem-statement transcription",
+          "",
+          "**02.4** Figure 4 shows a root hair cell. Name the process by which water molecules enter the root hair cell.",
+          "",
+          "**02.5** Explain how nitrate ions are transported into the root hair cell shown above.",
+          "",
+        ].join("\n"),
+      );
+      await writeValidatedCropAsset({
+        rootDir,
+        assetPath,
+        sourceLabel: "Figure 4",
+      });
+      await writeSourceFidelityAudit(rootDir);
+
+      const publishSheetTool = tools.publish_sheet;
+      requireFunctionTool(publishSheetTool);
+      await expect(publishSheetTool.execute({})).resolves.toMatchObject({
+        status: "published",
+        awardedMarks: 2,
+        maxMarks: 2,
+      });
+    });
+  });
+
   it("rejects compact handwritten grading reports that omit named source figures", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =

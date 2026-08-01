@@ -4251,28 +4251,63 @@ function metadataTextContains(container: string, part: string): boolean {
   );
 }
 
+function readVisibleQuestionPromptText(
+  entry: PaperSheetQuestionEntry,
+): string | undefined {
+  switch (entry.type) {
+    case "group":
+    case "fill":
+    case "mcq":
+    case "lines":
+    case "calc":
+    case "match":
+    case "spelling":
+    case "flow":
+      return entry.prompt;
+    case "cloze":
+    case "answer_bank":
+      return entry.segments.join(" ");
+  }
+}
+
+function buildSequentialQuestionPromptContexts(
+  entries: readonly PaperSheetQuestionEntry[] | undefined,
+): ReadonlyMap<string, string> {
+  const contexts = new Map<string, string>();
+  const visitEntries = (
+    currentEntries: readonly PaperSheetQuestionEntry[] | undefined,
+    ancestorPromptText: string,
+  ): void => {
+    const earlierSiblingPromptTexts: string[] = [];
+    for (const entry of currentEntries ?? []) {
+      const promptText = readVisibleQuestionPromptText(entry);
+      const promptContext = [
+        ancestorPromptText,
+        ...earlierSiblingPromptTexts,
+        promptText,
+      ]
+        .filter(
+          (part): part is string =>
+            typeof part === "string" && part.trim().length > 0,
+        )
+        .join("\n\n");
+      contexts.set(entry.id, promptContext);
+      if (entry.type === "group") {
+        visitEntries(entry.questions, promptContext);
+      }
+      if (typeof promptText === "string" && promptText.trim().length > 0) {
+        earlierSiblingPromptTexts.push(promptText);
+      }
+    }
+  };
+  visitEntries(entries, "");
+  return contexts;
+}
+
 function collectGraderWorksheetEarlyAssemblyIssues(
   report: SparkGraderWorksheetReport,
 ): string[] {
   const issues: string[] = [];
-  const readVisibleQuestionPromptText = (
-    entry: PaperSheetQuestionEntry,
-  ): string | undefined => {
-    switch (entry.type) {
-      case "group":
-      case "fill":
-      case "mcq":
-      case "lines":
-      case "calc":
-      case "match":
-      case "spelling":
-      case "flow":
-        return entry.prompt;
-      case "cloze":
-      case "answer_bank":
-        return entry.segments.join(" ");
-    }
-  };
   const checkVisiblePromptText = (
     ownerLabel: string,
     text: string | undefined,
@@ -4291,14 +4326,12 @@ function collectGraderWorksheetEarlyAssemblyIssues(
   };
   const visitQuestionEntries = (
     entries: readonly PaperSheetQuestionEntry[] | undefined,
-    ancestorPromptText = "",
+    promptContexts: ReadonlyMap<string, string>,
   ): void => {
     for (const entry of entries ?? []) {
       const promptText = readVisibleQuestionPromptText(entry);
       checkVisiblePromptText(`question "${entry.id}" prompt`, promptText);
-      const promptContext = [ancestorPromptText, promptText]
-        .filter((part): part is string => typeof part === "string")
-        .join("\n\n");
+      const promptContext = promptContexts.get(entry.id) ?? promptText ?? "";
       if (
         typeof promptText === "string" &&
         promptNeedsVisibleImage(promptContext)
@@ -4324,7 +4357,7 @@ function collectGraderWorksheetEarlyAssemblyIssues(
         );
       }
       if (entry.type === "group") {
-        visitQuestionEntries(entry.questions, promptContext);
+        visitQuestionEntries(entry.questions, promptContexts);
       }
     }
   };
@@ -4357,7 +4390,10 @@ function collectGraderWorksheetEarlyAssemblyIssues(
         );
       }
     }
-    visitQuestionEntries(section.questions);
+    const promptContexts = buildSequentialQuestionPromptContexts(
+      section.questions,
+    );
+    visitQuestionEntries(section.questions, promptContexts);
   }
 
   return issues;
@@ -6672,6 +6708,9 @@ function collectGraderWorksheetPublishIssues(
 
     const sectionQuestionRoot = parseQuestionSectionRoot(section.label);
     const sectionQuestionEntries = section.questions ?? [];
+    const sequentialPromptContexts = buildSequentialQuestionPromptContexts(
+      sectionQuestionEntries,
+    );
     const displayOwners = new Map<string, string>();
     const checkSectionDisplayNumber = (
       entryId: string,
@@ -7048,24 +7087,12 @@ function collectGraderWorksheetPublishIssues(
     }
 
     visitPaperSheetQuestions(section.questions, (question, parentGroup) => {
-      const promptText = (() => {
-        switch (question.type) {
-          case "fill":
-          case "mcq":
-          case "lines":
-          case "calc":
-          case "match":
-          case "spelling":
-          case "flow":
-            return question.prompt;
-          case "cloze":
-          case "answer_bank":
-            return question.segments.join(" ");
-        }
-      })();
-      const promptContext = [parentGroup?.prompt, promptText]
-        .filter((part): part is string => typeof part === "string")
-        .join("\n\n");
+      const promptText = readVisibleQuestionPromptText(question) ?? "";
+      const promptContext =
+        sequentialPromptContexts.get(question.id) ??
+        [parentGroup?.prompt, promptText]
+          .filter((part): part is string => typeof part === "string")
+          .join("\n\n");
       const review = report.review.questions[question.id];
       const score = review?.score;
       const answer = report.answers[question.id];
