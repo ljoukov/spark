@@ -24,6 +24,7 @@ import {
   type JsonSchema,
   type LlmExecutableTool,
   type LlmImageData,
+  type LlmGenerateImagesRequest,
   type LlmImageModelId as LlmImageModelIdV2,
   type LlmImageSize,
   type LlmModelId as LlmModelIdV2,
@@ -220,6 +221,37 @@ export type LlmGenerateImagesOptions = Omit<LlmCallBaseOptions, "contents"> & {
 
 function shouldUseDirectGeminiImageGeneration(modelId: string): boolean {
   return modelId === "gemini-3-pro-image-preview";
+}
+
+function buildLlmGenerateImagesRequest(
+  options: LlmGenerateImagesOptions,
+): LlmGenerateImagesRequest {
+  const model = resolveLlmImageModelId(options.modelId);
+  const baseRequest = {
+    stylePrompt: options.stylePrompt,
+    styleImages: options.styleImages,
+    imagePrompts: options.imagePrompts,
+    telemetry: false,
+  } as const;
+
+  switch (model) {
+    case "gemini-3-pro-image-preview":
+    case "gemini-3.1-flash-image-preview":
+      return {
+        ...baseRequest,
+        model,
+        imageGradingPrompt: options.imageGradingPrompt,
+        maxAttempts: options.maxAttempts,
+        imageAspectRatio: options.imageAspectRatio,
+        imageSize: options.imageSize,
+      };
+    case "gpt-image-2":
+    case "chatgpt-gpt-image-2":
+      return {
+        ...baseRequest,
+        model,
+      };
+  }
 }
 
 async function generateImagesWithDirectGemini(
@@ -813,17 +845,7 @@ export async function generateImages(
   try {
     const result = shouldUseDirectGeminiImageGeneration(options.modelId)
       ? await generateImagesWithDirectGemini(options)
-      : await generateImagesV2({
-          model: resolveLlmImageModelId(options.modelId),
-          stylePrompt: options.stylePrompt,
-          styleImages: options.styleImages,
-          imagePrompts: options.imagePrompts,
-          imageGradingPrompt: options.imageGradingPrompt,
-          maxAttempts: options.maxAttempts,
-          imageAspectRatio: options.imageAspectRatio,
-          imageSize: options.imageSize,
-          telemetry: false,
-        });
+      : await generateImagesV2(buildLlmGenerateImagesRequest(options));
     await publishSparkLlmCallMetricsFromEnv({
       operation: "generate_images",
       model: options.modelId,
@@ -858,17 +880,9 @@ export async function generateImageInBatches(
   const startedAtMs = Date.now();
   try {
     const result = await generateImageInBatchesV2({
-      model: resolveLlmImageModelId(options.modelId),
-      stylePrompt: options.stylePrompt,
-      styleImages: options.styleImages,
-      imagePrompts: options.imagePrompts,
-      imageGradingPrompt: options.imageGradingPrompt,
-      maxAttempts: options.maxAttempts,
-      imageAspectRatio: options.imageAspectRatio,
-      imageSize: options.imageSize,
+      ...buildLlmGenerateImagesRequest(options),
       batchSize: options.batchSize,
       overlapSize: options.overlapSize,
-      telemetry: false,
     });
     await publishSparkLlmCallMetricsFromEnv({
       operation: "generate_image_batches",

@@ -4,7 +4,11 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 
 import { Command } from "commander";
 import { z } from "zod";
-import { isLlmTextModelId, type LlmTextModelId } from "@ljoukov/llm";
+import {
+  isLlmTextModelId,
+  type LlmTextModelId,
+  type LlmThinkingLevel,
+} from "@ljoukov/llm";
 import {
   createRepoPathHelpers,
   formatUsd,
@@ -38,7 +42,7 @@ ensureEvalEnvLoaded();
 const BENCHMARK_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT_DIR = path.resolve(BENCHMARK_DIR, "../../../..");
 const OUTPUT_ROOT_DIR = path.join(BENCHMARK_DIR, "output");
-const DEFAULT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.5-fast";
+const DEFAULT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.6-sol";
 const { toRepoRelativePath } = createRepoPathHelpers({
   benchmarkDir: BENCHMARK_DIR,
   repoRootDir: REPO_ROOT_DIR,
@@ -73,7 +77,7 @@ type BenchmarkResult = {
   inlineAttachmentPaths: string[];
   replayInput: {
     modelId: string;
-    thinkingLevel: "low" | "medium" | "high" | null;
+    thinkingLevel: LlmThinkingLevel | null;
     useSubagents: boolean;
     maxSteps: number;
     disableExtractTextTool: boolean;
@@ -82,7 +86,7 @@ type BenchmarkResult = {
   };
   sourceDefaults: {
     modelId: string;
-    thinkingLevel: "low" | "medium" | "high" | null;
+    thinkingLevel: LlmThinkingLevel | null;
     useSubagents: boolean;
     maxSteps: number;
   };
@@ -235,8 +239,8 @@ function resolveReplayThinkingLevel(input: {
   cliModelId?: string;
   chosenModelId: LlmTextModelId;
   sourceModelId: string | null;
-  sourceThinkingLevel: "low" | "medium" | "high" | null;
-}): "low" | "medium" | "high" | null {
+  sourceThinkingLevel: LlmThinkingLevel | null;
+}): LlmThinkingLevel | null {
   if (input.cliThinking === "none") {
     return null;
   }
