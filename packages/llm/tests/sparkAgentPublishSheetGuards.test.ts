@@ -1887,6 +1887,47 @@ describe("Spark agent tool: publish_sheet guards", () => {
     });
   });
 
+  it("blocks visually dependent bounded scoring without student images", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const scoreAnswersTool = tools.score_answers_with_fresh_agent;
+      requireFunctionTool(scoreAnswersTool);
+
+      const result = await scoreAnswersTool.execute({
+        scope: "Question 1 graph audit",
+        worksheetIds: ["q1"],
+        sourceMarkdown: "Question 1 asks the student to plot the results.",
+        markSchemeMarkdown: "Award one mark for each accurate plotted point.",
+        studentAnswersMarkdown:
+          "Inspect the original answer images and graph points before scoring.",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_student_images_required",
+        blockedTool: "score_answers_with_fresh_agent",
+        scope: "Question 1 graph audit",
+      });
+      expect(JSON.stringify(result)).toContain("studentImagePaths");
+    });
+  });
+
   it("blocks bounded scoring when the source transcription is missing", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =

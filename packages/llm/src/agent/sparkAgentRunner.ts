@@ -3442,6 +3442,8 @@ const SOURCE_FIDELITY_REVIEW_TOOL_SUCCESS_PATTERN =
   /\btool_call_completed:.*\btool=validate_source_fidelity_with_fresh_agent\b.*\bstatus=ok\b/u;
 const SCORE_ANSWERS_REVIEW_TOOL_PATTERN =
   /\btool=score_answers_with_fresh_agent\b/u;
+const SCORING_STUDENT_IMAGE_EVIDENCE_REQUIRED_PATTERN =
+  /\b(?:inspect|check|review|use|view)\b[^.\n]{0,120}\b(?:original\s+)?(?:(?:student|answer)\s+){0,2}images?\b|\b(?:visibly\s+)?(?:circled|ringed|ticked|selected|shaded|plotted)\b|\bgraph\s+(?:axes?|scales?|points?|lines?)\b|\bcalculation\s+layout\b|\b(?:ambiguous|uncertain)\s+handwriting\b/iu;
 const CROP_VALIDATION_SUBAGENT_PATTERN = /\b(?:fresh-context\s+)?subagent\b/iu;
 const CROP_VALIDATION_PASS_PATTERN =
   /\b(?:pass(?:ed)?|validated|complete|all\s+(?:required\s+)?(?:content|information)|visible|not\s+clipped|included)\b/iu;
@@ -16878,6 +16880,7 @@ function buildAgentTools(options: {
         "Ask a fresh-context grading agent to score one bounded root question or short question range from already-extracted source/student/mark-scheme excerpts.",
         "Use this in handwritten-grading mode after transcription, source references, and sheet-plan exist, especially when a paper has many answer leaves or more than one root question.",
         "Pass studentImagePaths for every relevant original answer page when marks depend on visible selections, circles, graphs, diagrams, layout, or handwriting that OCR may not preserve. The images are attached directly to the fresh grading model.",
+        "If the supplied scope, notes, or student evidence asks the fresh grader to inspect visual answer evidence but studentImagePaths is empty, the tool returns blocked_student_images_required so the same scope can be retried with the originals.",
         "Call one instance per root question or small contiguous range. The fresh agent scores only the supplied excerpt and writes a compact JSON result; this tool also returns the per-question results inline so the main agent can assemble sheet.json without rereading every scoring file. The main agent still assembles sheet.json, run-summary.json, source-fidelity audit, and publish_sheet.",
       ].join("\n"),
       inputSchema: z
@@ -16938,6 +16941,26 @@ function buildAgentTools(options: {
               .filter((studentImagePath) => studentImagePath.length > 0),
           ),
         );
+        const scoringEvidenceInstructions = [
+          scope,
+          notes ?? "",
+          studentAnswersMarkdown,
+        ].join("\n");
+        if (
+          normalizedStudentImagePaths.length === 0 &&
+          SCORING_STUDENT_IMAGE_EVIDENCE_REQUIRED_PATTERN.test(
+            scoringEvidenceInstructions,
+          )
+        ) {
+          return {
+            status: "blocked_student_images_required",
+            blockedTool: "score_answers_with_fresh_agent",
+            scope,
+            outputPath: resolvedOutputPath,
+            nextAction:
+              "This scoring batch asks the fresh grader to inspect visual student evidence, but studentImagePaths is empty. Retry score_answers_with_fresh_agent with the relevant original student-answer image paths for this scope; do not replace visible ticks, circles, shading, graph work, calculation layout, or handwriting with uncertain OCR.",
+          };
+        }
         const studentImageAttachments = await Promise.all(
           normalizedStudentImagePaths.map(async (studentImagePath) => {
             const attachment = await resolveExtractTextContextPartFromWorkspace(
@@ -17865,9 +17888,8 @@ function buildAgentTools(options: {
           workspace.scheduleUpdate(aggregateOutputPath);
         }
         const passed = hasPositiveSourceFidelityAudit(reviewMarkdown);
-        const blockingIssues = extractSourceFidelityBlockingIssueFields(
-          reviewMarkdown,
-        ).join("\n");
+        const blockingIssues =
+          extractSourceFidelityBlockingIssueFields(reviewMarkdown).join("\n");
         return {
           status: passed ? "passed" : "failed",
           sourceScope,
@@ -19613,7 +19635,9 @@ export async function runSparkAgentTask(
             : graderModelTools
               ? { modelTools: graderModelTools }
               : {}),
-        subagents: tutorSessionId ? false : resolveSparkAgentSubagentSelection(),
+        subagents: tutorSessionId
+          ? false
+          : resolveSparkAgentSubagentSelection(),
         maxSteps,
         ...(thinkingLevel ? { thinkingLevel } : {}),
         signal: continuationAbortController.signal,
