@@ -1335,6 +1335,69 @@ describe("Spark agent tool: publish_sheet guards", () => {
     });
   });
 
+  it("allows missing bounded scoring to recover after draft artifacts exist", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      await writeValidSheetArtifacts(rootDir);
+      await writeLongHandwrittenTranscription(rootDir);
+      await writeFile(
+        path.join(rootDir, "grader/output/sheet-plan.md"),
+        [
+          "# Sheet plan",
+          "",
+          "Mode: **handwritten-grading**",
+          "",
+          "Total answer-bearing leaves included: **13**",
+          "Total source marks: **13**",
+          "",
+          "### Question 1 — total 13 marks",
+          ...Array.from({ length: 13 }, (_, index) => {
+            const label = `01.${(index + 1).toString()}`;
+            return `- \`q${index + 1}\` -> source **${label}** -> \`lines\` -> 1 mark`;
+          }),
+          "",
+          "## Planned scoring batches",
+          "1. Batch Question 1 — 13 marks",
+          "",
+        ].join("\n"),
+        { encoding: "utf8" },
+      );
+
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        graderPublish: {
+          mode: "mock",
+          runId: "sheet-1",
+        },
+      });
+
+      const scoreAnswersTool = tools.score_answers_with_fresh_agent;
+      requireFunctionTool(scoreAnswersTool);
+
+      const result = await scoreAnswersTool.execute({
+        scope: "Question 1",
+        worksheetIds: ["q1"],
+        sourceMarkdown: "Question 1 source wording is not yet copied.",
+        markSchemeMarkdown: "Question 1 mark scheme.",
+        studentAnswersMarkdown: "Question 1 student answers.",
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked_source_excerpt_invalid",
+        blockedTool: "score_answers_with_fresh_agent",
+      });
+    });
+  });
+
   it("writes JSON artifacts with structured escaping", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentTools } =

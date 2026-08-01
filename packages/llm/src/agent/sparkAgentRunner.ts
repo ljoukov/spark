@@ -11801,6 +11801,13 @@ function buildAgentTools(options: {
             "Bounded scoring is complete for this long handwritten-grading paper. If planned PDF final image asset files are missing and no source image inventory exists, run one bounded source-visual prep step: extract_pdf_images to grader/output/pdf-images or pdf_to_images for the exact needed pages under grader/output/rendered-pages. Then create only final guarded grader/output/assets/... PDF crops plus full-page JPEG click targets at their exact sheet-plan paths with crop_image/fullImage or pad_image; for uploaded photos/scans, reuse or normalize one JPEG source image and add #spark-bbox viewport links instead of repeated crops. Do not create `-raw`, `-candidate`, `-draft`, or temp asset copies. Batch all missing crop/pad calls in one parallel tool turn. Immediately write grader/output/sheet.json with write_json_workspace_file; a valid sheet write can derive grader/output/run-summary.json. Preserve returned scores and teacher-review statuses. Do not crop-validate, reread, regrade, search, or enrich before first-pass artifacts. Put each figure/table in the exact question/group prompt, not section.theory. After both JSON files exist, call validate_grader_artifacts.",
         };
       }
+      if (
+        isScoringHelperTool &&
+        longHandwrittenProgress.longHandwritten &&
+        !longHandwrittenProgress.scoringHelperCalled
+      ) {
+        return executeTool();
+      }
       if (await shouldRequireGraderPublishCriticalPath()) {
         if (GRADER_POST_ARTIFACT_ALLOWED_TOOLS.has(toolName)) {
           return executeTool();
